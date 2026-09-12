@@ -59,18 +59,12 @@ earlier version hard-coded the indices and painted Ki67 as Pan-CK.
 
 ## Building
 
-One clone. plugin_api comes from the EOV repository as a git dependency, and needs only abi_stable,
-serde, toml and thiserror, so EOV itself does not have to be checked out and nothing here links
-openslide.
+One clone, and nothing else checked out. The API comes from eov-plugin-api on crates.io.
 
     cargo build --release
     python package.py --onnxruntime path/to/onnxruntime.dll
 
-Cargo initialises EOV's submodules while fetching that dependency, and .gitmodules declares the
-gamepad plugin over ssh, so the fetch fails without a key. Until that url is https upstream, rewrite
-it locally:
-
-    git config --global url."https://github.com/".insteadOf git@github.com:
+Built against eov-plugin-api 0.4, and verified loading in the EOV v0.3.1 release binary.
 
 ## References
 

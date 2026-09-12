@@ -13,13 +13,12 @@ export-vtable-symbol = []
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# plugin_api only needs abi_stable, serde, toml and thiserror, so EOV does not
-# have to be checked out and nothing here links openslide.
+# Nothing here links openslide; the plugin only needs the API crate.
 [dependencies]
 abi_stable = "0.11"
 ndarray = "0.17"
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "api-24", "load-dynamic"] }
-plugin_api = { git = "https://github.com/eosin-platform/eov.git", tag = "v0.3.1" }
+eov-plugin-api = "0.4"
 
 [profile.release]
 opt-level = 3
