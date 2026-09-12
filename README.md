@@ -66,8 +66,11 @@ openslide.
     cargo build --release
     python package.py --onnxruntime path/to/onnxruntime.dll
 
-Cargo initialises EOV's submodules while fetching that dependency, and one of them is declared over
-ssh, so the fetch needs either an ssh key that can read it or that url changed to https upstream.
+Cargo initialises EOV's submodules while fetching that dependency, and .gitmodules declares the
+gamepad plugin over ssh, so the fetch fails without a key. Until that url is https upstream, rewrite
+it locally:
+
+    git config --global url."https://github.com/".insteadOf git@github.com:
 
 ## References
 
