@@ -44,11 +44,35 @@ measurement is patchy, and SMA is missing from stroma that measures full of it.
 
 The model, and how good it is, live in cellaris.
 
+## Region readout
+
+The second toolbar button is a polygon tool. Draw round some tissue and a sidebar gives each of the
+three markers two numbers: its mean predicted intensity over the tissue inside, and density r², how
+much of its variation optical density alone reproduces there.
+
+The control is the same one cellaris scores against, the mean optical density of the H&E. With no
+segmentation in the viewer it is measured over 16px blocks, about a cell, rather than cells, and
+blocks under 0.04 optical density are left out as glass. That is the gap between glass and tissue on
+CRC11. The first version borrowed the 0.15 tile cutoff from cellaris, which threw out 73% of the
+tissue blocks and, with them, the pale end of the density range, so it read density r² low. Near 1 the marker is a
+density map in that region, whatever it is called. A low value is needed for it to be anything more,
+but a model that paints noise scores low too, so only measured IF can say it is the marker.
+
+Over about 1 mm² of tumour on CRC11, 36,258 tissue blocks, Hoechst comes out at 0.72, Pan-CK at 0.24
+and SMA at 0.01. Hoechst is mostly density, which is what the pixel comparison above said. SMA's low
+value is not a good sign. Its mean was 4.39 here and 4.39 on a smaller region nearby, near the floor
+of its display window both times, so the prediction is close to flat and there is little variation
+for density to explain. A flat prediction scores low as well.
+
+It runs its own 256px windows at a 256px stride, since it needs values the overlay does not keep,
+and shares the one model session with it. Regions over 400 windows, about eight minutes on a CPU,
+are refused. Under 30 tissue blocks there is no r².
+
 ## Running it
 
 Install EOV. Put cellaris.eop in ~/.eov/plugins/, and markers.onnx and onnxruntime.dll in
-~/.eov/plugins/cellaris/ beside it. Open a slide, click the button in the toolbar, and zoom in until
-the amber frame goes away.
+~/.eov/plugins/cellaris/ beside it. Open a slide, click the first button in the toolbar, and zoom in
+until the amber frame goes away. The second is the region readout.
 
 CELLARIS_MODEL and CELLARIS_ORT_DYLIB override those two paths if you keep your models elsewhere. A
 path that does not exist is reported rather than skipped.

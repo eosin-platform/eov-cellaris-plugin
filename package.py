@@ -3,7 +3,8 @@
 
     python package.py --onnxruntime path/to/onnxruntime.dll
 
-A plain tar of plugin.toml, the built library and the ONNX runtime beside it.
+A plain tar of plugin.toml, the sidebar UI, the built library and the ONNX
+runtime beside it.
 """
 
 import argparse
@@ -34,7 +35,11 @@ def main() -> None:
     if not built.exists():
         raise SystemExit(f"no {built}; build first or pass --skip-build wrongly")
 
-    members = {"./plugin.toml": root / "plugin.toml", f"./{LIBRARY}": built}
+    members = {
+        "./plugin.toml": root / "plugin.toml",
+        "./ui/readout.slint": root / "ui" / "readout.slint",
+        f"./{LIBRARY}": built,
+    }
     if args.onnxruntime:
         members[f"./{args.onnxruntime.name}"] = args.onnxruntime
 

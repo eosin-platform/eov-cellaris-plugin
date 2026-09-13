@@ -7,6 +7,7 @@
 
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use ndarray::Array4;
 use ort::session::Session;
@@ -63,6 +64,16 @@ fn locate(file: &str, key: &str) -> Result<PathBuf, String> {
 /// The size the model was trained at. It does not generalise past it: a 384px
 /// input puts a ring of +2 arcsinh round every tile.
 pub const WINDOW: u32 = 256;
+
+/// One session for the overlay and the readout, loaded by whichever asks first.
+/// Call it from a worker thread: loading takes seconds.
+pub fn shared() -> Result<&'static Mutex<Model>, String> {
+    static SHARED: OnceLock<Result<Mutex<Model>, String>> = OnceLock::new();
+    SHARED
+        .get_or_init(|| Model::load().map(Mutex::new))
+        .as_ref()
+        .map_err(Clone::clone)
+}
 
 pub struct Model {
     session: Session,

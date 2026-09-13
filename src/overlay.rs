@@ -68,13 +68,18 @@ pub fn select(
         .collect()
 }
 
-/// One marker value as 0..=255 of its fixed window.
-pub fn scale(value: f32, marker: &Marker, raw_intensity: bool) -> u8 {
-    let y = if raw_intensity {
+/// A model output on the arcsinh scale the windows are in.
+pub fn intensity(value: f32, raw_intensity: bool) -> f32 {
+    if raw_intensity {
         (value / COFACTOR).asinh()
     } else {
         value
-    };
+    }
+}
+
+/// One marker value as 0..=255 of its fixed window.
+pub fn scale(value: f32, marker: &Marker, raw_intensity: bool) -> u8 {
+    let y = intensity(value, raw_intensity);
     let unit = ((y - marker.low) / (marker.high - marker.low)).clamp(0.0, 1.0);
     (unit * 255.0).round() as u8
 }

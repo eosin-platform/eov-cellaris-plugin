@@ -4,10 +4,11 @@
 //! trained on, and every 128px cell is the feather-weighted blend of the four
 //! windows over it -- the method measured at a seam score of 1.01 in Python.
 //! Windows are read at level 0 and predicted on a worker thread; the filter
-//! only blends and paints.
+//! only blends and paints. The region readout is in `region`.
 
 mod model;
 mod overlay;
+mod region;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -17,8 +18,8 @@ use std::time::{Duration, Instant};
 
 use abi_stable::std_types::{ROption, RString, RVec};
 use eov_plugin_api::ffi::{
-    ActionResponseFFI, GpuFilterContextFFI, HostApiVTable, HudToolbarButtonFFI, PluginVTable,
-    ToolbarButtonFFI, UiPropertyFFI, ViewportContextMenuItemFFI, ViewportFilterFFI,
+    ActionResponseFFI, GpuFilterContextFFI, HostApiVTable, HostToolModeFFI, HudToolbarButtonFFI,
+    PluginVTable, ToolbarButtonFFI, UiPropertyFFI, ViewportContextMenuItemFFI, ViewportFilterFFI,
     ViewportOverlayComponentRequestFFI, ViewportOverlayPointFFI, ViewportOverlayPolygonFFI,
     ViewportOverlayVertexFFI, ViewportSnapshotFFI,
 };
@@ -153,14 +154,22 @@ fn ensure_worker() {
     let state = Arc::clone(shared());
 
     std::thread::spawn(move || {
-        let mut loaded = match model::Model::load() {
+        let model = match model::shared() {
             Ok(model) => model,
             Err(error) => {
                 report(&state, format!("model did not load: {error}"));
                 return;
             }
         };
-        let markers = match overlay::select(&loaded.channel_names, &overlay::DEFAULT_MARKERS) {
+        let (channel_names, raw_intensity, path) = {
+            let loaded = model.lock().unwrap();
+            (
+                loaded.channel_names.clone(),
+                loaded.raw_intensity,
+                loaded.path.clone(),
+            )
+        };
+        let markers = match overlay::select(&channel_names, &overlay::DEFAULT_MARKERS) {
             Ok(markers) => markers,
             Err(error) => {
                 report(&state, error);
@@ -169,8 +178,8 @@ fn ensure_worker() {
         };
         eprintln!(
             "[cellaris] loaded {} channels from {}, painting {}",
-            loaded.channel_names.len(),
-            loaded.path.display(),
+            channel_names.len(),
+            path.display(),
             overlay::DEFAULT_MARKERS.map(|(name, _)| name).join(", ")
         );
         *state.markers.lock().unwrap() = Some(markers.clone());
@@ -218,7 +227,7 @@ fn ensure_worker() {
                 finish(Some(host), &mut last_redraw);
                 continue;
             };
-            let predicted = match loaded.predict(rgba.as_slice()) {
+            let predicted = match model.lock().unwrap().predict(rgba.as_slice()) {
                 Ok(values) => values,
                 Err(error) => {
                     report(&state, format!("inference failed: {error}"));
@@ -232,7 +241,7 @@ fn ensure_worker() {
                 let source = &predicted[marker.channel * plane..(marker.channel + 1) * plane];
                 let target = &mut scaled[index * plane..(index + 1) * plane];
                 for (out, value) in target.iter_mut().zip(source) {
-                    *out = overlay::scale(*value, marker, loaded.raw_intensity);
+                    *out = overlay::scale(*value, marker, raw_intensity);
                 }
             }
             {
@@ -504,17 +513,42 @@ extern "C" fn get_toolbar_buttons_ffi() -> RVec<ToolbarButtonFFI> {
         tool_mode: ROption::RNone,
         hotkey: ROption::RNone,
     });
+    buttons.push(ToolbarButtonFFI {
+        button_id: RString::from(region::BUTTON_ID),
+        tooltip: RString::from("Cellaris region readout"),
+        icon_svg: RString::from(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" \
+             stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linejoin=\"round\">\
+             <path d=\"M4 7l7-3 9 5-3 10-11 1z\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/></svg>",
+        ),
+        action_id: RString::from(region::BUTTON_ID),
+        tool_mode: ROption::RSome(HostToolModeFFI::PolygonAnnotation),
+        hotkey: ROption::RNone,
+    });
     buttons
 }
 
+fn host() -> Option<HostApiVTable> {
+    *shared().host.lock().unwrap()
+}
+
 extern "C" fn on_action_ffi(action_id: RString) -> ActionResponseFFI {
-    if action_id.as_str() == "toggle_cellaris" {
-        let now = !ENABLED.load(Ordering::Relaxed);
-        ENABLED.store(now, Ordering::Relaxed);
-        if now {
-            ensure_worker();
+    match action_id.as_str() {
+        "toggle_cellaris" => {
+            let now = !ENABLED.load(Ordering::Relaxed);
+            ENABLED.store(now, Ordering::Relaxed);
+            if now {
+                ensure_worker();
+            }
+            announce(now);
         }
-        announce(now);
+        region::BUTTON_ID => {
+            if let Some(host) = host() {
+                let _ = (host.set_active_tool)(host.context, HostToolModeFFI::PolygonAnnotation);
+                region::open_sidebar(&host);
+            }
+        }
+        _ => {}
     }
     ActionResponseFFI { open_window: false }
 }
@@ -544,17 +578,55 @@ extern "C" fn set_filter_enabled_ffi(filter_id: RString, enabled: bool) {
     }
 }
 
-// -- everything a pure viewport filter does not need ------------------------
+// -- region readout ----------------------------------------------------------
+
+extern "C" fn on_polygon_annotation_placed_ffi(
+    viewport: ViewportSnapshotFFI,
+    vertices: RVec<ViewportOverlayVertexFFI>,
+) {
+    if let Some(host) = host() {
+        region::start(
+            host,
+            viewport.file_id,
+            (viewport.image_width, viewport.image_height),
+            vertices.iter().map(|v| (v.x_level0, v.y_level0)).collect(),
+        );
+    }
+}
+
+extern "C" fn get_viewport_overlay_polygons_ffi(
+    viewport: ViewportSnapshotFFI,
+) -> RVec<ViewportOverlayPolygonFFI> {
+    region::polygons(viewport.file_id)
+}
+
+extern "C" fn get_sidebar_properties_ffi() -> RVec<UiPropertyFFI> {
+    region::sidebar_properties()
+}
+
+extern "C" fn on_ui_callback_ffi(callback: RString, _: RString) {
+    match callback.as_str() {
+        "clear-region" => region::clear(host()),
+        // Hiding the sidebar from inside its own callback would free the
+        // component mid-call, so it happens after this returns.
+        "close-readout" => {
+            if let Some(host) = host() {
+                std::thread::spawn(move || {
+                    let _ = (host.hide_sidebar)(host.context);
+                });
+            }
+        }
+        _ => {}
+    }
+}
+
+// -- everything else the host may ask for ------------------------------------
 
 extern "C" fn get_hud_toolbar_buttons_ffi() -> RVec<HudToolbarButtonFFI> {
     RVec::new()
 }
 extern "C" fn on_hud_action_ffi(_: RString, _: ViewportSnapshotFFI) -> ActionResponseFFI {
     ActionResponseFFI { open_window: false }
-}
-extern "C" fn on_ui_callback_ffi(_: RString, _: RString) {}
-extern "C" fn get_sidebar_properties_ffi() -> RVec<UiPropertyFFI> {
-    RVec::new()
 }
 extern "C" fn get_viewport_context_menu_items_ffi(
     _: ViewportSnapshotFFI,
@@ -572,11 +644,6 @@ extern "C" fn get_viewport_overlay_points_ffi(
 ) -> RVec<ViewportOverlayPointFFI> {
     RVec::new()
 }
-extern "C" fn get_viewport_overlay_polygons_ffi(
-    _: ViewportSnapshotFFI,
-) -> RVec<ViewportOverlayPolygonFFI> {
-    RVec::new()
-}
 extern "C" fn get_viewport_overlay_component_ffi() -> ROption<ViewportOverlayComponentRequestFFI> {
     ROption::RNone
 }
@@ -584,11 +651,6 @@ extern "C" fn get_viewport_overlay_properties_ffi(_: ViewportSnapshotFFI) -> RVe
     RVec::new()
 }
 extern "C" fn on_point_annotation_placed_ffi(_: ViewportSnapshotFFI, _: f64, _: f64) {}
-extern "C" fn on_polygon_annotation_placed_ffi(
-    _: ViewportSnapshotFFI,
-    _: RVec<ViewportOverlayVertexFFI>,
-) {
-}
 extern "C" fn on_undo_ffi() -> ActionResponseFFI {
     ActionResponseFFI { open_window: false }
 }
