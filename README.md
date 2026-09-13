@@ -47,26 +47,43 @@ The model, and how good it is, live in cellaris.
 ## Region readout
 
 The second toolbar button is a polygon tool. Draw round some tissue and a sidebar gives each of the
-three markers two numbers: its mean predicted intensity over the tissue inside, and density r², how
-much of its variation optical density alone reproduces there.
+three markers three numbers: its mean predicted intensity over the tissue inside, its spread, how much
+it varies between blocks, and density r², how much of that variation optical density alone
+reproduces there.
 
 The control is the same one cellaris scores against, the mean optical density of the H&E. With no
 segmentation in the viewer it is measured over 16px blocks, about a cell, rather than cells, and
 blocks under 0.04 optical density are left out as glass. That is the gap between glass and tissue on
 CRC11. The first version borrowed the 0.15 tile cutoff from cellaris, which threw out 73% of the
-tissue blocks and, with them, the pale end of the density range, so it read density r² low. Near 1 the marker is a
-density map in that region, whatever it is called. A low value is needed for it to be anything more,
-but a model that paints noise scores low too, so only measured IF can say it is the marker.
+tissue blocks and, with them, the pale end of the density range, so it read density r² low.
 
-Over about 1 mm² of tumour on CRC11, 36,258 tissue blocks, Hoechst comes out at 0.72, Pan-CK at 0.24
-and SMA at 0.01. Hoechst is mostly density, which is what the pixel comparison above said. SMA's low
-value is not a good sign. Its mean was 4.39 here and 4.39 on a smaller region nearby, near the floor
-of its display window both times, so the prediction is close to flat and there is little variation
-for density to explain. A flat prediction scores low as well.
+Near 1 the marker is a density map in that region, whatever it is called. A low value is needed for
+it to be anything more, but it is not enough. A prediction that barely changes scores low too,
+because there is nothing for density to explain, and that is what the spread is there to show. Only
+measured IF can say a marker is the marker.
+
+Two regions on CRC11:
+
+| Region | Tissue | Hoechst mean / spread / r² | Pan-CK | SMA |
+|---|---|---|---|---|
+| Tumour | 0.980 mm², 36,258 blocks | 6.75 / — / 0.72 | 4.67 / — / 0.24 | 4.39 / — / 0.01 |
+| Vessel wall and stroma | 0.024 mm², 893 blocks | 6.57 / 0.58 / 0.58 | 4.60 / 0.04 / 0.41 | 4.37 / 0.05 / 0.00 |
+
+The tumour region was read before the spread column existed.
+
+Hoechst varies and is mostly density, which is what the pixel comparison above said. Pan-CK and SMA
+barely vary at all, a spread of 0.04 and 0.05 against Hoechst's 0.58, so their low r² means nothing.
+SMA sits at 4.37 to 4.39 in every region tried, near the floor of its display window, including
+round what looks like a vessel wall, where measured SMA would be bright. That is my reading of the
+H&E, not a measurement, but it matches the missing stroma in the comparison above.
 
 It runs its own 256px windows at a 256px stride, since it needs values the overlay does not keep,
 and shares the one model session with it. Regions over 400 windows, about eight minutes on a CPU,
 are refused. Under 30 tissue blocks there is no r².
+
+EOV v0.3.1 reopens the last sidebar from the cache of the build that was installed when it was
+saved, so after an update the panel can be an older one that cannot show this build's numbers. The
+plugin checks the open panel against its own and replaces it when you pick the tool or draw.
 
 ## Running it
 

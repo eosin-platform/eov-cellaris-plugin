@@ -96,6 +96,18 @@ impl Fit {
         }
     }
 
+    /// Standard deviation of the prediction across blocks. Near zero, a low
+    /// r² only means there was nothing to explain.
+    pub fn spread(&self) -> f64 {
+        if self.n == 0.0 {
+            0.0
+        } else {
+            (self.syy / self.n - self.mean() * self.mean())
+                .max(0.0)
+                .sqrt()
+        }
+    }
+
     /// Share of the prediction's variance a straight line in density reproduces.
     /// Squared, so a control pointing either way counts, as `control_strength`.
     pub fn r2(&self) -> Option<f64> {
@@ -241,14 +253,22 @@ fn fail(generation: u64, host: &HostApiVTable, message: String) {
     });
 }
 
+/// EOV v0.3.1 restores the last sidebar from an absolute path into the cache
+/// of whichever build was installed then, so after an update the open panel
+/// can be an older UI that refuses this build's rows. Anything that is not
+/// this build's own file is replaced; a matching request would toggle it shut.
 pub fn open_sidebar(host: &HostApiVTable) {
+    const SOURCE: &str = include_str!("../ui/readout.slint");
     let snapshot = (host.get_snapshot)(host.context);
-    let ours = snapshot
+    let current = snapshot
         .active_sidebar
         .as_ref()
         .into_option()
-        .is_some_and(|sidebar| sidebar.component.as_str() == COMPONENT);
-    if !ours {
+        .filter(|sidebar| sidebar.component.as_str() == COMPONENT)
+        .is_some_and(|sidebar| {
+            std::fs::read_to_string(sidebar.ui_path.as_str()).is_ok_and(|text| text == SOURCE)
+        });
+    if !current {
         let _ = (host.show_sidebar)(
             host.context,
             RString::from(BUTTON_ID),
@@ -487,6 +507,7 @@ fn describe(readout: &Readout) -> (String, String, f64, Vec<serde_json::Value>) 
                     "green": lane(colour[1]),
                     "blue": lane(colour[2]),
                     "mean": format!("{:.2}", fit.mean()),
+                    "spread": format!("{:.2}", fit.spread()),
                     "density": fit.r2().map_or("—".to_string(), |r2| format!("{r2:.2}")),
                 })
             })
@@ -577,6 +598,12 @@ mod tests {
         }
         assert!(flat.r2().is_none(), "a constant prediction has no r²");
         assert!((flat.mean() - 5.0).abs() < 1e-12);
+        assert!(flat.spread() < 1e-6, "a constant prediction has spread");
+
+        let mut two = Fit::default();
+        two.add(0.0, 4.0);
+        two.add(0.0, 6.0);
+        assert!((two.spread() - 1.0).abs() < 1e-12, "4 and 6 spread by 1");
     }
 
     #[test]

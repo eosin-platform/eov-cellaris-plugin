@@ -4,6 +4,7 @@ export struct ReadoutRow {
     green: int,
     blue: int,
     mean: string,
+    spread: string,
     density: string,
 }
 
@@ -84,8 +85,9 @@ export component CellarisReadout inherits Rectangle {
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: "marker"; color: #969696; font-size: 11px; horizontal-stretch: 1; }
-                Text { text: "mean"; color: #969696; font-size: 11px; width: 48px; horizontal-alignment: right; }
-                Text { text: "density r²"; color: #969696; font-size: 11px; width: 72px; horizontal-alignment: right; }
+                Text { text: "mean"; color: #969696; font-size: 11px; width: 40px; horizontal-alignment: right; }
+                Text { text: "spread"; color: #969696; font-size: 11px; width: 44px; horizontal-alignment: right; }
+                Text { text: "density r²"; color: #969696; font-size: 11px; width: 64px; horizontal-alignment: right; }
             }
 
             for row in root.rows: HorizontalLayout {
@@ -102,13 +104,14 @@ export component CellarisReadout inherits Rectangle {
                 }
 
                 Text { text: row.name; color: #cccccc; font-size: 12px; horizontal-stretch: 1; }
-                Text { text: row.mean; color: #cccccc; font-size: 12px; width: 48px; horizontal-alignment: right; }
-                Text { text: row.density; color: #cccccc; font-size: 12px; width: 72px; horizontal-alignment: right; }
+                Text { text: row.mean; color: #cccccc; font-size: 12px; width: 40px; horizontal-alignment: right; }
+                Text { text: row.spread; color: #cccccc; font-size: 12px; width: 44px; horizontal-alignment: right; }
+                Text { text: row.density; color: #cccccc; font-size: 12px; width: 64px; horizontal-alignment: right; }
             }
         }
 
         Text {
-            text: "Mean is the predicted intensity, arcsinh, over tissue in the region. Density r² is how much of its variation between 16px blocks optical density alone reproduces. Near 1, the marker is a density map here. Low is needed for it to be more than that, but only measured IF shows it is the marker.";
+            text: "Mean is the predicted intensity, arcsinh, over tissue in the region, and spread how much it varies between 16px blocks. Density r² is how much of that variation optical density alone reproduces. Near 1, the marker is a density map here. Low with a small spread means the prediction is flat, not that it learned anything. Low with a wide spread is needed for it to be the marker, but only measured IF shows it is.";
             color: #969696;
             font-size: 11px;
             wrap: word-wrap;
