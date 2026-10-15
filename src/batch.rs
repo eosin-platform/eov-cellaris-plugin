@@ -301,7 +301,8 @@ impl Histogram {
         for (bin, count) in self.counts.iter().enumerate() {
             seen += count;
             if seen >= rank {
-                return Some(HIST_LOW + (bin as f64 + 0.5) * width);
+                // x.xx5, without the float noise of the sum.
+                return Some(((HIST_LOW + (bin as f64 + 0.5) * width) * 1000.0).round() / 1000.0);
             }
         }
         Some(HIST_HIGH)
@@ -1300,6 +1301,8 @@ mod tests {
         hist.add(f64::NAN);
         let p50 = hist.percentile(50).unwrap();
         assert!((p50 - 5.495).abs() < 0.011, "{p50}");
+        // Printed as it is: to 0.001.
+        assert_eq!(p50.to_string().len(), "5.495".len(), "{p50}");
         assert!(hist.percentile(1).unwrap() < hist.percentile(99).unwrap());
         // Out of range values count at the ends.
         hist.add(100.0);
