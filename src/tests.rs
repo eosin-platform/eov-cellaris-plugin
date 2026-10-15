@@ -1288,3 +1288,67 @@ fn ort_smoke_wrong_library_is_reported() {
     println!("{failure:#?}");
     assert!(failure.detail.contains("OrtGetApiBase"), "{failure:?}");
 }
+
+#[test]
+fn a_confirmed_long_readout_runs_as_a_job_and_can_be_cancelled() {
+    let slide = Slide {
+        radius: 9_000.0,
+        ..Slide::new(Some(0.325))
+    };
+    let rig = Rig::new(&[(1, slide)], &[], FakeConfig::default());
+    rig.click(PANEL_BUTTON);
+    rig.harness
+        .send(HostEvent::ShapeDrawn {
+            tool_id: REGION_TOOL.into(),
+            pane: 1,
+            file_id: 1,
+            shape: Shape::Rectangle {
+                x: 2_000.0,
+                y: 2_000.0,
+                width: 1_600.0,
+                height: 1_600.0,
+            },
+            modifiers: Modifiers::default(),
+        })
+        .unwrap();
+    wait_for("the question", LONG, || {
+        !rig.harness.calls_to("dialog.confirm").is_empty()
+    });
+    // The mock numbers its ids "<kind>-<n>" from one counter.
+    for n in 1..20 {
+        rig.harness
+            .send(HostEvent::ConfirmResult {
+                request_id: format!("request-{n}"),
+                confirmed: true,
+            })
+            .unwrap();
+    }
+    assert_eq!(rig.harness.calls_to("job.start").len(), 1);
+    wait_for("some progress", LONG, || {
+        rig.sidebar()["readout-status"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("Measuring"))
+            && rig.seen().windows.load(Ordering::SeqCst) > 0
+    });
+    for n in 1..40 {
+        rig.harness
+            .send(HostEvent::JobCancelRequested {
+                job_id: format!("job-{n}"),
+            })
+            .unwrap();
+    }
+    assert!(
+        rig.sidebar()["readout-status"]
+            .as_str()
+            .unwrap()
+            .starts_with("Cancelled"),
+        "{:?}",
+        rig.sidebar()["readout-status"]
+    );
+    assert_eq!(rig.sidebar()["readout-running"], json!(false));
+    // Nothing more is computed for it.
+    std::thread::sleep(Duration::from_millis(400));
+    let after = rig.seen().windows.load(Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(rig.seen().windows.load(Ordering::SeqCst), after);
+}
