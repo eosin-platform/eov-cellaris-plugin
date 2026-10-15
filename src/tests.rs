@@ -630,7 +630,7 @@ fn zoomed_out_views_say_so_instead_of_predicting() {
 #[test]
 fn the_badges_name_the_predictions_and_stay_put_during_a_pan() {
     let slide = Slide::new(Some(0.325));
-    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let v = view(1, 1, 4_000.0, 4_000.0, 300.0, 300.0, 2.0);
     let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
     rig.click(OVERLAY_BUTTON);
     wait_for("the whole view", LONG, || view_done(&rig, 1));
@@ -647,17 +647,18 @@ fn the_badges_name_the_predictions_and_stay_put_during_a_pan() {
         ))
     );
 
-    // Pan: nothing is sent again for the badges (they are fixed to the
-    // pane), and nothing moves on the slide.
+    // Pan within what is computed: nothing is sent again for the badges
+    // (they are fixed to the pane), and nothing moves on the slide.
     let sent = rig.harness.calls_to("badge.set").len();
     let marks = rig.objects(&marks_layer(1));
-    let moved = view(1, 1, 4_050.0, 4_050.0, 200.0, 200.0, 2.0);
+    let moved = view(1, 1, 4_050.0, 4_050.0, 200.0, 200.0, 3.0);
     rig.harness.state().snapshot.panes[0].view = Some(moved);
     rig.harness
         .send(HostEvent::ViewChanged { view: moved })
         .unwrap();
     wait_for("the panned view", LONG, || view_done(&rig, 1));
     assert_eq!(rig.harness.calls_to("badge.set").len(), sent);
+    assert_eq!(rig.objects(&marks_layer(1)), marks);
     assert!(marks.iter().all(|o| o.label.is_none()));
 
     // Hiding a marker drops it from the legend.
