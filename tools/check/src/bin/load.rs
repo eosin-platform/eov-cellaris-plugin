@@ -4,10 +4,13 @@
 //! a mock host, and drives it through a few events.
 //!
 //!     cargo run --manifest-path tools/check/Cargo.toml --bin load -- \
-//!         target/release/libcellaris.so
+//!         target/release/libcellaris.so [--package-root DIR]
 //!
-//! With no ONNX Runtime and no model installed, turning the overlay on must
-//! end in a reported error, not a crash.
+//! Without a model, turning the overlay on must end in a reported error, not
+//! a crash. By default the runtime search is pointed at an empty directory,
+//! so the error is about ONNX Runtime. With `--package-root` (an extracted
+//! .eop) the plugin searches as it would in eov, and a package that bundles
+//! ONNX Runtime gets as far as the missing model.
 
 use abi_stable::std_types::RStr;
 use eov_plugin_api::abi::{ABI_VERSION, API_VERSION, PluginModuleRef};
@@ -37,10 +40,20 @@ fn send(plugin: &eov_plugin_api::abi::PluginBox, event: &HostEvent) -> Result<()
 }
 
 fn run() -> Result<(), String> {
-    let path: PathBuf = std::env::args_os()
-        .nth(1)
-        .ok_or("usage: load <path to libcellaris>")?
+    let mut args = std::env::args_os().skip(1);
+    let path: PathBuf = args
+        .next()
+        .ok_or("usage: load <path to libcellaris> [--package-root DIR]")?
         .into();
+    let package_root: Option<PathBuf> = match args.next() {
+        Some(flag) if flag == "--package-root" => Some(
+            args.next()
+                .ok_or("--package-root needs a directory")?
+                .into(),
+        ),
+        Some(other) => return Err(format!("unexpected argument {other:?}")),
+        None => None,
+    };
     let header = abi_stable::library::lib_header_from_path(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     let module = header
@@ -68,14 +81,18 @@ fn run() -> Result<(), String> {
         ..Default::default()
     };
     host.state().snapshot.files = vec![file.clone()];
-    let init = test_init("cellaris");
-    // Keep the real ONNX Runtime search away from anything installed on
-    // this machine: an empty, explicit directory.
-    let empty = PathBuf::from(&init.data_dir).join("no-runtime");
-    std::fs::create_dir_all(&empty).map_err(|e| e.to_string())?;
-    let mut init = init;
-    init.settings
-        .insert("runtime_path".into(), json!(empty.to_string_lossy()));
+    let mut init = test_init("cellaris");
+    match &package_root {
+        Some(root) => init.plugin_root = root.to_string_lossy().into_owned(),
+        None => {
+            // Keep the ONNX Runtime search away from anything installed on
+            // this machine: an empty, explicit directory.
+            let empty = PathBuf::from(&init.data_dir).join("no-runtime");
+            std::fs::create_dir_all(&empty).map_err(|e| e.to_string())?;
+            init.settings
+                .insert("runtime_path".into(), json!(empty.to_string_lossy()));
+        }
+    }
     let init_json = serde_json::to_string(&init).map_err(|e| e.to_string())?;
     let create = module.create();
     let plugin = create(host.to_ffi(), RStr::from_str(&init_json))
