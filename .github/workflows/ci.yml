@@ -1,28 +1,179 @@
 name: CI
 
+# The plugin builds against eov-plugin-api 1.0 from an eov checkout (it is
+# not on crates.io yet), so every job checks eov out and this repository
+# into it at plugins/cellaris, where the submodule lives.
+
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      eov_ref:
+        description: "eov revision to build against"
+        default: master
+        type: string
+  # The release workflow runs this for the exact source commit, with the
+  # version that names the packages.
+  workflow_call:
+    inputs:
+      eov_ref:
+        type: string
+        default: master
+      version:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  EOV_REF: ${{ inputs.eov_ref || 'master' }}
 
 jobs:
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  lint:
+    name: Format, lints and the panel
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+        working-directory: eov/plugins/cellaris
+    steps:
+      - name: Check out eov
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: eosin-platform/eov
+          ref: ${{ env.EOV_REF }}
+          path: eov
+          persist-credentials: false
+      - name: Check out the plugin into it
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: eov/plugins/cellaris
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (master)
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            eov/plugins/cellaris
+            eov/plugins/cellaris/tools/check
+      - name: System libraries for the Slint compiler
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
+      - run: cargo fmt --check
+      - run: cargo fmt --check --manifest-path tools/check/Cargo.toml
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --manifest-path tools/check/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: The panel compiles with eov's Slint and takes what the plugin sends
+        run: cargo run --locked --manifest-path tools/check/Cargo.toml --features ui --bin ui
+      - name: Scripts and release metadata
+        run: |
+          set -euo pipefail
+          python3 -m py_compile package.py scripts/*.py tools/*.py
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          python3 scripts/release.py validate-source --version "$version"
+
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            library: libcellaris.so
+            python: python3
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            library: libcellaris.so
+            python: python3
+          - platform: macos-arm64
+            runner: macos-latest
+            library: libcellaris.dylib
+            python: python3
+          # Microsoft no longer builds ONNX Runtime for Intel macOS: this
+          # package has no runtime of its own (users install one with
+          # Homebrew), and the runtime tests do not run here.
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            library: libcellaris.dylib
+            python: python3
+            no_runtime: true
+          - platform: windows-x86_64
+            runner: windows-latest
+            library: cellaris.dll
+            python: python
+          - platform: windows-arm64
+            runner: windows-11-arm
+            library: cellaris.dll
+            python: python
+    defaults:
+      run:
+        shell: bash
+        working-directory: eov/plugins/cellaris
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Check out eov
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          components: rustfmt, clippy
-
-      # ort is built with load-dynamic, so onnxruntime is found at run time and
-      # nothing here needs it to compile.
-      - run: cargo fmt --check
-      - run: cargo clippy --release -- -D warnings
-      - run: cargo test --release
+          repository: eosin-platform/eov
+          ref: ${{ env.EOV_REF }}
+          path: eov
+          persist-credentials: false
+      - name: Check out the plugin into it
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: eov/plugins/cellaris
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (master)
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.platform }}
+          workspaces: |
+            eov/plugins/cellaris
+            eov/plugins/cellaris/tools/check
+      - name: Unit and integration tests
+        run: cargo test --locked
+      - name: Fetch ONNX Runtime (pinned, checksum verified)
+        if: ${{ !matrix.no_runtime }}
+        run: |
+          set -euo pipefail
+          root="$(${{ matrix.python }} tools/fetch_onnxruntime.py \
+            --platform ${{ matrix.platform }} --dest "$RUNNER_TEMP/onnxruntime" | tail -n 1)"
+          echo "CELLARIS_SMOKE_ORT=$root" >> "$GITHUB_ENV"
+      - name: Tests with the real runtime and the synthetic model
+        if: ${{ !matrix.no_runtime }}
+        run: cargo test --locked --release ort_smoke -- --ignored --test-threads=1
+      - name: Build the library
+        run: cargo build --locked --release
+      - name: The library loads the way eov loads it
+        run: cargo run --locked --manifest-path tools/check/Cargo.toml --bin load -- "target/release/${{ matrix.library }}"
+      - name: Package
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)-dev"
+          fi
+          name="cellaris-v${version}-${{ matrix.platform }}.eop"
+          args=(--skip-build --out "dist/$name")
+          if [ -n "${CELLARIS_SMOKE_ORT:-}" ]; then
+            args+=(--onnxruntime "$CELLARIS_SMOKE_ORT")
+          fi
+          mkdir -p dist
+          ${{ matrix.python }} package.py "${args[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cellaris-${{ matrix.platform }}
+          path: eov/plugins/cellaris/dist/*
+          if-no-files-found: error

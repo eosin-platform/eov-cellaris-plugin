@@ -1141,16 +1141,20 @@ fn the_manifest_is_valid_for_plugin_api_1() {
 // ---------------------------------------------------------------------------
 
 /// `CELLARIS_SMOKE_ORT` (a runtime library or a directory holding one) and
-/// `CELLARIS_SMOKE_MODEL` (a markers.onnx).
+/// `CELLARIS_SMOKE_MODEL` (a markers.onnx; by default the synthetic one in
+/// tests/data, written by tools/make_test_model.py).
 fn smoke_paths() -> Option<(PathBuf, PathBuf)> {
-    Some((
-        std::env::var_os("CELLARIS_SMOKE_ORT")?.into(),
-        std::env::var_os("CELLARIS_SMOKE_MODEL")?.into(),
-    ))
+    let runtime = std::env::var_os("CELLARIS_SMOKE_ORT")?.into();
+    let model = std::env::var_os("CELLARIS_SMOKE_MODEL")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/markers-synthetic.onnx")
+        });
+    Some((runtime, model))
 }
 
 #[test]
-#[ignore = "needs ONNX Runtime and a model: set CELLARIS_SMOKE_ORT and CELLARIS_SMOKE_MODEL"]
+#[ignore = "needs ONNX Runtime: set CELLARIS_SMOKE_ORT"]
 fn ort_smoke_backend() {
     let Some((runtime, model)) = smoke_paths() else {
         return;
@@ -1191,7 +1195,7 @@ fn ort_smoke_backend() {
 }
 
 #[test]
-#[ignore = "needs ONNX Runtime and a model: set CELLARIS_SMOKE_ORT and CELLARIS_SMOKE_MODEL"]
+#[ignore = "needs ONNX Runtime: set CELLARIS_SMOKE_ORT"]
 fn ort_smoke_plugin() {
     let Some((runtime, model)) = smoke_paths() else {
         return;

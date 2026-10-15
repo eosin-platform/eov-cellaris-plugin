@@ -1,5 +1,7 @@
 target/
 *.eop
 *.onnx
+!tests/data/markers-synthetic.onnx
 onnxruntime.dll
 libonnxruntime*
+__pycache__/
