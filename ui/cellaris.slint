@@ -1,0 +1,482 @@
+// The Cellaris panel. Every value is pushed by the plugin (Surface::set);
+// controls keep no state of their own, so what is shown is always what the
+// plugin holds. Callbacks arrive as Plugin::ui_callback.
+
+import { Slider, ScrollView } from "std-widgets.slint";
+
+export struct MarkerRow {
+    name: string,
+    colour: color,
+    visible: bool,
+    window: string,
+}
+
+export struct ReadoutRow {
+    name: string,
+    colour: color,
+    mean: string,
+    spread: string,
+    density: string,
+}
+
+export struct CardRow {
+    key: string,
+    value: string,
+}
+
+global Colours {
+    out property <color> surface: #252526;
+    out property <color> raised: #3e444c;
+    out property <color> raised-hover: #4a5460;
+    out property <color> track: #3e3e42;
+    out property <color> text: #cccccc;
+    out property <color> muted: #969696;
+    out property <color> faint: #6a6a6a;
+    out property <color> accent: #0e639c;
+    out property <color> warning: #ffc107;
+    out property <color> error: #f44336;
+    out property <color> notice-bg: #4a3500;
+    out property <color> notice-text: #ffd166;
+}
+
+component Heading inherits Text {
+    color: Colours.muted;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+component Note inherits Text {
+    color: Colours.muted;
+    font-size: 11px;
+    wrap: word-wrap;
+}
+
+component Action inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 26px;
+    min-width: label.preferred-width + 16px;
+    horizontal-stretch: 1;
+    border-radius: 4px;
+    background: !root.enabled ? Colours.track : touch.has-hover ? Colours.raised-hover : Colours.raised;
+
+    label := Text {
+        text: root.text;
+        color: root.enabled ? Colours.text : Colours.faint;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component Toggle inherits Rectangle {
+    in property <bool> on;
+    in property <string> text;
+    callback clicked();
+    min-height: 22px;
+
+    HorizontalLayout {
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: Colours.muted;
+                background: root.on ? Colours.accent : transparent;
+
+                if root.on: Text {
+                    text: "\u{2713}";
+                    color: white;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: Colours.text;
+            font-size: 12px;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component Bar inherits Rectangle {
+    in property <float> value;
+    height: 4px;
+    border-radius: 2px;
+    background: Colours.track;
+
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        height: parent.height;
+        border-radius: 2px;
+        background: Colours.accent;
+    }
+}
+
+component Swatch inherits Rectangle {
+    in property <color> colour;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: #111318;
+    background: root.colour;
+}
+
+export component CellarisPanel inherits Rectangle {
+    in property <string> notice: "PREDICTED \u{2014} research use only, not for diagnosis";
+    in property <bool> overlay-on: false;
+    in property <string> status: "";
+    in property <int> status-level: 0;
+    in property <string> status-detail: "";
+    in property <bool> can-retry: false;
+    in property <string> slide-name: "No slide";
+    in property <string> slide-notes: "";
+    in property <float> progress: -1;
+    in property <string> progress-text: "";
+    in property <float> overlay-opacity: 0.8;
+    in property <bool> fluorescence: false;
+    in property <bool> assume-mpp: false;
+    in property <[MarkerRow]> markers: [];
+    in property <[CardRow]> model-card: [];
+    in property <string> readout-status: "";
+    in property <string> readout-detail: "";
+    in property <float> readout-progress: 0;
+    in property <[ReadoutRow]> readout-rows: [];
+    in property <bool> has-region: false;
+    in property <bool> readout-running: false;
+    in property <bool> can-copy: false;
+
+    callback toggle-overlay();
+    callback set-opacity(float);
+    callback set-marker-visible(int, bool);
+    callback set-fluorescence(bool);
+    callback set-assume-mpp(bool);
+    callback measure-roi();
+    callback draw-region();
+    callback clear-region();
+    callback cancel-readout();
+    callback copy-readout();
+    callback choose-model();
+    callback choose-runtime();
+    callback retry();
+    callback close-panel();
+
+    background: Colours.surface;
+
+    scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.visible-width;
+        viewport-height: content.preferred-height;
+
+        content := VerticalLayout {
+            width: scroll.visible-width;
+            padding: 12px;
+            spacing: 10px;
+            alignment: start;
+
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: "Cellaris";
+                    color: Colours.text;
+                    font-size: 15px;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Action {
+                    text: "Close";
+                    horizontal-stretch: 0;
+                    clicked => {
+                        root.close-panel();
+                    }
+                }
+            }
+
+            // The research-use statement, always first (CEL-9).
+            Rectangle {
+                background: Colours.notice-bg;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Colours.warning;
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+                    Text {
+                        text: root.notice;
+                        color: Colours.notice-text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: "The colours show what a model predicts the immunofluorescence would be. They are not measurements: check them against measured IF before relying on them.";
+                        color: Colours.notice-text;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.status;
+                    color: root.status-level == 3 ? Colours.error : root.status-level == 2 ? Colours.warning : Colours.text;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                if root.status-detail != "": Note {
+                    text: root.status-detail;
+                }
+                if root.can-retry: HorizontalLayout {
+                    Action {
+                        text: "Retry";
+                        horizontal-stretch: 0;
+                        clicked => {
+                            root.retry();
+                        }
+                    }
+                    Rectangle {}
+                }
+            }
+
+            Heading { text: "SLIDE"; }
+            Text {
+                text: root.slide-name;
+                color: Colours.text;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            if root.slide-notes != "": Note {
+                text: root.slide-notes;
+            }
+
+            Heading { text: "PREDICTED MARKERS"; }
+            HorizontalLayout {
+                spacing: 8px;
+                Action {
+                    text: root.overlay-on ? "Hide predictions" : "Show predictions";
+                    clicked => {
+                        root.toggle-overlay();
+                    }
+                }
+            }
+            if root.progress >= 0: VerticalLayout {
+                spacing: 4px;
+                Bar {
+                    value: root.progress;
+                }
+                Note {
+                    text: root.progress-text;
+                }
+            }
+
+            for row[index] in root.markers: HorizontalLayout {
+                spacing: 8px;
+                Toggle {
+                    on: row.visible;
+                    text: row.name;
+                    horizontal-stretch: 1;
+                    clicked => {
+                        root.set-marker-visible(index, !row.visible);
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Swatch {
+                        colour: row.colour;
+                    }
+                }
+                Text {
+                    text: row.window;
+                    color: Colours.muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: "Opacity";
+                    color: Colours.text;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                Slider {
+                    minimum: 0.1;
+                    maximum: 1.0;
+                    value: root.overlay-opacity;
+                    horizontal-stretch: 1;
+                    changed(value) => {
+                        root.set-opacity(value);
+                    }
+                }
+                Text {
+                    text: round(root.overlay-opacity * 100) + " %";
+                    color: Colours.muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    min-width: 34px;
+                }
+            }
+
+            Toggle {
+                on: root.fluorescence;
+                text: "Fluorescence style: colour on black over all tissue";
+                clicked => {
+                    root.set-fluorescence(!root.fluorescence);
+                }
+            }
+            Toggle {
+                on: root.assume-mpp;
+                text: "Assume the model's pixel size for slides that report none";
+                clicked => {
+                    root.set-assume-mpp(!root.assume-mpp);
+                }
+            }
+            Note {
+                text: "Colours are chosen to stay distinct with red-green and blue-yellow colour blindness; hide markers to look at one at a time. Areas still being computed are veiled; failed ones are outlined in red.";
+            }
+
+            Heading { text: "REGION READOUT"; }
+            Text {
+                text: root.readout-status;
+                color: Colours.text;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            if root.readout-detail != "": Note {
+                text: root.readout-detail;
+            }
+            if root.readout-running: Bar {
+                value: root.readout-progress;
+            }
+            if root.readout-rows.length > 0: VerticalLayout {
+                spacing: 6px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "marker"; color: Colours.muted; font-size: 11px; horizontal-stretch: 1; }
+                    Text { text: "mean"; color: Colours.muted; font-size: 11px; width: 40px; horizontal-alignment: right; }
+                    Text { text: "spread"; color: Colours.muted; font-size: 11px; width: 44px; horizontal-alignment: right; }
+                    Text { text: "density r\u{b2}"; color: Colours.muted; font-size: 11px; width: 64px; horizontal-alignment: right; }
+                }
+
+                for row in root.readout-rows: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        Swatch {
+                            colour: row.colour;
+                        }
+                    }
+                    Text { text: row.name; color: Colours.text; font-size: 12px; horizontal-stretch: 1; }
+                    Text { text: row.mean; color: Colours.text; font-size: 12px; width: 40px; horizontal-alignment: right; }
+                    Text { text: row.spread; color: Colours.text; font-size: 12px; width: 44px; horizontal-alignment: right; }
+                    Text { text: row.density; color: Colours.text; font-size: 12px; width: 64px; horizontal-alignment: right; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Action {
+                    text: "Draw region";
+                    clicked => {
+                        root.draw-region();
+                    }
+                }
+                Action {
+                    text: "Measure ROI";
+                    clicked => {
+                        root.measure-roi();
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                if root.readout-running: Action {
+                    text: "Cancel";
+                    clicked => {
+                        root.cancel-readout();
+                    }
+                }
+                Action {
+                    text: "Copy";
+                    enabled: root.can-copy;
+                    clicked => {
+                        root.copy-readout();
+                    }
+                }
+                Action {
+                    text: "Clear";
+                    enabled: root.has-region;
+                    clicked => {
+                        root.clear-region();
+                    }
+                }
+            }
+            Note {
+                text: "Mean is the predicted intensity, arcsinh, over tissue in the region, and spread how much it varies between 5 \u{b5}m blocks. Density r\u{b2} is how much of that variation optical density alone reproduces. Near 1, the marker is a density map here. Low with a small spread means the prediction is flat, not that it learned anything. Low with a wide spread is needed for it to be the marker, but only measured IF shows it is. Numbers come from the same blended predictions the overlay shows.";
+            }
+
+            Heading { text: "MODEL"; }
+            for row in root.model-card: VerticalLayout {
+                spacing: 1px;
+                Text {
+                    text: row.key;
+                    color: Colours.muted;
+                    font-size: 10px;
+                }
+                Text {
+                    text: row.value;
+                    color: Colours.text;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Action {
+                    text: "Choose model\u{2026}";
+                    clicked => {
+                        root.choose-model();
+                    }
+                }
+                Action {
+                    text: "Choose runtime\u{2026}";
+                    clicked => {
+                        root.choose-runtime();
+                    }
+                }
+            }
+        }
+    }
+}
