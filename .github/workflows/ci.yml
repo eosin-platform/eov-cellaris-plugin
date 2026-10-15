@@ -153,7 +153,15 @@ jobs:
           echo "CELLARIS_SMOKE_ORT=$root" >> "$GITHUB_ENV"
       - name: Tests with the real runtime and the synthetic model
         if: ${{ !matrix.no_runtime }}
-        run: cargo test --locked --release ort_smoke -- --ignored --test-threads=1
+        run: >-
+          cargo test --locked --release ort_smoke -- --ignored --test-threads=1
+          --skip ort_smoke_a_candidate_that_fails_does_not_spoil_the_next
+      # ONNX Runtime loads once per process, so this one runs on its own.
+      - name: A runtime that does not load does not spoil the next one
+        if: ${{ !matrix.no_runtime }}
+        run: >-
+          cargo test --locked --release -- --ignored --exact
+          tests::ort_smoke_a_candidate_that_fails_does_not_spoil_the_next
       - name: Build the library
         run: cargo build --locked --release
       - name: The library loads the way eov loads it

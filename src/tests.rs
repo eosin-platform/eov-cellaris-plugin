@@ -288,13 +288,13 @@ fn view(
         width: width * zoom,
         height: height * zoom,
         scale_factor: 1.0,
-        rotation_deg: 0.0,
         visible: Rect {
             x,
             y,
             width,
             height,
         },
+        ..Default::default()
     }
 }
 
@@ -1644,6 +1644,60 @@ fn ort_smoke_plugin() {
     println!("a cell's tooltip: {tooltip:?}");
     assert!(state.badges[NOTICE_BADGE].1.contains("research use only"));
     println!("badges: {:?}", state.badges);
+}
+
+/// `ort` 2.0.0-rc.13 keeps a failed load as if it had succeeded, so a
+/// candidate that cannot be loaded must never reach it: the next one would
+/// "load" without loading anything.
+#[cfg(unix)]
+#[test]
+#[ignore = "needs ONNX Runtime: set CELLARIS_SMOKE_ORT; run alone (it loads once per process)"]
+fn ort_smoke_a_candidate_that_fails_does_not_spoil_the_next() {
+    let Some((runtime, _)) = smoke_paths() else {
+        return;
+    };
+    if crate::runtime::tried() {
+        println!("skipped: this process has already loaded ONNX Runtime; run the test alone");
+        return;
+    }
+    let (os, name) = if cfg!(target_os = "macos") {
+        ("macos", "libonnxruntime.dylib")
+    } else {
+        ("linux", "libonnxruntime.so")
+    };
+    // A library, or an extracted release (with it in lib/).
+    let library = if runtime.is_dir() {
+        [runtime.clone(), runtime.join("lib")]
+            .iter()
+            .filter_map(|dir| std::fs::read_dir(dir).ok())
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| crate::runtime::is_runtime_name(n, os))
+            })
+            .expect("no runtime in CELLARIS_SMOKE_ORT")
+    } else {
+        runtime
+    };
+    let init = test_init("cellaris");
+    let package = PathBuf::from(&init.plugin_root).join("package");
+    let data = PathBuf::from(&init.data_dir);
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(package.join(name), b"not a library").unwrap();
+    std::os::unix::fs::symlink(&library, data.join(name)).unwrap();
+    let loaded = crate::runtime::load(&crate::runtime::Search {
+        plugin_root: Some(package),
+        data_dir: Some(data),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(loaded.source, crate::runtime::Source::DataDir);
+    assert!(loaded.version.is_some());
+    // And ort can use it.
+    assert!(std::panic::catch_unwind(ort::info).is_ok());
 }
 
 #[test]

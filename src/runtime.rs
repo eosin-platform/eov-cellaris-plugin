@@ -289,38 +289,66 @@ fn install_hint() -> String {
     )
 }
 
-/// The version ONNX Runtime reports through `OrtApiBase::GetVersionString`.
-fn reported_version(path: &Path) -> Option<String> {
-    // ort resolves a relative name next to the executable first; so does
-    // this, so that it asks the same library.
-    let path = match std::env::current_exe() {
+/// Where `ort` looks for `path`: a relative name next to the executable
+/// first, as it does.
+fn resolve_like_ort(path: &Path) -> PathBuf {
+    match std::env::current_exe() {
         Ok(exe) if path.is_relative() => exe
             .parent()
             .map(|dir| dir.join(path))
             .filter(|p| p.exists())
             .unwrap_or_else(|| path.to_path_buf()),
         _ => path.to_path_buf(),
-    };
-    // SAFETY: ort has just loaded this library, so opening it again only
-    // takes another reference to it. OrtGetApiBase and GetVersionString
-    // take no arguments, and the string they return is static.
+    }
+}
+
+/// A candidate that opened, still open, and its version.
+struct Checked {
+    path: PathBuf,
+    version: Option<String>,
+    _library: libloading::Library,
+}
+
+/// Opens a candidate without `ort` and checks that it is ONNX Runtime and
+/// new enough. `ort` can try only once per process: its 2.0.0-rc.13 keeps a
+/// failed load as if it had succeeded (and then uses an empty library), so
+/// it is only given a library known to open.
+fn check(path: &Path) -> Result<Checked, String> {
+    let path = resolve_like_ort(path);
+    // SAFETY: opening a library runs its initialisers, as loading it would.
+    // OrtGetApiBase and GetVersionString take no arguments, and the string
+    // they return is static.
     unsafe {
-        let library = libloading::Library::new(&path).ok()?;
+        let library =
+            libloading::Library::new(&path).map_err(|e| format!("it could not be opened: {e}"))?;
         let get_base: libloading::Symbol<unsafe extern "C" fn() -> *const ort::sys::OrtApiBase> =
-            library.get(b"OrtGetApiBase").ok()?;
+            library
+                .get(b"OrtGetApiBase")
+                .map_err(|_| "it is not ONNX Runtime (it has no OrtGetApiBase)".to_string())?;
         let base = get_base();
         if base.is_null() {
-            return None;
+            return Err("it is not ONNX Runtime (OrtGetApiBase returned nothing)".into());
         }
         let text = ((*base).GetVersionString)();
-        if text.is_null() {
-            return None;
-        }
-        Some(
+        let version = (!text.is_null()).then(|| {
             std::ffi::CStr::from_ptr(text)
                 .to_string_lossy()
-                .into_owned(),
-        )
+                .into_owned()
+        });
+        let minor = |v: &str| v.split('.').nth(1).and_then(|m| m.parse::<u32>().ok());
+        let needed = minor(MIN_VERSION).unwrap_or(0);
+        if let Some(version) = &version
+            && minor(version).is_some_and(|m| m < needed)
+        {
+            return Err(format!(
+                "it is ONNX Runtime {version}, older than {MIN_VERSION}"
+            ));
+        }
+        Ok(Checked {
+            path,
+            version,
+            _library: library,
+        })
     }
 }
 
@@ -345,9 +373,21 @@ pub fn version_from_build_info(info: &str) -> Option<String> {
     (!version.is_empty()).then_some(version)
 }
 
+/// How loading went in this process: ONNX Runtime loads once per process.
+static LOADED: std::sync::OnceLock<Result<Loaded, Failure>> = std::sync::OnceLock::new();
+
+/// Whether this process has already tried `ort` (and so cannot again).
+pub fn tried() -> bool {
+    LOADED.get().is_some()
+}
+
 /// Loads the first candidate that works. Loading is once per process: after
-/// a success, later calls return the same runtime.
+/// a success, later calls return the same runtime; after `ort` itself
+/// failed, only a restart helps.
 pub fn load(search: &Search) -> Result<Loaded, Failure> {
+    if let Some(done) = LOADED.get() {
+        return done.clone();
+    }
     let candidates = candidates(search, current_os(), &Disk).map_err(|reason| Failure {
         summary: "ONNX Runtime was not found".to_string(),
         detail: format!("{reason}.\n{}", install_hint()),
@@ -360,51 +400,73 @@ pub fn load(search: &Search) -> Result<Loaded, Failure> {
     }
     let mut attempts = Vec::new();
     for candidate in candidates {
-        let path = candidate.path.clone();
+        let explicit = !matches!(
+            candidate.source,
+            Source::Bundled | Source::DataDir | Source::System
+        );
+        let checked = match catch_unwind(AssertUnwindSafe(|| check(&candidate.path))) {
+            Ok(Ok(checked)) => checked,
+            Ok(Err(reason)) => {
+                attempts.push(format!(
+                    "{} ({}): {reason}",
+                    candidate.path.display(),
+                    candidate.source.describe()
+                ));
+                if explicit {
+                    break;
+                }
+                continue;
+            }
+            Err(_) => {
+                attempts.push(format!(
+                    "{} ({}): opening it crashed",
+                    candidate.path.display(),
+                    candidate.source.describe()
+                ));
+                if explicit {
+                    break;
+                }
+                continue;
+            }
+        };
+        // The one try `ort` gets.
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            ort::init_from(&path).map(|builder| {
+            ort::init_from(&checked.path).map(|builder| {
                 // Keep ONNX Runtime's telemetry off for slides.
                 builder.with_name("cellaris").with_telemetry(false).commit();
             })
         }));
-        match outcome {
-            Ok(Ok(())) => {
-                let version = catch_unwind(AssertUnwindSafe(|| reported_version(&candidate.path)))
-                    .ok()
-                    .flatten()
-                    .or_else(|| version_from_name(&candidate.path))
-                    .or_else(|| {
-                        catch_unwind(ort::info)
-                            .ok()
-                            .and_then(version_from_build_info)
-                    });
-                return Ok(Loaded {
-                    path: candidate.path,
-                    source: candidate.source,
-                    version,
-                });
-            }
-            Ok(Err(error)) => attempts.push(format!(
-                "{} ({}): {error}",
-                candidate.path.display(),
-                candidate.source.describe()
-            )),
-            Err(_) => attempts.push(format!(
-                "{} ({}): loading it crashed",
-                candidate.path.display(),
-                candidate.source.describe()
-            )),
-        }
-        if !matches!(
-            candidate.source,
-            Source::Bundled | Source::DataDir | Source::System
-        ) {
-            break;
-        }
+        let result = match outcome {
+            Ok(Ok(())) => Ok(Loaded {
+                version: checked
+                    .version
+                    .clone()
+                    .or_else(|| version_from_name(&checked.path)),
+                path: candidate.path,
+                source: candidate.source,
+            }),
+            Ok(Err(error)) => Err(Failure {
+                summary: "ONNX Runtime could not be loaded".to_string(),
+                detail: format!(
+                    "{} ({}): {error}. Restart eov to try again.",
+                    checked.path.display(),
+                    candidate.source.describe()
+                ),
+            }),
+            Err(_) => Err(Failure {
+                summary: "ONNX Runtime could not be loaded".to_string(),
+                detail: format!(
+                    "{} ({}): loading it crashed. Restart eov to try again.",
+                    checked.path.display(),
+                    candidate.source.describe()
+                ),
+            }),
+        };
+        return LOADED.get_or_init(|| result).clone();
     }
-    let incompatible = attempts.iter().any(|a| a.contains("not compatible"));
+    let old = attempts.iter().any(|a| a.contains("older than"));
     Err(Failure {
-        summary: if incompatible {
+        summary: if old {
             format!("The ONNX Runtime found is older than {MIN_VERSION}")
         } else {
             "ONNX Runtime could not be loaded".to_string()
