@@ -244,9 +244,11 @@ pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Ca
     };
     for name in system {
         let path = PathBuf::from(name);
-        // Bare names are left to the dynamic loader's search; absolute
-        // ones are only worth a try when they are there.
-        if path.is_absolute() && !probe.exists(&path) {
+        // Bare names are left to the dynamic loader's search; paths are
+        // only worth a try when they are there. (Not `is_absolute`: on
+        // Windows, a path without a drive letter is not absolute.)
+        let bare = path.parent().is_none_or(|dir| dir.as_os_str().is_empty());
+        if !bare && !probe.exists(&path) {
             continue;
         }
         found.push(Candidate {
@@ -543,7 +545,7 @@ mod tests {
         assert_eq!(found[1].path, PathBuf::from("/data/libonnxruntime.so"));
         assert!(found[2..].iter().all(|c| c.source == Source::System));
         assert_eq!(found[2].path, PathBuf::from("libonnxruntime.so"));
-        // Absolute system paths are only tried when they exist.
+        // System paths (not bare names) are only tried when they exist.
         assert!(!found.iter().any(|c| c.path.starts_with("/usr/local")));
 
         let mut fake = Fake::default();
