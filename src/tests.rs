@@ -1352,3 +1352,27 @@ fn a_confirmed_long_readout_runs_as_a_job_and_can_be_cancelled() {
     std::thread::sleep(Duration::from_millis(400));
     assert_eq!(rig.seen().windows.load(Ordering::SeqCst), after);
 }
+
+#[test]
+fn a_failure_nobody_needs_any_more_does_not_spin_the_worker() {
+    // One read fails, then the overlay is turned off before the retry.
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 60.0, 60.0, 2.0);
+    let rig = Rig::with_reader(&[(1, slide)], &[v], FakeConfig::default(), Some(1));
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the failure", LONG, || {
+        rig.objects(&marks_layer(1))
+            .iter()
+            .any(|o| o.object_id.starts_with("failed-"))
+    });
+    rig.click(OVERLAY_BUTTON);
+    // Past the 2 s back-off, nothing wants the window.
+    std::thread::sleep(Duration::from_millis(2_500));
+    let before = rig.harness.calls_to("snapshot").len();
+    std::thread::sleep(Duration::from_secs(1));
+    let passes = rig.harness.calls_to("snapshot").len() - before;
+    assert!(
+        passes <= 3,
+        "the idle worker made {passes} passes in a second"
+    );
+}

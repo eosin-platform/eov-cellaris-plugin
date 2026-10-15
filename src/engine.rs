@@ -56,6 +56,8 @@ const RERENDER: usize = 200;
 const UI_INTERVAL: Duration = Duration::from_millis(250);
 /// The worker looks at the host this often even when nothing happens.
 const IDLE_POLL: Duration = Duration::from_secs(3);
+/// An idle worker never waits less than this, whatever the bookkeeping says.
+const MIN_WAIT: Duration = Duration::from_millis(50);
 /// Seconds per window assumed before anything has been measured.
 pub const DEFAULT_SECONDS_PER_WINDOW: f64 = 1.2;
 
@@ -629,7 +631,10 @@ impl<B: Backend> Worker<B> {
                 }
             };
             if !busy {
-                let timeout = self.next_deadline().unwrap_or(IDLE_POLL).min(IDLE_POLL);
+                let timeout = self
+                    .next_deadline()
+                    .unwrap_or(IDLE_POLL)
+                    .clamp(MIN_WAIT, IDLE_POLL);
                 self.shared.wait(timeout);
             }
         }
@@ -679,14 +684,17 @@ impl<B: Backend> Worker<B> {
     }
 
     /// The earliest moment a failed window may be retried.
+    /// The next retry still to come. A retry that is due and wanted is
+    /// planned in the same pass (which is then busy); one nobody wants any
+    /// more must not wake the worker, or it would spin.
     fn next_deadline(&self) -> Option<Duration> {
         let st = self.shared.lock();
         let now = Instant::now();
         st.files
             .values()
             .flat_map(|f| f.failures.values())
-            .filter(|f| !f.given_up())
-            .map(|f| f.retry_at.saturating_duration_since(now))
+            .filter(|f| !f.given_up() && f.retry_at > now)
+            .map(|f| f.retry_at - now)
             .min()
     }
 
