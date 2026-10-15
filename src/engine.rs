@@ -468,6 +468,30 @@ fn scale_for(info: &FileInfo, model: &ModelInfo, prefs: &Prefs) -> Result<Arc<Gr
     Grid::new(info, scale, model.mpp, model.window).map(Arc::new)
 }
 
+/// Maps every slide onto the model grid, and opens its disk shelf once the
+/// slide's identity is known (the host computes it after opening).
+fn ensure_grids(st: &mut State, model: &ModelInfo, markers: &[Marker]) {
+    let disk_on = st.prefs.disk_cache_mb > 0;
+    for file in st.files.values_mut() {
+        if file.grid.is_none() {
+            file.grid = Some(scale_for(&file.info, model, &st.prefs));
+        }
+        if file.shelf.is_none()
+            && disk_on
+            && let (Some(grid), Some(identity)) = (file.grid(), &file.info.identity)
+        {
+            file.shelf = Some(Shelf::new(
+                &st.paths.cache_dir.join("cells"),
+                &cache::key(identity, &model.sha256, grid, markers, model.recon),
+                grid.stride,
+                markers.len(),
+                model.recon,
+            ));
+            file.disk_misses.clear();
+        }
+    }
+}
+
 /// The windows a cell still needs.
 fn missing_windows(file: &FileState, grid: &Grid, cell: Idx) -> Vec<Idx> {
     let accum = file.accums.get(&cell);
@@ -621,6 +645,7 @@ impl<B: Backend> Worker<B> {
         if self.load_if_wanted() {
             return true;
         }
+        self.start_readouts();
         let plan = self.plan();
         let mut publish = Publish {
             generation: plan.generation,
@@ -823,34 +848,7 @@ impl<B: Backend> Worker<B> {
             return Plan::default();
         };
         let batch = model.batch.size(st.prefs.batch_size);
-
-        // Grids, and the disk shelves that go with them.
-        let disk_on = st.prefs.disk_cache_mb > 0;
-        for file in st.files.values_mut() {
-            if file.grid.is_none() {
-                file.grid = Some(scale_for(&file.info, &model, &st.prefs));
-            }
-            // The identity can arrive after the file (the host computes it).
-            if file.shelf.is_none()
-                && disk_on
-                && let (Some(grid), Some(identity)) = (file.grid(), &file.info.identity)
-            {
-                file.shelf = Some(Shelf::new(
-                    &st.paths.cache_dir.join("cells"),
-                    &cache::key(identity, &model.sha256, grid, &markers, model.recon),
-                    grid.stride,
-                    markers.len(),
-                    model.recon,
-                ));
-                file.disk_misses.clear();
-            }
-        }
-
-        // Readouts the user asked for.
-        let file_ids: Vec<FileId> = st.files.keys().copied().collect();
-        for id in &file_ids {
-            self.start_readout(st, *id);
-        }
+        ensure_grids(st, &model, &markers);
 
         // Demand: every pane's view, then readouts.
         let mut demands: Vec<Demand> = Vec::new();
@@ -1020,102 +1018,137 @@ impl<B: Backend> Worker<B> {
         plan
     }
 
-    /// Starts the readout of a file whose region changed.
-    fn start_readout(&self, st: &mut State, id: FileId) {
-        let Some(file) = st.files.get_mut(&id) else {
-            return;
-        };
-        if !file.readout_wanted {
-            return;
-        }
-        let Some(region) = file.region.clone() else {
-            file.readout_wanted = false;
-            return;
-        };
-        let grid = match &file.grid {
-            Some(Ok(grid)) => Arc::clone(grid),
-            Some(Err(problem)) => {
-                file.readout_wanted = false;
-                file.readout = Some(ReadoutJob {
-                    readout: failed_readout(&mut st.readout_seq, Some(region), problem.message()),
-                    job: None,
-                    confirm: None,
-                    started: Instant::now(),
-                });
+    /// Starts the readouts of files whose region changed. The cells a
+    /// region needs are found without holding the state lock (a large
+    /// outline takes a while), and the readout is installed only if the
+    /// region did not change meanwhile.
+    fn start_readouts(&self) {
+        let requests: Vec<(FileId, Region, Arc<Grid>)> = {
+            let mut guard = self.shared.lock();
+            let st = &mut *guard;
+            let (Some(model), Ok(markers)) = (st.model.info().cloned(), st.markers.clone()) else {
                 return;
-            }
-            None => return,
-        };
-        file.readout_wanted = false;
-        if let Some(old) = file.readout.take()
-            && let Some(job) = old.job
-        {
-            job.finish(Some("replaced by a new region".into()));
-        }
-        let markers = st.markers.as_ref().map(Vec::len).unwrap_or(0);
-        let cells = region.cells(&grid, READOUT_MAX_WINDOWS * 2);
-        let windows: HashSet<Idx> = cells
-            .iter()
-            .flat_map(|cell| grid.covering(*cell).map(|(w, _, _)| w))
-            .collect();
-        st.readout_seq += 1;
-        let id_seq = st.readout_seq;
-        let mut readout = Readout::new(id_seq, region, cells.clone(), markers, windows.len());
-        if cells.is_empty() {
-            readout.state = ReadoutState::Failed("No part of that region is on the slide.".into());
-        } else if windows.len() > READOUT_MAX_WINDOWS {
-            readout.state = ReadoutState::Failed(format!(
-                "That region needs more than {READOUT_MAX_WINDOWS} windows. Draw a smaller one."
-            ));
-        }
-        let mut job = ReadoutJob {
-            readout,
-            job: None,
-            confirm: None,
-            started: Instant::now(),
-        };
-        if job.readout.is_running() {
-            // Cells already known count straight away.
-            let threshold = st.model.info().and_then(|m| m.recon_threshold);
-            for cell in &cells {
-                if let Some((data, _)) = file.cells.get(cell) {
-                    job.readout.consume(*cell, data, &grid, threshold);
+            };
+            ensure_grids(st, &model, &markers);
+            let mut requests = Vec::new();
+            for (id, file) in st.files.iter_mut() {
+                if !file.readout_wanted {
+                    continue;
+                }
+                let Some(region) = file.region.clone() else {
+                    file.readout_wanted = false;
+                    continue;
+                };
+                match &file.grid {
+                    Some(Ok(grid)) => requests.push((*id, region, Arc::clone(grid))),
+                    Some(Err(problem)) => {
+                        file.readout_wanted = false;
+                        file.readout = Some(ReadoutJob {
+                            readout: failed_readout(
+                                &mut st.readout_seq,
+                                Some(region),
+                                problem.message(),
+                            ),
+                            job: None,
+                            confirm: None,
+                            started: Instant::now(),
+                        });
+                    }
+                    None => {}
                 }
             }
-            let left: usize = job
-                .readout
-                .remaining
+            requests
+        };
+        for (id, region, grid) in requests {
+            let cells = region.cells(&grid, READOUT_MAX_WINDOWS * 2);
+            let windows: HashSet<Idx> = cells
                 .iter()
-                .map(|cell| missing_windows_of(&file.accums, &grid, *cell).len())
-                .sum::<usize>()
-                .min(windows.len());
-            let estimate = left as f64 * st.throughput.seconds_per_window();
-            if left > READOUT_CONFIRM_WINDOWS {
-                job.readout.state = ReadoutState::Confirming;
-                job.confirm = self
-                    .host
-                    .confirm(ConfirmArgs {
-                        title: "Measure a large region?".into(),
-                        message: format!(
-                            "This region needs about {left} more windows of predictions, roughly \
-                             {} on this computer. The overlay keeps working meanwhile, and the \
-                             readout can be cancelled.",
-                            present::duration(estimate)
-                        ),
-                        confirm_label: "Measure".into(),
-                        cancel_label: "Cancel".into(),
-                        destructive: false,
-                    })
-                    .ok();
-                if job.confirm.is_none() {
-                    job.readout.state = ReadoutState::Running;
+                .flat_map(|cell| grid.covering(*cell).map(|(w, _, _)| w))
+                .collect();
+            let mut guard = self.shared.lock();
+            let st = &mut *guard;
+            let markers = st.markers.as_ref().map(Vec::len).unwrap_or(0);
+            let threshold = st.model.info().and_then(|m| m.recon_threshold);
+            let seconds = st.throughput.seconds_per_window();
+            let Some(file) = st.files.get_mut(&id) else {
+                continue;
+            };
+            let unchanged = file.readout_wanted
+                && file.region.as_ref() == Some(&region)
+                && file.grid().is_some_and(|g| Arc::ptr_eq(g, &grid));
+            if !unchanged {
+                // A newer outline or grid: the next pass takes it.
+                continue;
+            }
+            file.readout_wanted = false;
+            if let Some(old) = file.readout.take()
+                && let Some(job) = old.job
+            {
+                job.finish(Some("replaced by a new region".into()));
+            }
+            st.readout_seq += 1;
+            let mut readout = Readout::new(
+                st.readout_seq,
+                region,
+                cells.clone(),
+                markers,
+                windows.len(),
+            );
+            if cells.is_empty() {
+                readout.state =
+                    ReadoutState::Failed("No part of that region is on the slide.".into());
+            } else if windows.len() > READOUT_MAX_WINDOWS {
+                readout.state = ReadoutState::Failed(format!(
+                    "That region needs more than {READOUT_MAX_WINDOWS} windows. Draw a smaller one."
+                ));
+            }
+            let mut job = ReadoutJob {
+                readout,
+                job: None,
+                confirm: None,
+                started: Instant::now(),
+            };
+            if job.readout.is_running() {
+                // Cells already known count straight away.
+                for cell in &cells {
+                    if let Some((data, _)) = file.cells.get(cell) {
+                        job.readout.consume(*cell, data, &grid, threshold);
+                    }
+                }
+                let left: usize = job
+                    .readout
+                    .remaining
+                    .iter()
+                    .map(|cell| missing_windows_of(&file.accums, &grid, *cell).len())
+                    .sum::<usize>()
+                    .min(windows.len());
+                if left > READOUT_CONFIRM_WINDOWS {
+                    job.readout.state = ReadoutState::Confirming;
+                    job.confirm = self
+                        .host
+                        .confirm(ConfirmArgs {
+                            title: "Measure a large region?".into(),
+                            message: format!(
+                                "This region needs about {left} more windows of predictions, \
+                                 roughly {} on this computer. The overlay keeps working \
+                                 meanwhile, and the readout can be cancelled.",
+                                present::duration(left as f64 * seconds)
+                            ),
+                            confirm_label: "Measure".into(),
+                            cancel_label: "Cancel".into(),
+                            destructive: false,
+                        })
+                        .ok();
+                    if job.confirm.is_none() {
+                        job.readout.state = ReadoutState::Running;
+                    }
+                }
+                if job.readout.is_running() {
+                    job.job = self.host.start_job("Cellaris region readout", true).ok();
                 }
             }
-            if job.readout.is_running() {
-                job.job = self.host.start_job("Cellaris region readout", true).ok();
-            }
+            file.readout = Some(job);
         }
-        file.readout = Some(job);
     }
 
     // -- computing -----------------------------------------------------------

@@ -164,9 +164,10 @@ and flagged as less reliable; more than twice as coarse (1 µm/px for this model
 whose metadata names a stain other than H&E is flagged.
 
 Settings are kept by eov, in `settings.json` in the data directory above. A few have no control in
-the panel yet and can be set there while eov is closed: `batch_size` (windows per run, default 4),
-`threads` (inference threads, default half the CPUs, at most 8) and `disk_cache_mb` (default 2048;
-0 turns the disk cache off).
+the panel yet and can be set there while eov is closed: `markers` (the channels to predict, up to
+six of the model's, default `["Hoechst", "Pan-CK", "SMA"]`; past three, colours are harder to tell
+apart, so hide some), `batch_size` (windows per run, default 4), `threads` (inference threads,
+default half the CPUs, at most 8) and `disk_cache_mb` (default 2048; 0 turns the disk cache off).
 
 ## The model's metadata
 
