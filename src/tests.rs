@@ -1202,10 +1202,11 @@ fn ort_smoke_backend() {
     );
     // A wrong batch is an error, not a panic.
     assert!(predictor.predict(&input[..10], 2).is_err());
-    // The stopper interrupts a run; the next run works again.
+    // A stop asked for between runs stops the next one (shutdown must not
+    // wait for a whole batch); the run after that works again.
     let stop = predictor.stopper().unwrap();
     stop();
-    let _ = predictor.predict(&input, 2);
+    assert!(predictor.predict(&input, 2).is_err(), "the stop was lost");
     assert!(predictor.predict(&input, 2).is_ok());
 }
 
@@ -1375,4 +1376,98 @@ fn a_failure_nobody_needs_any_more_does_not_spin_the_worker() {
         passes <= 3,
         "the idle worker made {passes} passes in a second"
     );
+}
+
+#[test]
+fn the_same_error_at_different_places_is_reported_once() {
+    let host = MockHost::new();
+    let sdk = Host::from_ffi(host.to_ffi());
+    let mut st = crate::engine::State::new(Default::default(), Default::default());
+    for (x, y) in [(0, 0), (512, 0), (1024, 2048)] {
+        crate::engine::notify_once(
+            &sdk,
+            &mut st,
+            "Cellaris could not compute part of the slide; retrying",
+            &format!("corrupt region at level 0, ({x}, {y}), 256x256"),
+        );
+    }
+    crate::engine::notify_once(&sdk, &mut st, "Another problem", "detail");
+    assert_eq!(host.state().notifications.len(), 2);
+}
+
+#[test]
+fn assuming_the_pixel_size_also_rescues_implausible_ones() {
+    // 5,000 µm/px is "reported" but not a pixel size anyone scans at.
+    let slide = Slide::new(Some(5_000.0));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the refusal", LONG, || {
+        rig.objects(&marks_layer(1)).iter().any(|o| {
+            o.label
+                .as_deref()
+                .is_some_and(|l| l.contains("pixel size unknown"))
+        })
+    });
+    rig.harness
+        .ui_callback("panel", "set-assume-mpp", vec![json!(true)])
+        .unwrap();
+    wait_for("assumed-scale rasters", LONG, || rig.rasters(1) > 0);
+}
+
+#[test]
+fn two_panes_on_the_same_view_do_not_double_the_counts() {
+    let slide = Slide::new(Some(0.325));
+    let a = view(1, 1, 4_000.0, 4_000.0, 64.0, 64.0, 2.0);
+    let b = view(2, 1, 4_000.0, 4_000.0, 64.0, 64.0, 2.0);
+    // Every read fails, so every cell in view is pending and failed.
+    let rig = Rig::with_reader(&[(1, slide)], &[a, b], FakeConfig::default(), Some(10_000));
+    rig.click(OVERLAY_BUTTON);
+    let line = || {
+        rig.objects(&marks_layer(1))
+            .into_iter()
+            .find(|o| o.object_id == "status-1")
+            .and_then(|o| o.label)
+            .unwrap_or_default()
+    };
+    wait_for("failures in the badge", LONG, || line().contains("failed"));
+    // "Computing 0 of N cells · M failed, retrying": M can be at most N.
+    let text = line();
+    let numbers: Vec<usize> = text
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|n| n.parse().ok())
+        .collect();
+    assert!(numbers.len() >= 3, "{text}");
+    assert!(numbers[2] <= numbers[1], "{text}");
+}
+
+#[test]
+fn a_slide_that_disappears_ends_its_readout_job() {
+    let slide = Slide::new(Some(0.325));
+    let rig = Rig::new(&[(1, slide)], &[], FakeConfig::default());
+    rig.harness
+        .send(HostEvent::ShapeDrawn {
+            tool_id: REGION_TOOL.into(),
+            pane: 1,
+            file_id: 1,
+            shape: Shape::Rectangle {
+                x: 4_000.0,
+                y: 4_000.0,
+                width: 400.0,
+                height: 400.0,
+            },
+            modifiers: Modifiers::default(),
+        })
+        .unwrap();
+    wait_for("the job", LONG, || {
+        !rig.harness.calls_to("job.start").is_empty()
+    });
+    // The host stops publishing the slide (its FileClosed is still to come).
+    rig.harness.state().snapshot.files.clear();
+    wait_for("the job to end as closed", LONG, || {
+        rig.harness
+            .calls_to("job.finish")
+            .iter()
+            .any(|args| args["error"] == json!("the slide was closed"))
+    });
 }

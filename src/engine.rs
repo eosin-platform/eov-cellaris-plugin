@@ -702,7 +702,20 @@ impl<B: Backend> Worker<B> {
             .and_then(|pane| pane.file_id)
             .or(st.active_file.filter(|id| snapshot.file(*id).is_some()));
         let open: BTreeSet<FileId> = snapshot.files.iter().map(|f| f.file_id).collect();
-        st.files.retain(|id, _| open.contains(id));
+        let closed: Vec<FileId> = st
+            .files
+            .keys()
+            .filter(|id| !open.contains(id))
+            .copied()
+            .collect();
+        for id in closed {
+            if let Some(file) = st.files.remove(&id)
+                && let Some(job) = file.readout
+                && let Some(host_job) = job.job
+            {
+                host_job.finish(Some("the slide was closed".into()));
+            }
+        }
         for info in &snapshot.files {
             match st.files.get_mut(&info.file_id) {
                 Some(file) if file.info != *info => file.info = info.clone(),
@@ -843,6 +856,7 @@ impl<B: Backend> Worker<B> {
             file.failed.clear();
         }
         let views: Vec<ViewInfo> = st.views.values().copied().collect();
+        let mut seen: HashSet<(FileId, Idx)> = HashSet::new();
         if st.overlay {
             for view in views {
                 let Some(file) = st.files.get_mut(&view.file_id) else {
@@ -863,7 +877,7 @@ impl<B: Backend> Worker<B> {
                 file.panes
                     .insert(view.pane, PaneDemand::Active { cells: count, done });
                 for cell in &cells {
-                    if !file.cells.contains_key(cell) {
+                    if !file.cells.contains_key(cell) && seen.insert((view.file_id, *cell)) {
                         file.pending.push(*cell);
                         if missing_windows(file, &grid, *cell)
                             .iter()
@@ -1212,6 +1226,12 @@ impl<B: Backend> Worker<B> {
         let mut prepared = prepared.into_iter().peekable();
         let mut offset = 0;
         while prepared.peek().is_some() {
+            if self.stopping() {
+                for (index, _) in prepared.by_ref() {
+                    results[index].outcome = Outcome::Failed("stopping".to_string());
+                }
+                break;
+            }
             let n = (input.len() / per - offset).min(run);
             let slice = &input[offset * per..(offset + n) * per];
             let predicted = match self.predictor.as_mut() {
@@ -1713,9 +1733,17 @@ pub fn ensure_layers(host: &Host, st: &mut State) -> Vec<FileId> {
     created
 }
 
-/// Tells the user about a problem once per distinct message.
+/// Tells the user about a problem once per kind of message: the digits
+/// (coordinates, sizes, counts) are left out of the comparison, so a read
+/// error repeated for every window of a corrupt area is one notification.
 pub fn notify_once(host: &Host, st: &mut State, title: &str, detail: &str) {
-    let key = format!("{title}\n{detail}");
+    let key: String = format!("{title}\n{detail}")
+        .chars()
+        .filter(|c| !c.is_ascii_digit())
+        .collect();
+    if st.notified.len() > 256 {
+        st.notified.clear();
+    }
     if st.notified.insert(key) {
         host.notify_error(title.to_string(), detail.to_string());
     }

@@ -424,6 +424,9 @@ pub struct OrtBackend;
 struct OrtPredictor {
     session: ort::session::Session,
     run_options: Arc<ort::session::RunOptions>,
+    /// A stop asked for between runs, kept until a run has seen it (each
+    /// run clears ONNX Runtime's own terminate flag before it starts).
+    stop_requested: Arc<std::sync::atomic::AtomicBool>,
     input: String,
     markers: String,
     recon: Option<String>,
@@ -580,6 +583,7 @@ impl Backend for OrtBackend {
         Ok(Box::new(OrtPredictor {
             session,
             run_options,
+            stop_requested: Arc::default(),
             input: input_name,
             markers: "markers".to_string(),
             recon,
@@ -618,6 +622,12 @@ impl Predictor for OrtPredictor {
             input
         };
         let _ = self.run_options.unterminate();
+        if self
+            .stop_requested
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err("stopped".to_string());
+        }
         let tensor = ort::value::TensorRef::from_array_view(([run_n, 3, side, side], data))
             .map_err(|e| e.to_string())?;
         let outputs = self
@@ -662,7 +672,9 @@ impl Predictor for OrtPredictor {
 
     fn stopper(&self) -> Option<Stopper> {
         let options = Arc::clone(&self.run_options);
+        let requested = Arc::clone(&self.stop_requested);
         Some(Arc::new(move || {
+            requested.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = options.terminate();
         }))
     }

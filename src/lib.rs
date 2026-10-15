@@ -156,11 +156,16 @@ impl<B: Backend> Cellaris<B> {
     fn set_assume_mpp(&self, assume: bool) {
         let mut st = self.lock();
         st.prefs.assume_mpp = assume;
-        // Only slides without a pixel size are affected.
+        // Only slides without a usable pixel size are affected: those the
+        // grid found none for, and those mapped with an assumed one.
         let ids: Vec<FileId> = st
             .files
             .iter()
-            .filter(|(_, f)| f.info.mpp_x.is_none() && f.info.mpp_y.is_none())
+            .filter(|(_, f)| {
+                matches!(f.problem(), Some(geometry::ScaleProblem::Unknown))
+                    || f.grid()
+                        .is_some_and(|g| g.scale.source == geometry::ScaleSource::Assumed)
+            })
             .map(|(id, _)| *id)
             .collect();
         for id in ids {
@@ -341,6 +346,14 @@ impl<B: Backend> Cellaris<B> {
         let mut st = self.lock();
         for file in st.files.values_mut() {
             file.failures.clear();
+            if file.region.is_some()
+                && file
+                    .readout
+                    .as_ref()
+                    .is_some_and(|job| matches!(job.readout.state, ReadoutState::Failed(_)))
+            {
+                file.readout_wanted = true;
+            }
         }
         if matches!(st.model, ModelState::Failed(_)) {
             st.notified.clear();
