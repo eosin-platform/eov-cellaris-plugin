@@ -9,8 +9,9 @@
 //!   border, imitating a model that sees no context there.
 
 use super::*;
-use crate::engine::{marks_layer, pred_layer, region_layer};
+use crate::engine::{marks_layer, pred_layer, region_layer, values_layer};
 use crate::model::{Batch, LoadError, LoadRequest, ModelInfo, Prediction, Predictor};
+use crate::present::{MODEL_BADGE, NOTICE_BADGE, slide_badge};
 use crate::resample::optical_density;
 use eov_plugin_api::testing::{MockHost, TestHarness, test_init};
 use serde::{Deserialize, Serialize};
@@ -395,6 +396,18 @@ impl Rig {
         seen(&self.data_dir)
     }
 
+    /// A badge's slide and text.
+    fn badge(&self, id: &str) -> Option<(Option<FileId>, String)> {
+        self.harness.state().badges.get(id).cloned()
+    }
+
+    /// The text of a slide's own badge, or "".
+    fn slide_line(&self, file_id: FileId) -> String {
+        self.badge(&slide_badge(file_id))
+            .map(|(_, text)| text)
+            .unwrap_or_default()
+    }
+
     fn sidebar(&self) -> Map<String, Value> {
         let state = self.harness.state();
         state
@@ -406,14 +419,23 @@ impl Rig {
     }
 }
 
-/// Every cell of pane 1's view is shown: the badge is up with no progress
-/// line, and nothing is veiled as pending.
+/// Every cell in view is shown: the notice and legend are up, the slide's
+/// badge has no progress, and nothing is veiled as pending.
 fn view_done(rig: &Rig, file_id: FileId) -> bool {
-    let marks = rig.objects(&marks_layer(file_id));
-    marks.iter().any(|o| o.object_id == "badge-1")
-        && marks.iter().any(|o| o.object_id.starts_with("legend-1-"))
-        && !marks.iter().any(|o| o.object_id == "status-1")
-        && !marks.iter().any(|o| o.object_id.starts_with("pending"))
+    let notice = rig
+        .badge(NOTICE_BADGE)
+        .is_some_and(|(file, text)| file.is_none() && text.contains("research use only"));
+    let legend = rig
+        .badge(MODEL_BADGE)
+        .is_some_and(|(_, text)| text.contains("Hoechst"));
+    let line = rig.slide_line(file_id);
+    notice
+        && legend
+        && !line.contains("Computing")
+        && !rig
+            .objects(&marks_layer(file_id))
+            .iter()
+            .any(|o| o.object_id.starts_with("pending"))
 }
 
 fn wait_for(what: &str, timeout: Duration, mut done: impl FnMut() -> bool) {
@@ -527,25 +549,18 @@ fn both_panes_of_a_split_view_are_computed() {
         rects.iter().any(|r| in_rect(r, &left.visible))
             && rects.iter().any(|r| in_rect(r, &right.visible))
     });
-    // One badge for the slide, in the focused pane: the slide's layer is
-    // drawn in both panes, so a badge per pane would show up in the other.
-    let badges = |rig: &Rig| -> Vec<String> {
+    // The notice is fixed to every pane, not drawn on the slide (where it
+    // would show in one pane's corner and drift during a pan).
+    wait_for("the notice", LONG, || {
+        rig.badge(NOTICE_BADGE)
+            .is_some_and(|(file, text)| file.is_none() && text.contains("PREDICTED"))
+    });
+    assert!(
         rig.objects(&marks_layer(1))
-            .into_iter()
-            .filter(|o| o.object_id.starts_with("badge-"))
-            .map(|o| o.object_id)
-            .collect()
-    };
-    assert_eq!(badges(&rig), vec!["badge-1"]);
-    // It follows the focus.
-    rig.harness.state().snapshot.focused_pane = Some(2);
-    rig.harness
-        .send(HostEvent::ActiveChanged {
-            pane: Some(2),
-            file_id: Some(1),
-        })
-        .unwrap();
-    assert_eq!(badges(&rig), vec!["badge-2"]);
+            .iter()
+            .all(|o| o.label.is_none()),
+        "text drawn on the slide"
+    );
 }
 
 #[test]
@@ -558,18 +573,17 @@ fn two_slides_side_by_side_each_carry_a_badge() {
         FakeConfig::default(),
     );
     rig.click(OVERLAY_BUTTON);
-    wait_for("both badges", LONG, || {
-        rig.objects(&marks_layer(1))
-            .iter()
-            .any(|o| o.object_id == "badge-1")
-            && rig
-                .objects(&marks_layer(2))
-                .iter()
-                .any(|o| o.object_id == "badge-2")
-    });
     wait_for("both slides", LONG, || {
         rig.rasters(1) > 0 && rig.rasters(2) > 0
     });
+    // Each slide's warnings show over its own pane only: the 20x one is
+    // upsampled, the 40x one is not.
+    wait_for("the upsampling note", LONG, || {
+        rig.badge(&slide_badge(2))
+            .is_some_and(|(file, text)| file == Some(2) && text.contains("upsampled"))
+    });
+    wait_for("both views", LONG, || view_done(&rig, 1));
+    assert!(!rig.slide_line(1).contains("upsampled"));
 }
 
 #[test]
@@ -607,33 +621,82 @@ fn zoomed_out_views_say_so_instead_of_predicting() {
     let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
     rig.click(OVERLAY_BUTTON);
     wait_for("the zoom notice", LONG, || {
-        rig.objects(&marks_layer(1)).iter().any(|o| {
-            o.label
-                .as_deref()
-                .is_some_and(|l| l.starts_with("Zoom in to predict"))
-        })
+        rig.slide_line(1)
+            .starts_with("Zoom in to predict: this view needs")
     });
     assert_eq!(rig.seen().windows.load(Ordering::SeqCst), 0);
 }
 
 #[test]
-fn the_badge_and_legend_follow_the_view_and_name_the_predictions() {
+fn the_badges_name_the_predictions_and_stay_put_during_a_pan() {
     let slide = Slide::new(Some(0.325));
     let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
     let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
     rig.click(OVERLAY_BUTTON);
-    wait_for("the badge and legend", LONG, || {
-        let marks = rig.objects(&marks_layer(1));
-        marks.iter().any(|o| o.object_id == "badge-1")
-            && marks.iter().any(|o| o.object_id.starts_with("legend-1-"))
-    });
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    let (_, notice) = rig.badge(NOTICE_BADGE).unwrap();
+    assert!(
+        notice.contains("PREDICTED") && notice.contains("research use only"),
+        "{notice}"
+    );
+    assert_eq!(
+        rig.badge(MODEL_BADGE),
+        Some((
+            None,
+            "Hoechst: yellow \u{b7} Pan-CK: magenta \u{b7} SMA: bluish green".to_string()
+        ))
+    );
+
+    // Pan: nothing is sent again for the badges (they are fixed to the
+    // pane), and nothing moves on the slide.
+    let sent = rig.harness.calls_to("badge.set").len();
+    let marks = rig.objects(&marks_layer(1));
+    let moved = view(1, 1, 4_050.0, 4_050.0, 200.0, 200.0, 2.0);
+    rig.harness.state().snapshot.panes[0].view = Some(moved);
+    rig.harness
+        .send(HostEvent::ViewChanged { view: moved })
+        .unwrap();
+    wait_for("the panned view", LONG, || view_done(&rig, 1));
+    assert_eq!(rig.harness.calls_to("badge.set").len(), sent);
+    assert!(marks.iter().all(|o| o.label.is_none()));
+
+    // Hiding a marker drops it from the legend.
+    rig.harness
+        .ui_callback("panel", "set-marker-visible", vec![json!(1), json!(false)])
+        .unwrap();
+    assert_eq!(
+        rig.badge(MODEL_BADGE).unwrap().1,
+        "Hoechst: yellow \u{b7} SMA: bluish green (1 hidden)"
+    );
+    assert_eq!(
+        rig.harness.state().settings.get("hidden_markers"),
+        Some(&json!(["Pan-CK"]))
+    );
+    // With the overlay off, every badge goes.
+    rig.click(OVERLAY_BUTTON);
+    assert!(rig.harness.state().badges.is_empty());
+}
+
+#[test]
+fn an_older_host_without_badges_gets_the_notice_on_the_slide() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.harness.state().unsupported = vec!["badge.set".into()];
+    rig.click(OVERLAY_BUTTON);
     let badge = |rig: &Rig| {
         rig.objects(&marks_layer(1))
             .into_iter()
             .find(|o| o.object_id == "badge-1")
-            .unwrap()
     };
-    let label = badge(&rig).label.unwrap();
+    wait_for("the badge on the slide", LONG, || {
+        badge(&rig).is_some()
+            && rig
+                .objects(&marks_layer(1))
+                .iter()
+                .any(|o| o.object_id.starts_with("legend-1-"))
+    });
+    let label = badge(&rig).unwrap().label.unwrap();
     assert!(
         label.contains("PREDICTED") && label.contains("research use only"),
         "{label}"
@@ -646,33 +709,62 @@ fn the_badge_and_legend_follow_the_view_and_name_the_predictions() {
         .collect();
     assert_eq!(legend.len(), 3, "{legend:?}");
     assert!(legend[0].contains("Hoechst") && legend[0].contains("predicted"));
+    // Asked once, then no more.
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(rig.harness.calls_to("badge.set").len(), 1);
 
-    // Pan: the badge moves to the new corner. (The host publishes the new
-    // view in its snapshot before it sends the event.)
+    // There it follows the view, once the view settles.
     let moved = view(1, 1, 6_000.0, 6_000.0, 200.0, 200.0, 2.0);
     rig.harness.state().snapshot.panes[0].view = Some(moved);
     rig.harness
         .send(HostEvent::ViewChanged { view: moved })
         .unwrap();
-    let Shape::Point { x, y } = badge(&rig).shape else {
+    let Shape::Point { x, y } = badge(&rig).unwrap().shape else {
         panic!("the badge is not a point");
     };
     assert!((6_000.0..6_050.0).contains(&x) && (6_000.0..6_050.0).contains(&y));
+}
 
-    // Hiding a marker drops it from the legend.
-    rig.harness
-        .ui_callback("panel", "set-marker-visible", vec![json!(1), json!(false)])
-        .unwrap();
-    let legend = rig
-        .objects(&marks_layer(1))
-        .into_iter()
-        .filter(|o| o.object_id.starts_with("legend-1-"))
-        .count();
-    assert_eq!(legend, 2);
-    assert_eq!(
-        rig.harness.state().settings.get("hidden_markers"),
-        Some(&json!(["Pan-CK"]))
+#[test]
+fn hovering_a_cell_shows_its_predicted_values() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    let state = rig.harness.state();
+    let layer = &state.layers[&values_layer(1)];
+    // Not interactive: it takes no clicks or hovers from other tools.
+    assert!(!layer.spec.interactive && !layer.spec.editable);
+    assert!(layer.spec.visible);
+    assert!(
+        layer.spec.z > state.layers[&pred_layer(1)].spec.z && layer.spec.z < -50,
+        "over the predictions, under the ROI dimming"
     );
+    // Offered once a cell (32 slide px with the fake's 64 px windows) is 24
+    // screen px wide.
+    let min_zoom = layer.spec.min_zoom.unwrap();
+    assert!((min_zoom - 24.0 / 32.0).abs() < 1e-9, "{min_zoom}");
+    // A tooltip over each painted cell.
+    let rasters: Vec<&String> = state.layers[&pred_layer(1)].rasters.keys().collect();
+    let values: Vec<&String> = layer.objects.keys().collect();
+    assert!(!values.is_empty());
+    assert!(values.iter().all(|id| rasters.contains(id)), "{values:?}");
+    let object = layer.objects.values().next().unwrap();
+    let tooltip = object.tooltip.as_deref().unwrap();
+    assert!(
+        tooltip.starts_with("Predicted \u{2014} research use only"),
+        "{tooltip}"
+    );
+    assert!(
+        tooltip.contains("Hoechst ") && tooltip.contains("SMA 5.00"),
+        "{tooltip}"
+    );
+    assert!(tooltip.contains("tissue blocks"), "{tooltip}");
+    drop(state);
+    // They go with the overlay.
+    rig.click(OVERLAY_BUTTON);
+    assert!(!rig.harness.state().layers[&values_layer(1)].spec.visible);
 }
 
 #[test]
@@ -682,11 +774,8 @@ fn slides_without_a_pixel_size_are_refused_unless_the_user_assumes_one() {
     let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
     rig.click(OVERLAY_BUTTON);
     wait_for("the refusal", LONG, || {
-        rig.objects(&marks_layer(1)).iter().any(|o| {
-            o.label
-                .as_deref()
-                .is_some_and(|l| l.contains("pixel size unknown"))
-        })
+        rig.slide_line(1)
+            .starts_with("Not computed: pixel size unknown")
     });
     assert_eq!(rig.rasters(1), 0);
     rig.harness
@@ -694,11 +783,8 @@ fn slides_without_a_pixel_size_are_refused_unless_the_user_assumes_one() {
         .unwrap();
     wait_for("assumed-scale rasters", LONG, || rig.rasters(1) > 0);
     wait_for("the assumption to be shown", LONG, || {
-        rig.objects(&marks_layer(1))
-            .into_iter()
-            .find(|o| o.object_id == "notes-1")
-            .and_then(|o| o.label)
-            .is_some_and(|notes| notes.contains("assumed"))
+        rig.slide_line(1)
+            .contains("pixel size unknown \u{2014} assumed 0.325")
     });
     assert_eq!(
         rig.harness.state().settings.get("assume_mpp"),
@@ -958,6 +1044,158 @@ fn the_roi_can_be_measured_and_cleared() {
         })
         .unwrap();
     assert!(rig.objects(&region_layer(1)).is_empty());
+}
+
+#[test]
+fn a_readout_of_the_roi_follows_the_roi() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 400.0, 400.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.click(PANEL_BUTTON);
+    let square = |x: f64, side: f64| Rect {
+        x,
+        y: 4_100.0,
+        width: side,
+        height: side,
+    };
+    let shape = |r: Rect| Shape::Rectangle {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+    };
+    rig.harness.state().roi.insert(1, square(4_100.0, 100.0));
+    rig.harness
+        .ui_callback("panel", "measure-roi", vec![])
+        .unwrap();
+    wait_for("the ROI readout", LONG, || {
+        rig.sidebar().get("can-copy") == Some(&json!(true))
+    });
+    let first = rig.sidebar()["readout-status"].clone();
+
+    // The ROI is moved and enlarged: measured again, where it is now.
+    let moved = square(4_200.0, 200.0);
+    rig.harness.state().roi.insert(1, moved);
+    rig.harness
+        .send(HostEvent::RoiChanged {
+            file_id: 1,
+            roi: Some(moved),
+        })
+        .unwrap();
+    assert_eq!(rig.objects(&region_layer(1))[0].shape, shape(moved));
+    wait_for("the second readout", LONG, || {
+        let panel = rig.sidebar();
+        panel.get("can-copy") == Some(&json!(true)) && panel["readout-status"] != first
+    });
+    assert_eq!(rig.harness.calls_to("job.start").len(), 2);
+    // The same ROI again starts nothing.
+    rig.harness
+        .send(HostEvent::RoiChanged {
+            file_id: 1,
+            roi: Some(moved),
+        })
+        .unwrap();
+    assert_eq!(rig.harness.calls_to("job.start").len(), 2);
+    // Removed, and the region goes with it.
+    rig.harness
+        .send(HostEvent::RoiChanged {
+            file_id: 1,
+            roi: None,
+        })
+        .unwrap();
+    assert!(rig.objects(&region_layer(1)).is_empty());
+    assert_eq!(rig.sidebar()["has-region"], json!(false));
+
+    // A region drawn with the tool stays where it was drawn.
+    let drawn = square(4_100.0, 120.0);
+    rig.harness
+        .send(HostEvent::ShapeDrawn {
+            tool_id: REGION_TOOL.into(),
+            pane: 1,
+            file_id: 1,
+            shape: shape(drawn),
+            modifiers: Modifiers::default(),
+        })
+        .unwrap();
+    rig.harness
+        .send(HostEvent::RoiChanged {
+            file_id: 1,
+            roi: Some(square(4_300.0, 50.0)),
+        })
+        .unwrap();
+    assert_eq!(rig.objects(&region_layer(1))[0].shape, shape(drawn));
+}
+
+#[test]
+fn an_adjusted_display_is_noted_in_the_panel() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.harness.state().display = DisplayAdjustments {
+        gamma: 1.4,
+        modified: true,
+        badge: "Gamma 1.4".into(),
+        ..Default::default()
+    };
+    rig.click(PANEL_BUTTON);
+    let notes = |rig: &Rig| {
+        rig.sidebar()["slide-notes"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    };
+    wait_for("the note", LONG, || {
+        notes(&rig).contains("the display is adjusted (Gamma 1.4); predictions use the slide's")
+    });
+    // Each pane is asked once; changes come as events.
+    let asked = rig.harness.calls_to("view.display");
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0]["pane"], json!(1));
+    rig.harness
+        .send(HostEvent::DisplayChanged {
+            pane: 1,
+            display: DisplayAdjustments::default(),
+        })
+        .unwrap();
+    assert!(!notes(&rig).contains("adjusted"), "{}", notes(&rig));
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    assert_eq!(rig.harness.calls_to("view.display").len(), 1);
+}
+
+#[test]
+fn an_older_host_without_display_info_is_asked_once() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.harness.state().unsupported = vec!["view.display".into()];
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    assert!(rig.harness.calls_to("view.display").len() <= 1);
+}
+
+#[test]
+fn the_overlay_has_a_key_and_a_refused_key_is_shown_in_the_panel() {
+    let rig = Rig::new(&[(1, Slide::new(Some(0.325)))], &[], FakeConfig::default());
+    assert_eq!(
+        rig.harness.state().toolbar_buttons[OVERLAY_BUTTON].hotkey,
+        Some(Hotkey::key("x"))
+    );
+    let reason = "Hotkey 'x' of cellaris:cellaris_overlay was ignored: it is the same key as \
+                  other:tool.";
+    rig.harness
+        .send(HostEvent::RegistrationRefused {
+            what: "hotkey".into(),
+            id: OVERLAY_BUTTON.into(),
+            reason: reason.into(),
+        })
+        .unwrap();
+    rig.click(PANEL_BUTTON);
+    let detail = rig.sidebar()["status-detail"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(detail.contains(reason), "{detail}");
 }
 
 #[test]
@@ -1312,6 +1550,15 @@ fn ort_smoke_plugin() {
         "{:?}",
         state.notifications
     );
+    // The cells carry their values, offered from 24 screen px a cell.
+    let values = &state.layers[&values_layer(1)];
+    assert!(!values.objects.is_empty());
+    let min_zoom = values.spec.min_zoom.unwrap();
+    assert!((min_zoom - 24.0 / 166.4).abs() < 1e-9, "{min_zoom}");
+    let tooltip = values.objects.values().next().unwrap().tooltip.clone();
+    println!("a cell's tooltip: {tooltip:?}");
+    assert!(state.badges[NOTICE_BADGE].1.contains("research use only"));
+    println!("badges: {:?}", state.badges);
 }
 
 #[test]
@@ -1442,11 +1689,7 @@ fn assuming_the_pixel_size_also_rescues_implausible_ones() {
     let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
     rig.click(OVERLAY_BUTTON);
     wait_for("the refusal", LONG, || {
-        rig.objects(&marks_layer(1)).iter().any(|o| {
-            o.label
-                .as_deref()
-                .is_some_and(|l| l.contains("pixel size unknown"))
-        })
+        rig.slide_line(1).contains("pixel size unknown")
     });
     rig.harness
         .ui_callback("panel", "set-assume-mpp", vec![json!(true)])
@@ -1462,22 +1705,20 @@ fn two_panes_on_the_same_view_do_not_double_the_counts() {
     // Every read fails, so every cell in view is pending and failed.
     let rig = Rig::with_reader(&[(1, slide)], &[a, b], FakeConfig::default(), Some(10_000));
     rig.click(OVERLAY_BUTTON);
-    let line = || {
-        rig.objects(&marks_layer(1))
-            .into_iter()
-            .find(|o| o.object_id == "status-1")
-            .and_then(|o| o.label)
-            .unwrap_or_default()
-    };
-    wait_for("failures in the badge", LONG, || line().contains("failed"));
-    // "Computing 0 of N cells · M failed, retrying": M can be at most N.
-    let text = line();
+    wait_for("failures in the badge", LONG, || {
+        rig.slide_line(1).contains("failed")
+    });
+    // "Computing 0 of N cells · M failed, retrying": M can be at most N,
+    // and N is the cells in view, each counted once.
+    let text = rig.slide_line(1);
     let numbers: Vec<usize> = text
         .split(|c: char| !c.is_ascii_digit())
         .filter_map(|n| n.parse().ok())
         .collect();
     assert!(numbers.len() >= 3, "{text}");
     assert!(numbers[2] <= numbers[1], "{text}");
+    let cells = 64.0f64 / 32.0;
+    assert!(numbers[1] as f64 <= (cells + 1.0) * (cells + 1.0), "{text}");
 }
 
 #[test]

@@ -80,10 +80,12 @@ measured IF can say a marker is the marker.
 The numbers come from the same feathered predictions the overlay paints, so there are no window
 joins in them and they match what is on screen. The first version measured non-overlapping 256 px
 windows, where about a quarter of the blocks sit at a window edge; the join variance inflated the
-spread and pulled r² down. Regions are re-measured when the outline is edited, large regions ask
-before they start, a running readout can be cancelled, and Copy puts the numbers on the clipboard as
-tab-separated text with their provenance: slide, model SHA-256, pixel sizes, windows, area and
-date.
+spread and pulled r² down. Regions are re-measured when the outline is edited, and a readout of the
+region of interest follows it: moving, redrawing or undoing the ROI measures it again, and removing
+it clears the readout (a region drawn with the Cellaris tool stays where it was drawn). Large
+regions ask before they start, a running readout can be cancelled, and Copy puts the numbers on
+the clipboard as tab-separated text with their provenance: slide, model SHA-256, pixel sizes,
+windows, area and date.
 
 Two regions on CRC11, measured by the first version (unblended 256 px windows, blocks of 16 slide
 pixels) and not yet measured again with this one:
@@ -145,26 +147,38 @@ and path. ONNX Runtime loads once per process: choosing another one takes effect
 
 The toolbar gets three things:
 
-- **Cellaris: predicted markers** turns the overlay on and off for every open slide. The model
-  loads the first time something needs it; if that fails, the panel says why, and turning the
-  overlay on again, *Retry* or choosing another model tries again, without restarting eov.
+- **Cellaris: predicted markers** (key X) turns the overlay on and off for every open slide. The
+  model loads the first time something needs it; if that fails, the panel says why, and turning
+  the overlay on again, *Retry* or choosing another model tries again, without restarting eov. If
+  another plugin already uses X, eov says so and the panel repeats it.
 - **Cellaris panel** shows the legend, the per-marker toggles, opacity, a fluorescence-style mode
   (colour on black over all tissue), the region readout and the model card.
 - **Cellaris region readout**, a polygon tool.
 
-On the slide, the pane you are working in carries a badge — *PREDICTED — research use only, not
-for diagnosis* — with progress and warnings under it, and a legend of the markers shown; the status
-bar says the same while predictions are on. (With one slide in two panes, the badge follows the
-focus: overlay layers belong to a slide, not a pane.) Areas still being computed are
-veiled; areas that failed are outlined in red and retried, backing off, up to five times. Glass,
-areas without image data and near-black areas are never painted. Split views compute each pane's
-view; work starts at the centre of each view and the panes take turns.
+While the overlay is on, the top of every pane showing a slide carries badges, fixed to the pane
+rather than drawn on the slide: *PREDICTED — research use only, not for diagnosis*; the legend,
+naming each marker's colour ("Hoechst: yellow · Pan-CK: magenta · SMA: bluish green"); and the
+slide's own progress and warnings, counting each cell in view once however many panes show it. The
+status bar says the same. (eov versions from before badges get the notice, legend and progress
+drawn in a corner of the slide instead, in the pane you are working in; it moves there when the
+view settles.) Areas still being computed are veiled; areas that failed are outlined in red and
+retried, backing off, up to five times. Glass, areas without image data and near-black areas are
+never painted. Split views compute each pane's view; work starts at the centre of each view and
+the panes take turns.
+
+Pointing at a predicted cell shows its values: each marker's mean over the cell's tissue blocks,
+the blocks a region readout would measure there, and how many of them look unlike the training
+data. They are offered once a cell (41.6 µm) is at least 24 screen pixels wide.
+
+eov's display adjustments (gamma, contrast, stain normalisation) change what you see, not what the
+model sees: predictions are made from the slide's own pixels. When the pane is adjusted, the panel
+and copied readouts say so.
 
 Slides that do not report their pixel size are not computed unless *Assume the model's pixel size*
-is on, and then the badge says the scale is assumed. Slides coarser than the model are upsampled
-and flagged as less reliable (a 20× scan at 0.5 µm/px is 1.5× coarser); more than twice as
-coarse (past 0.65 µm/px for this model, such as a 10× scan) is refused. A slide
-whose metadata names a stain other than H&E is flagged.
+is on, and then the slide's badge says the scale is assumed. Slides coarser than the model are
+upsampled and flagged as less reliable (a 20× scan at 0.5 µm/px is 1.5× coarser); more than twice
+as coarse (past 0.65 µm/px for this model, such as a 10× scan) is refused. A slide whose metadata
+names a stain other than H&E is flagged.
 
 Settings are kept by eov, in `settings.json` in the data directory above. A few have no control in
 the panel yet and can be set there while eov is closed: `markers` (the channels to predict, up to

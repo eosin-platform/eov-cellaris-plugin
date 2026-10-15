@@ -27,10 +27,12 @@ pub mod runtime;
 mod tests;
 
 use config::{
-    OVERLAY_BUTTON, OVERLAY_ICON, PANEL_BUTTON, PANEL_COMPONENT, PANEL_ICON, PANEL_UI, PANEL_WIDTH,
-    Prefs, REGION_ICON, REGION_TOOL, keys,
+    OVERLAY_BUTTON, OVERLAY_ICON, OVERLAY_KEY, PANEL_BUTTON, PANEL_COMPONENT, PANEL_ICON, PANEL_UI,
+    PANEL_WIDTH, Prefs, REGION_ICON, REGION_TOOL, keys,
 };
-use engine::{FileState, ModelState, Paths, Shared, State, Worker, pred_layer, region_layer};
+use engine::{
+    FileState, ModelState, Paths, Shared, State, Worker, pred_layer, region_layer, values_layer,
+};
 use eov_plugin_api::prelude::*;
 use markers::DisplayMode;
 use model::{Backend, OrtBackend};
@@ -93,6 +95,7 @@ impl<B: Backend> Cellaris<B> {
         for (id, file) in &st.files {
             if file.layers {
                 let _ = self.host.layer(pred_layer(*id)).set_visible(on);
+                let _ = self.host.layer(values_layer(*id)).set_visible(on);
             }
         }
         let _ = self.host.set_toolbar_button_active(OVERLAY_BUTTON, on);
@@ -171,12 +174,7 @@ impl<B: Backend> Cellaris<B> {
         for id in ids {
             if let Some(file) = st.files.get_mut(&id) {
                 let cells = file.reset();
-                if !cells.is_empty() {
-                    let _ = self
-                        .host
-                        .layer(pred_layer(id))
-                        .remove(cells.into_iter().map(engine::cell_object).collect());
-                }
+                engine::remove_cells(&self.host, id, cells);
             }
         }
         self.refresh(&mut st);
@@ -220,7 +218,9 @@ impl<B: Backend> Cellaris<B> {
 
     // -- regions ----------------------------------------------------------------
 
-    fn set_region(&self, file_id: FileId, region: Option<Region>) {
+    /// Measures `region` on a slide (`None`: stops measuring). A region
+    /// taken from the slide's region of interest follows it.
+    fn set_region(&self, file_id: FileId, region: Option<Region>, from_roi: bool) {
         let mut st = self.lock();
         let needs_model = !matches!(st.model, ModelState::Ready(_) | ModelState::Loading);
         let Some(file) = st.files.get_mut(&file_id) else {
@@ -232,6 +232,7 @@ impl<B: Backend> Cellaris<B> {
             job.finish(None);
         }
         file.readout_wanted = region.is_some();
+        file.region_from_roi = from_roi && region.is_some();
         file.region = region;
         if file.readout_wanted && needs_model {
             st.load_wanted = true;
@@ -258,7 +259,7 @@ impl<B: Backend> Cellaris<B> {
         };
         match self.host.roi(file_id).map_err(host_err)? {
             Some(rect) if rect.width > 0.0 && rect.height > 0.0 => {
-                self.set_region(file_id, Some(Region::Rectangle(rect)));
+                self.set_region(file_id, Some(Region::Rectangle(rect)), true);
             }
             _ => self.host.notify(
                 NotifyLevel::Info,
@@ -267,6 +268,22 @@ impl<B: Backend> Cellaris<B> {
             ),
         }
         Ok(())
+    }
+
+    /// A region measured from the region of interest follows it: drawn
+    /// again, moved, undone or removed.
+    fn roi_changed(&self, file_id: FileId, roi: Option<Rect>) {
+        let region = roi
+            .filter(|rect| rect.width > 0.0 && rect.height > 0.0)
+            .map(Region::Rectangle);
+        let follows = self
+            .lock()
+            .files
+            .get(&file_id)
+            .is_some_and(|file| file.region_from_roi && file.region != region);
+        if follows {
+            self.set_region(file_id, region, true);
+        }
     }
 
     fn cancel_readout(&self, file_id: Option<FileId>, job_id: Option<&str>) {
@@ -468,10 +485,12 @@ impl<B: Backend> Plugin for Cellaris<B> {
         for problem in &problems {
             host.info(format!("Cellaris {problem}"));
         }
+        // The host adds the key to the tooltip, or refuses it if taken.
         host.add_toolbar_button(ToolbarButtonSpec {
             button_id: OVERLAY_BUTTON.into(),
             tooltip: "Cellaris: predicted markers over H&E (research use only)".into(),
             icon_svg: OVERLAY_ICON.into(),
+            hotkey: Some(Hotkey::key(OVERLAY_KEY)),
             order: 0,
             ..Default::default()
         })
@@ -576,7 +595,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 shape,
                 ..
             } if tool_id == REGION_TOOL => match Region::from_shape(&shape) {
-                Some(region) => self.set_region(file_id, Some(region)),
+                Some(region) => self.set_region(file_id, Some(region), false),
                 None => self.host.notify(
                     NotifyLevel::Info,
                     "Outline a region with at least three points.",
@@ -590,7 +609,8 @@ impl<B: Backend> Plugin for Cellaris<B> {
                     .copied()
                     .find(|id| region_layer(*id) == object.layer_id);
                 if let Some(file_id) = file_id {
-                    self.set_region(file_id, Region::from_shape(&shape));
+                    // Reshaped by hand, it no longer follows the ROI.
+                    self.set_region(file_id, Region::from_shape(&shape), false);
                 }
             }
             HostEvent::ObjectsDeleteRequested { objects } => {
@@ -603,7 +623,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
                         .collect()
                 };
                 for file_id in files {
-                    self.set_region(file_id, None);
+                    self.set_region(file_id, None, false);
                 }
             }
             HostEvent::ConfirmResult {
@@ -617,6 +637,25 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 if st.sidebar.as_ref().is_some_and(|s| s.id() == surface_id) {
                     st.sidebar = None;
                     st.last_sidebar = None;
+                }
+                self.refresh(&mut st);
+            }
+            HostEvent::RoiChanged { file_id, roi } => self.roi_changed(file_id, roi),
+            HostEvent::DisplayChanged { pane, display } => {
+                let mut st = self.lock();
+                st.displays.insert(pane, display);
+                self.refresh(&mut st);
+            }
+            HostEvent::RegistrationRefused { what, id, reason } => {
+                // eov has warned and logged it; the panel keeps it in view.
+                let mut st = self.lock();
+                let problem = if what == "hotkey" {
+                    reason
+                } else {
+                    format!("eov refused the {what} of {id}: {reason}")
+                };
+                if !st.setting_problems.contains(&problem) {
+                    st.setting_problems.push(problem);
                 }
                 self.refresh(&mut st);
             }
@@ -653,7 +692,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
             "draw-region" => self.host.activate_tool(REGION_TOOL).map_err(host_err)?,
             "clear-region" => {
                 if let Some(file_id) = self.active_file() {
-                    self.set_region(file_id, None);
+                    self.set_region(file_id, None, false);
                 }
             }
             "cancel-readout" => {

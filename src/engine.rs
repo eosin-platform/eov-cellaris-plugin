@@ -60,6 +60,9 @@ const IDLE_POLL: Duration = Duration::from_secs(3);
 const MIN_WAIT: Duration = Duration::from_millis(50);
 /// Seconds per window assumed before anything has been measured.
 pub const DEFAULT_SECONDS_PER_WINDOW: f64 = 1.2;
+/// Cells' value tooltips are offered once a cell is this many screen
+/// pixels wide; below that, a pointer covers several cells.
+pub const TOOLTIP_CELL_PX: f64 = 24.0;
 
 pub fn pred_layer(file: FileId) -> String {
     format!("cellaris-predicted-{file}")
@@ -71,6 +74,11 @@ pub fn marks_layer(file: FileId) -> String {
 
 pub fn region_layer(file: FileId) -> String {
     format!("cellaris-region-{file}")
+}
+
+/// Transparent cells carrying the predicted values as tooltips.
+pub fn values_layer(file: FileId) -> String {
+    format!("cellaris-values-{file}")
 }
 
 pub fn cell_object(cell: Idx) -> String {
@@ -126,8 +134,8 @@ impl Failure {
 /// What a pane's view needs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaneDemand {
-    /// Computing, or all done.
-    Active { cells: u64, done: u64 },
+    /// Computing, or all done (the slide counts its cells in view).
+    Active,
     /// Zoomed out past [`MAX_VIEW_CELLS`].
     TooFar { cells: u64 },
     /// The slide cannot be predicted (see the file's problem).
@@ -160,11 +168,15 @@ pub struct FileState {
     pub disk_misses: HashSet<Idx>,
     pub shelf: Option<Shelf>,
     pub region: Option<Region>,
+    /// The region is the slide's region of interest, and follows it.
+    pub region_from_roi: bool,
     /// A readout waiting to be started (the region changed).
     pub readout_wanted: bool,
     pub readout: Option<ReadoutJob>,
     pub panes: BTreeMap<PaneId, PaneDemand>,
-    /// Cells in view still being computed, and those whose windows failed.
+    /// Cells in any pane's view (each counted once), those still being
+    /// computed, and those whose windows failed.
+    pub in_view: usize,
     pub pending: Vec<Idx>,
     pub failed: Vec<Idx>,
     pub dark_windows: usize,
@@ -174,6 +186,8 @@ pub struct FileState {
     /// Fingerprints of what the marks and region layers last showed.
     pub marks_print: Option<u64>,
     pub region_print: Option<u64>,
+    /// The minimum zoom given to the values layer, once the grid is known.
+    pub values_zoom: Option<f64>,
 }
 
 impl FileState {
@@ -191,9 +205,11 @@ impl FileState {
             disk_misses: HashSet::new(),
             shelf: None,
             region: None,
+            region_from_roi: false,
             readout_wanted: false,
             readout: None,
             panes: BTreeMap::new(),
+            in_view: 0,
             pending: Vec::new(),
             failed: Vec::new(),
             dark_windows: 0,
@@ -201,6 +217,7 @@ impl FileState {
             unusual_windows: 0,
             marks_print: None,
             region_print: None,
+            values_zoom: None,
         }
     }
 
@@ -215,8 +232,10 @@ impl FileState {
         self.stale.clear();
         self.disk_misses.clear();
         self.shelf = None;
+        self.in_view = 0;
         self.pending.clear();
         self.failed.clear();
+        self.values_zoom = None;
         self.dark_windows = 0;
         self.tissue_windows = 0;
         self.unusual_windows = 0;
@@ -288,6 +307,25 @@ pub struct State {
     pub last_status: Option<Option<String>>,
     pub last_sidebar: Option<Map<String, Value>>,
     pub last_panel_open: Option<bool>,
+    /// Whether the host shows badges; hosts older than the badge method
+    /// get the notice drawn on the slide instead.
+    pub badges: Support,
+    /// The badges shown: id → (slide, text).
+    pub shown_badges: BTreeMap<String, (Option<FileId>, String)>,
+    /// How each pane displays its slide, as far as the host says.
+    pub displays: BTreeMap<PaneId, DisplayAdjustments>,
+    /// Whether the host answers `view.display`.
+    pub displays_known: Support,
+}
+
+/// Whether the host has a method that came after API 1.0's first release.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Support {
+    /// Not tried yet.
+    #[default]
+    Unknown,
+    Yes,
+    No,
 }
 
 impl State {
@@ -318,6 +356,10 @@ impl State {
             last_status: None,
             last_sidebar: None,
             last_panel_open: None,
+            badges: Support::Unknown,
+            shown_badges: BTreeMap::new(),
+            displays: BTreeMap::new(),
+            displays_known: Support::Unknown,
         }
     }
 
@@ -529,6 +571,18 @@ struct WindowResult {
     outcome: Outcome,
 }
 
+/// A cell to draw and upload.
+pub struct Render {
+    file: FileId,
+    cell: Idx,
+    /// Its level-0 rectangle.
+    rect: Rect,
+    tissue: Arc<TissueCell>,
+    /// A new cell, whose value tooltip goes up too (a redraw after a
+    /// display change only changes its colours).
+    new: bool,
+}
+
 /// What a pass hands to the host.
 #[derive(Default)]
 pub struct Publish {
@@ -538,10 +592,15 @@ pub struct Publish {
     display: Option<Display>,
     /// Raster side in model pixels.
     side: u32,
-    /// Cells to draw and upload, with their level-0 rectangles.
-    renders: Vec<(FileId, Idx, Rect, Arc<TissueCell>)>,
+    /// The markers' names and the model's reconstruction-error threshold,
+    /// for the value tooltips.
+    names: Vec<String>,
+    threshold: Option<f32>,
+    renders: Vec<Render>,
     removals: Vec<(FileId, Vec<Idx>)>,
     writes: Vec<(Shelf, Idx, CellData)>,
+    /// Values layers to limit to zooms where a cell is big enough to point at.
+    min_zooms: Vec<(FileId, f64)>,
 }
 
 impl Publish {
@@ -549,19 +608,30 @@ impl Publish {
     fn follow(&mut self, st: &State) {
         self.display = st.display();
         self.side = st.model.info().map_or(0, |m| (m.window / 2) as u32);
+        self.names = st
+            .markers
+            .as_ref()
+            .map(|markers| markers.iter().map(|m| m.name.clone()).collect())
+            .unwrap_or_default();
+        self.threshold = st.model.info().and_then(|m| m.recon_threshold);
     }
 }
 
-/// Removes cells' rasters from the host.
+/// Removes cells from the host: their rasters and their value tooltips.
 pub fn remove_rasters(host: &Host, removals: Vec<(FileId, Vec<Idx>)>) {
     for (file, cells) in removals {
-        if cells.is_empty() {
-            continue;
-        }
-        let _ = host
-            .layer(pred_layer(file))
-            .remove(cells.into_iter().map(cell_object).collect());
+        remove_cells(host, file, cells);
     }
+}
+
+/// Removes one slide's cells from the host.
+pub fn remove_cells(host: &Host, file: FileId, cells: Vec<Idx>) {
+    if cells.is_empty() {
+        return;
+    }
+    let ids: Vec<String> = cells.into_iter().map(cell_object).collect();
+    let _ = host.layer(values_layer(file)).remove(ids.clone());
+    let _ = host.layer(pred_layer(file)).remove(ids);
 }
 
 // ---------------------------------------------------------------------------
@@ -730,9 +800,37 @@ impl<B: Backend> Worker<B> {
             }
         }
         let created = ensure_layers(&self.host, &mut st);
+        let state = &mut *st;
+        let views = &state.views;
+        state.displays.retain(|pane, _| views.contains_key(pane));
+        let unknown: Vec<PaneId> = if state.displays_known == Support::No {
+            Vec::new()
+        } else {
+            views
+                .keys()
+                .filter(|pane| !state.displays.contains_key(pane))
+                .copied()
+                .collect()
+        };
         drop(st);
         for file in created {
             self.refresh_file(file);
+        }
+        // Later changes arrive as `DisplayChanged`; a pane seen for the
+        // first time is asked once.
+        for pane in unknown {
+            match self.host.display_adjustments(Some(pane)) {
+                Ok(display) => {
+                    let mut st = self.shared.lock();
+                    st.displays_known = Support::Yes;
+                    st.displays.entry(pane).or_insert(display);
+                }
+                Err(error) if error.is_unsupported() => {
+                    self.shared.lock().displays_known = Support::No;
+                    break;
+                }
+                Err(_) => {}
+            }
         }
     }
 
@@ -856,11 +954,13 @@ impl<B: Backend> Worker<B> {
         let mut demands: Vec<Demand> = Vec::new();
         for file in st.files.values_mut() {
             file.panes.clear();
+            file.in_view = 0;
             file.pending.clear();
             file.failed.clear();
         }
         let views: Vec<ViewInfo> = st.views.values().copied().collect();
         let mut seen: HashSet<(FileId, Idx)> = HashSet::new();
+        let mut in_view: HashSet<(FileId, Idx)> = HashSet::new();
         if st.overlay {
             for view in views {
                 let Some(file) = st.files.get_mut(&view.file_id) else {
@@ -877,9 +977,12 @@ impl<B: Backend> Worker<B> {
                     continue;
                 }
                 let cells = grid.cells_by_distance(&view.visible, view.center_x, view.center_y);
-                let done = cells.iter().filter(|c| file.cells.contains_key(c)).count() as u64;
-                file.panes
-                    .insert(view.pane, PaneDemand::Active { cells: count, done });
+                file.panes.insert(view.pane, PaneDemand::Active);
+                for cell in &cells {
+                    if in_view.insert((view.file_id, *cell)) {
+                        file.in_view += 1;
+                    }
+                }
                 for cell in &cells {
                     if !file.cells.contains_key(cell) && seen.insert((view.file_id, *cell)) {
                         file.pending.push(*cell);
@@ -1454,9 +1557,13 @@ impl<B: Backend> Worker<B> {
                     break;
                 };
                 if let Some((CellData::Tissue(tissue), _)) = file.cells.get(&cell) {
-                    publish
-                        .renders
-                        .push((*id, cell, grid.cell_rect(cell), Arc::clone(tissue)));
+                    publish.renders.push(Render {
+                        file: *id,
+                        cell,
+                        rect: grid.cell_rect(cell),
+                        tissue: Arc::clone(tissue),
+                        new: false,
+                    });
                     budget -= 1;
                 }
             }
@@ -1472,25 +1579,50 @@ impl<B: Backend> Worker<B> {
     /// host never keeps a stale raster.
     fn publish(&mut self, mut publish: Publish) {
         remove_rasters(&self.host, std::mem::take(&mut publish.removals));
+        for (file, zoom) in std::mem::take(&mut publish.min_zooms) {
+            // Hosts before the method still draw the layer at every zoom.
+            let _ = self.host.layer(values_layer(file)).set_min_zoom(Some(zoom));
+        }
         if let Some(display) = publish.display.take()
             && !publish.renders.is_empty()
             && publish.side > 0
         {
             let mut sent = Vec::with_capacity(publish.renders.len());
-            for (file, cell, rect, tissue) in publish.renders.drain(..) {
+            let mut values: BTreeMap<FileId, Vec<OverlayObject>> = BTreeMap::new();
+            for render in publish.renders.drain(..) {
                 let image = Image {
                     width: publish.side,
                     height: publish.side,
-                    data: display.render(&tissue),
+                    data: display.render(&render.tissue),
                 };
-                match self.host.layer(pred_layer(file)).put_raster(
-                    cell_object(cell),
-                    rect,
+                match self.host.layer(pred_layer(render.file)).put_raster(
+                    cell_object(render.cell),
+                    render.rect,
                     image,
                     true,
                 ) {
-                    Ok(()) => sent.push((file, cell)),
-                    Err(error) => self.host.debug(format!("raster upload failed: {error}")),
+                    Ok(()) => sent.push((render.file, render.cell)),
+                    Err(error) => {
+                        self.host.debug(format!("raster upload failed: {error}"));
+                        continue;
+                    }
+                }
+                if render.new
+                    && let Some(object) = present::cell_values(
+                        render.cell,
+                        render.rect,
+                        &render.tissue,
+                        &publish.names,
+                        publish.threshold,
+                    )
+                {
+                    values.entry(render.file).or_default().push(object);
+                }
+            }
+            for (file, objects) in values {
+                if let Err(error) = self.host.layer(values_layer(file)).upsert(objects) {
+                    self.host
+                        .debug(format!("value tooltips could not be sent: {error}"));
                 }
             }
             let stale: BTreeMap<FileId, Vec<Idx>> = {
@@ -1636,10 +1768,20 @@ fn finish_cell(
     if let CellData::Tissue(tissue) = &data
         && file.layers
     {
-        publish
-            .renders
-            .push((grid.file_id, cell, grid.cell_rect(cell), Arc::clone(tissue)));
+        publish.renders.push(Render {
+            file: grid.file_id,
+            cell,
+            rect: grid.cell_rect(cell),
+            tissue: Arc::clone(tissue),
+            new: true,
+        });
         file.uploaded.insert(cell);
+        if file.values_zoom.is_none() {
+            let (w, h) = grid.cell_size();
+            let zoom = TOOLTIP_CELL_PX / w.min(h).max(1e-9);
+            file.values_zoom = Some(zoom);
+            publish.min_zooms.push((grid.file_id, zoom));
+        }
     }
     if let Some(shelf) = &file.shelf {
         if !from_disk {
@@ -1719,14 +1861,23 @@ pub fn ensure_layers(host: &Host, st: &mut State) -> Vec<FileId> {
                 .at_z(-60)
         };
         let marks = LayerSpec::new(marks_layer(*id), *id)
-            .named("Cellaris \u{2014} legend and progress")
+            .named("Cellaris \u{2014} progress")
             .at_z(160);
         let region = LayerSpec::new(region_layer(*id), *id)
             .named("Cellaris \u{2014} readout region")
             .at_z(95)
             .editable(true)
             .with_style(present::region_style());
-        let ok = [predicted, marks, region]
+        // Not interactive, so it takes no clicks from other tools: the host
+        // shows the tooltips of such layers when nothing else is hovered.
+        let values = LayerSpec {
+            visible: overlay,
+            ..LayerSpec::new(values_layer(*id), *id)
+                .named("Cellaris \u{2014} predicted values (research use only)")
+                .at_z(-59)
+                .with_style(present::values_style())
+        };
+        let ok = [predicted, values, marks, region]
             .into_iter()
             .all(|spec| host.create_layer(spec).is_ok());
         if ok {
@@ -1808,6 +1959,8 @@ mod tests {
         let mock = MockHost::new();
         let host = Host::from_ffi(mock.to_ffi());
         host.create_layer(LayerSpec::new(pred_layer(1), 1)).unwrap();
+        host.create_layer(LayerSpec::new(values_layer(1), 1))
+            .unwrap();
         let mut st = State::new(Prefs::default(), Paths::default());
         let info = model();
         st.markers = markers::select(&info.channel_names, &st.prefs.markers);
@@ -1826,7 +1979,13 @@ mod tests {
         let tissue = Arc::new(TissueCell {
             planes: vec![200; 3 * 32 * 32],
             mask: vec![255; 32 * 32],
-            blocks: Vec::new(),
+            blocks: vec![crate::blend::BlockStat {
+                od: 0.3,
+                coverage: 1.0,
+                dark: 0.0,
+                means: vec![5.0; 3],
+                recon: None,
+            }],
         });
         let rect = |i: f64| Rect {
             x: i * 32.0,
@@ -1834,15 +1993,21 @@ mod tests {
             width: 32.0,
             height: 32.0,
         };
-        publish.renders = vec![
-            (1, Idx::new(0, 0), rect(0.0), Arc::clone(&tissue)),
-            (1, Idx::new(1, 0), rect(1.0), tissue),
-        ];
+        let render = |i: i64, tissue: Arc<TissueCell>| Render {
+            file: 1,
+            cell: Idx::new(i, 0),
+            rect: rect(i as f64),
+            tissue,
+            new: true,
+        };
+        publish.renders = vec![render(0, Arc::clone(&tissue)), render(1, tissue)];
         let mut worker = Worker::new(host, Arc::clone(&shared), Arc::new(NoBackend));
         worker.publish(publish);
         let state = mock.state();
         let rasters: Vec<&String> = state.layers[&pred_layer(1)].rasters.keys().collect();
         assert_eq!(rasters, vec!["c0_0"], "a dropped cell kept its raster");
+        let values: Vec<&String> = state.layers[&values_layer(1)].objects.keys().collect();
+        assert_eq!(values, vec!["c0_0"], "a dropped cell kept its tooltip");
 
         // After an invalidation every raster of the old generation goes.
         drop(state);
@@ -1850,10 +2015,8 @@ mod tests {
         publish.follow(&shared.lock());
         let removals = shared.lock().invalidate();
         assert_eq!(removals, vec![(1, vec![Idx::new(0, 0)])]);
-        publish.renders = vec![(
-            1,
-            Idx::new(0, 0),
-            rect(0.0),
+        publish.renders = vec![render(
+            0,
             Arc::new(TissueCell {
                 planes: vec![9; 3 * 32 * 32],
                 mask: vec![255; 32 * 32],
@@ -1863,6 +2026,7 @@ mod tests {
         remove_rasters(&Host::from_ffi(mock.to_ffi()), removals);
         worker.publish(publish);
         assert!(mock.state().layers[&pred_layer(1)].rasters.is_empty());
+        assert!(mock.state().layers[&values_layer(1)].objects.is_empty());
     }
 
     #[test]

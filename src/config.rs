@@ -6,6 +6,9 @@ use serde::Serialize;
 
 /// Toggles the predicted-marker overlay on every open slide.
 pub const OVERLAY_BUTTON: &str = "cellaris_overlay";
+/// The overlay button's key. eov binds f, m, n, r, d, i, the digits and
+/// + = -; the annotations plugin's tools take v . c p g b o l t h.
+pub const OVERLAY_KEY: &str = "x";
 /// Shows or hides the Cellaris panel.
 pub const PANEL_BUTTON: &str = "cellaris_panel";
 /// Draws a region to measure.

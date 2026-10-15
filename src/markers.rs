@@ -193,6 +193,24 @@ pub fn hex(colour: [u8; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", colour[0], colour[1], colour[2])
 }
 
+/// The palette's colours by name, for legends that cannot show a swatch.
+pub const PALETTE_NAMES: [&str; MAX_MARKERS] = [
+    "yellow",
+    "magenta",
+    "bluish green",
+    "sky blue",
+    "orange",
+    "vermilion",
+];
+
+/// A colour's name in the palette, or its hex code.
+pub fn colour_name(colour: [u8; 3]) -> String {
+    PALETTE
+        .iter()
+        .position(|c| *c == colour)
+        .map_or_else(|| hex(colour), |k| PALETTE_NAMES[k].to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

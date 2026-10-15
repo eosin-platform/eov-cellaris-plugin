@@ -150,9 +150,26 @@ fn run() -> Result<(), String> {
         error.message,
         error.detail.unwrap_or_default()
     );
-    let layers = host.state().layers.len();
-    if layers != 3 {
-        return Err(format!("expected 3 layers for the slide, found {layers}"));
+    {
+        let state = host.state();
+        let layers: Vec<&str> = state.layers.keys().map(String::as_str).collect();
+        let expected = [
+            "cellaris-marks-1",
+            "cellaris-predicted-1",
+            "cellaris-region-1",
+            "cellaris-values-1",
+        ];
+        if layers != expected {
+            return Err(format!(
+                "expected the layers {expected:?}, found {layers:?}"
+            ));
+        }
+        // The research-use notice is up even though nothing could load.
+        let notice = state.badges.get("1-notice").map(|(_, text)| text.as_str());
+        if !notice.is_some_and(|text| text.contains("research use only")) {
+            return Err(format!("no research-use badge: {:?}", state.badges));
+        }
+        println!("badges: {:?}", state.badges.values().collect::<Vec<_>>());
     }
     plugin.shutdown();
     println!("loaded, created, drove and shut down the plugin");

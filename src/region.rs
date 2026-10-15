@@ -6,7 +6,7 @@
 //! no segmentation. Blocks come from the same feathered cells the overlay
 //! paints (CEL-5), and are defined in micrometres (CEL-3).
 
-use crate::blend::CellData;
+use crate::blend::{BlockStat, CellData};
 use crate::geometry::{BLOCK, Grid, Idx};
 use crate::resample::TISSUE_OD;
 use eov_plugin_api::protocol::{Rect, Shape};
@@ -18,6 +18,27 @@ pub const MIN_BLOCKS: usize = 30;
 const MIN_COVERAGE: f32 = 0.99;
 /// Blocks with more dark (not bright-field) pixels than this are skipped.
 const MAX_DARK: f32 = 0.25;
+
+/// What a readout, or a cell's tooltip, makes of a block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockUse {
+    /// Glass, or not wholly on the slide: left out.
+    Skip,
+    /// Mostly near-black (not bright-field H&E): left out, and counted.
+    Dark,
+    /// Tissue: measured.
+    Tissue,
+}
+
+pub fn block_use(block: &BlockStat) -> BlockUse {
+    if block.coverage < MIN_COVERAGE || block.od < TISSUE_OD {
+        BlockUse::Skip
+    } else if block.dark > MAX_DARK {
+        BlockUse::Dark
+    } else {
+        BlockUse::Tissue
+    }
+}
 
 /// A region drawn or chosen on a slide, in level-0 pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -305,14 +326,15 @@ impl Readout {
             CellData::Tissue(tissue) => {
                 let per = grid.stride / BLOCK;
                 for (index, block) in tissue.blocks.iter().enumerate() {
-                    if block.coverage < MIN_COVERAGE || block.od < TISSUE_OD {
+                    let usage = block_use(block);
+                    if usage == BlockUse::Skip {
                         continue;
                     }
                     let (x, y) = grid.block_center(cell, index % per, index / per);
                     if !self.region.contains(x, y) {
                         continue;
                     }
-                    if block.dark > MAX_DARK {
+                    if usage == BlockUse::Dark {
                         self.dark_blocks += 1;
                         continue;
                     }

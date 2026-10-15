@@ -1,14 +1,34 @@
-//! What the user sees: the viewport badge, legend and progress (CEL-9), the
-//! readout region, the panel, the status bar, and the copyable readout.
+//! What the user sees: the badges over each pane — the research-use
+//! notice, the legend, progress and warnings (CEL-9) — the cells' values
+//! on hover, the readout region, the panel, the status bar, and the
+//! copyable readout.
 
+use crate::blend::TissueCell;
 use crate::config::{PANEL_BUTTON, RESEARCH_NOTICE};
-use crate::engine::{FileState, ModelState, PaneDemand, State, marks_layer, region_layer};
+use crate::engine::{
+    FileState, ModelState, PaneDemand, State, Support, cell_object, marks_layer, region_layer,
+};
 use crate::geometry::{Grid, Idx, SCALE_TOLERANCE, ScaleSource};
 use crate::markers::{self, DisplayMode};
-use crate::region::{Readout, ReadoutState, utc_timestamp};
+use crate::region::{BlockUse, Readout, ReadoutState, block_use, utc_timestamp};
 use eov_plugin_api::prelude::*;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
+
+/// The research-use notice, over every pane showing a slide.
+pub const NOTICE_BADGE: &str = "1-notice";
+/// The legend, or why there is nothing to show.
+pub const MODEL_BADGE: &str = "2-model";
+/// The host shows at most 8 badges per plugin: the two above, and one per
+/// slide on screen for this many slides.
+pub const SLIDE_BADGES: usize = 6;
+/// The host's limit on a badge's length, in characters.
+pub const BADGE_CHARS: usize = 200;
+
+/// A slide's own badge: its progress and warnings.
+pub fn slide_badge(file: FileId) -> String {
+    format!("3-slide-{file}")
+}
 
 const TEXT: Rgba = Rgba(0xFF, 0xFF, 0xFF, 0xFF);
 const WARNING: Rgba = Rgba(0xFF, 0xC1, 0x07, 0xFF);
@@ -35,6 +55,79 @@ pub fn region_style() -> Style {
         text_color: TEXT,
         ..Style::default()
     }
+}
+
+/// The values layer draws nothing; it is there for its tooltips.
+pub fn values_style() -> Style {
+    Style {
+        fill: Rgba::TRANSPARENT,
+        stroke: Rgba::TRANSPARENT,
+        stroke_width: 0.0,
+        ..Style::default()
+    }
+}
+
+/// A cell's predicted values, as the tooltip of an invisible rectangle
+/// over it: each marker's mean over the cell's tissue blocks, the same
+/// blocks a region readout measures. Cells with no such block get none.
+pub fn cell_values(
+    cell: Idx,
+    rect: Rect,
+    tissue: &TissueCell,
+    names: &[String],
+    threshold: Option<f32>,
+) -> Option<OverlayObject> {
+    let mut sums = vec![0f64; names.len()];
+    let (mut blocks, mut dark, mut unusual) = (0usize, 0usize, 0usize);
+    for block in &tissue.blocks {
+        match block_use(block) {
+            BlockUse::Skip => {}
+            BlockUse::Dark => dark += 1,
+            BlockUse::Tissue => {
+                blocks += 1;
+                for (sum, mean) in sums.iter_mut().zip(&block.means) {
+                    *sum += f64::from(*mean);
+                }
+                if let (Some(recon), Some(threshold)) = (block.recon, threshold)
+                    && recon > threshold
+                {
+                    unusual += 1;
+                }
+            }
+        }
+    }
+    if blocks == 0 || names.is_empty() {
+        return None;
+    }
+    let values: Vec<String> = names
+        .iter()
+        .zip(&sums)
+        .map(|(name, sum)| format!("{name} {:.2}", sum / blocks as f64))
+        .collect();
+    let mut text = format!(
+        "Predicted \u{2014} research use only\n{}\nMean arcsinh intensity over {blocks} tissue \
+         blocks",
+        values.join(" \u{b7} ")
+    );
+    if unusual > 0 {
+        text.push_str(&format!(", {unusual} unlike the training data"));
+    }
+    if dark > 0 {
+        text.push_str(&format!("; {dark} near-black blocks left out"));
+    }
+    Some(
+        OverlayObject::new(
+            cell_object(cell),
+            Shape::Rectangle {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+            },
+        )
+        .with_tooltip(text)
+        .with_editable(false),
+    )
 }
 
 /// Merges cells into rectangles: runs along each row, then identical runs
@@ -152,50 +245,101 @@ pub fn scale_notes(st: &State, file: &FileState) -> Vec<String> {
     notes
 }
 
-/// The badge's second line for one pane.
-fn pane_line(st: &State, file: &FileState, pane: PaneId) -> Option<(String, Rgba)> {
-    if let Some(problem) = file.problem() {
-        return Some((format!("Not computed: {}", short_problem(problem)), WARNING));
-    }
+/// A line of text, and whether it warns.
+type Line = (String, bool);
+
+/// Why nothing can be predicted on any slide, while that is so.
+fn model_line(st: &State) -> Option<Line> {
     match &st.model {
-        ModelState::Failed(error) => {
-            return Some((
-                format!("Not computed: {} (see the Cellaris panel)", error.summary),
-                WARNING,
+        ModelState::Failed(error) => Some((
+            format!("Not computed: {} (see the Cellaris panel)", error.summary),
+            true,
+        )),
+        ModelState::Loading | ModelState::Idle => Some(("Loading the model\u{2026}".into(), false)),
+        ModelState::Ready(_) => st
+            .markers
+            .as_ref()
+            .err()
+            .map(|problem| (format!("Not computed: {problem}"), true)),
+    }
+}
+
+/// The markers shown and their colours, by name: a badge has no swatches.
+fn legend_line(st: &State) -> Option<String> {
+    let markers = st.markers.as_ref().ok()?;
+    let shown: Vec<String> = markers
+        .iter()
+        .filter(|m| st.prefs.is_visible(&m.name))
+        .map(|m| format!("{}: {}", m.name, markers::colour_name(m.colour)))
+        .collect();
+    if shown.is_empty() {
+        return Some("Every marker is hidden (see the Cellaris panel)".into());
+    }
+    let hidden = markers.len() - shown.len();
+    let mut line = shown.join(" \u{b7} ");
+    if hidden > 0 {
+        line.push_str(&format!(" ({hidden} hidden)"));
+    }
+    Some(line)
+}
+
+/// Where a slide's predictions stand, over every pane showing it (a badge
+/// belongs to a slide, and shows in each of its panes).
+fn slide_line(st: &State, file: &FileState) -> Option<Line> {
+    if let Some(problem) = file.problem() {
+        return Some((format!("Not computed: {}", short_problem(problem)), true));
+    }
+    if st.model.info().is_none() || st.markers.is_err() {
+        // The model's line says why.
+        return None;
+    }
+    let left = file.pending.len();
+    if left > 0 {
+        let done = file.in_view.saturating_sub(left);
+        let mut line = format!("Computing {done} of {} cells", file.in_view);
+        let failed = file.failed.len();
+        if failed > 0 {
+            let retrying = file.failures.values().any(|f| !f.given_up());
+            line.push_str(&format!(
+                " \u{b7} {failed} failed{}",
+                if retrying {
+                    ", retrying"
+                } else {
+                    " (Retry in the Cellaris panel)"
+                }
+            ));
+        } else {
+            line.push_str(&format!(
+                " \u{b7} {} left",
+                duration(left as f64 * st.throughput.seconds_per_window())
             ));
         }
-        ModelState::Loading | ModelState::Idle => {
-            return Some(("Loading the model\u{2026}".into(), TEXT));
-        }
-        ModelState::Ready(_) => {}
+        return Some((line, failed > 0));
     }
-    if let Err(problem) = &st.markers {
-        return Some((format!("Not computed: {problem}"), WARNING));
-    }
-    match file.panes.get(&pane)? {
-        PaneDemand::TooFar { cells } => Some((
-            format!(
-                "Zoom in to predict: this view needs {cells} cells (limit {})",
-                crate::engine::MAX_VIEW_CELLS
-            ),
-            WARNING,
-        )),
-        PaneDemand::Active { cells, done } if done < cells => {
-            let left = cells - done;
-            let failed = file.failed.len();
-            let mut line = format!("Computing {done} of {cells} cells");
-            if failed > 0 {
-                line.push_str(&format!(" \u{b7} {failed} failed, retrying"));
-            } else {
-                line.push_str(&format!(
-                    " \u{b7} {} left",
-                    duration(left as f64 * st.throughput.seconds_per_window())
-                ));
-            }
-            Some((line, if failed > 0 { WARNING } else { TEXT }))
-        }
-        _ => None,
-    }
+    let too_far = file
+        .panes
+        .values()
+        .filter_map(|demand| match demand {
+            PaneDemand::TooFar { cells } => Some(*cells),
+            _ => None,
+        })
+        .max()?;
+    let which = if file
+        .panes
+        .values()
+        .any(|demand| matches!(demand, PaneDemand::Active))
+    {
+        "one view of this slide"
+    } else {
+        "this view"
+    };
+    Some((
+        format!(
+            "Zoom in to predict: {which} needs {too_far} cells (limit {})",
+            crate::engine::MAX_VIEW_CELLS
+        ),
+        true,
+    ))
 }
 
 fn short_problem(problem: &crate::geometry::ScaleProblem) -> String {
@@ -208,7 +352,114 @@ fn short_problem(problem: &crate::geometry::ScaleProblem) -> String {
     }
 }
 
-/// The objects of a file's marks layer.
+/// At most [`BADGE_CHARS`] characters, ending in an ellipsis if cut.
+fn clip(text: &str) -> String {
+    if text.chars().count() <= BADGE_CHARS {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(BADGE_CHARS - 1).collect();
+    out.push('\u{2026}');
+    out
+}
+
+/// A slide's badge: its line and its notes.
+fn slide_text(st: &State, file: &FileState) -> Option<String> {
+    let mut parts: Vec<String> = slide_line(st, file)
+        .map(|(line, _)| line)
+        .into_iter()
+        .collect();
+    parts.extend(scale_notes(st, file));
+    (!parts.is_empty()).then(|| clip(&parts.join(" \u{b7} ")))
+}
+
+/// The badges to show while the overlay is on: id → (slide, text). The
+/// host shows them at the top of the panes, fixed to the pane, in id order;
+/// a slide's own badge shows only in the panes showing that slide.
+pub fn badges(st: &State) -> BTreeMap<String, (Option<FileId>, String)> {
+    let mut out = BTreeMap::new();
+    if !st.overlay {
+        return out;
+    }
+    out.insert(
+        NOTICE_BADGE.to_string(),
+        (None, format!("{RESEARCH_NOTICE} \u{b7} Cellaris")),
+    );
+    if let Some(line) = model_line(st)
+        .map(|(line, _)| line)
+        .or_else(|| legend_line(st))
+    {
+        out.insert(MODEL_BADGE.to_string(), (None, clip(&line)));
+    }
+    // The slides on screen, the focused pane's first.
+    let focused = st
+        .focused_pane
+        .and_then(|pane| st.views.get(&pane))
+        .map(|view| view.file_id);
+    let mut shown: Vec<FileId> = Vec::new();
+    for id in focused
+        .into_iter()
+        .chain(st.views.values().map(|view| view.file_id))
+    {
+        if st.files.contains_key(&id) && !shown.contains(&id) {
+            shown.push(id);
+        }
+    }
+    for id in shown.into_iter().take(SLIDE_BADGES) {
+        if let Some(text) = slide_text(st, &st.files[&id]) {
+            out.insert(slide_badge(id), (Some(id), text));
+        }
+    }
+    out
+}
+
+/// Brings the host's badges up to date, sending only what changed. A host
+/// without badges is noted, and the slides carry the notice instead.
+pub fn refresh_badges(host: &Host, st: &mut State) {
+    if st.badges == Support::No {
+        return;
+    }
+    let wanted = badges(st);
+    let gone: Vec<String> = st
+        .shown_badges
+        .keys()
+        .filter(|id| !wanted.contains_key(*id))
+        .cloned()
+        .collect();
+    let mut sends: Vec<(String, Option<FileId>, Option<String>)> =
+        gone.into_iter().map(|id| (id, None, None)).collect();
+    for (id, (file, text)) in wanted {
+        if st.shown_badges.get(&id) != Some(&(file, text.clone())) {
+            sends.push((id, file, Some(text)));
+        }
+    }
+    for (id, file, text) in sends {
+        match host.set_badge(&id, file, text.as_deref()) {
+            Err(error) if error.is_unsupported() => {
+                host.info(
+                    "Cellaris draws its research-use notice on the slide: this eov has no badges",
+                );
+                st.badges = Support::No;
+                st.shown_badges.clear();
+                return;
+            }
+            Err(error) => host.debug(format!("Cellaris could not set badge {id}: {error}")),
+            Ok(()) => st.badges = Support::Yes,
+        }
+        // Not sent again until it changes, even after an error.
+        match text {
+            Some(text) => {
+                st.shown_badges.insert(id, (file, text));
+            }
+            None => {
+                st.shown_badges.remove(&id);
+            }
+        }
+    }
+}
+
+/// The objects of a file's marks layer: areas still computing are veiled,
+/// and areas that failed are outlined. On hosts without badges the notice,
+/// progress, notes and legend are drawn here too.
 pub fn marks(st: &State, id: FileId) -> Vec<OverlayObject> {
     let mut objects = Vec::new();
     let Some(file) = st.files.get(&id) else {
@@ -251,11 +502,17 @@ pub fn marks(st: &State, id: FileId) -> Vec<OverlayObject> {
             );
         }
     }
-    let notes = scale_notes(st, file);
-    // A layer belongs to a slide and is drawn in every pane showing it, so
-    // one badge per slide: in the focused pane when it shows this slide,
-    // else in the first pane that does. (One per pane would show up in the
-    // others too.)
+    if st.badges == Support::No {
+        in_slide_badge(st, id, file, &mut objects);
+    }
+    objects
+}
+
+/// The badge drawn on the slide, for hosts without badges. A layer belongs
+/// to a slide and is drawn in every pane showing it, so there is one, in
+/// the focused pane when it shows this slide, else in the first that does;
+/// it follows the view once the view settles.
+fn in_slide_badge(st: &State, id: FileId, file: &FileState, objects: &mut Vec<OverlayObject>) {
     let shows = |pane: &PaneId| st.views.get(pane).is_some_and(|v| v.file_id == id);
     let pane = st.focused_pane.filter(shows).or_else(|| {
         st.views
@@ -263,64 +520,65 @@ pub fn marks(st: &State, id: FileId) -> Vec<OverlayObject> {
             .find(|(_, v)| v.file_id == id)
             .map(|(pane, _)| *pane)
     });
-    let badged = pane.and_then(|pane| st.views.get_key_value(&pane));
-    if let Some((pane, view)) = badged {
-        let zoom = view.zoom.max(1e-9);
-        let x = view.visible.x + 12.0 / zoom;
-        let mut y = view.visible.y + 14.0 / zoom;
-        let step = 22.0 / zoom;
+    let Some((pane, view)) = pane.and_then(|pane| st.views.get_key_value(&pane)) else {
+        return;
+    };
+    let zoom = view.zoom.max(1e-9);
+    let x = view.visible.x + 12.0 / zoom;
+    let mut y = view.visible.y + 14.0 / zoom;
+    let step = 22.0 / zoom;
+    objects.push(text(
+        format!("badge-{pane}"),
+        x,
+        y,
+        format!("{RESEARCH_NOTICE} \u{b7} Cellaris"),
+        TEXT,
+    ));
+    y += step;
+    if let Some((line, warning)) = model_line(st).or_else(|| slide_line(st, file)) {
+        let colour = if warning { WARNING } else { TEXT };
+        objects.push(text(format!("status-{pane}"), x, y, line, colour));
+        y += step;
+    }
+    let notes = scale_notes(st, file);
+    if !notes.is_empty() {
         objects.push(text(
-            format!("badge-{pane}"),
+            format!("notes-{pane}"),
             x,
             y,
-            format!("{RESEARCH_NOTICE} \u{b7} Cellaris"),
-            TEXT,
+            notes.join(" \u{b7} "),
+            WARNING,
         ));
         y += step;
-        if let Some((line, colour)) = pane_line(st, file, *pane) {
-            objects.push(text(format!("status-{pane}"), x, y, line, colour));
-            y += step;
-        }
-        if !notes.is_empty() {
-            objects.push(text(
-                format!("notes-{pane}"),
-                x,
-                y,
-                notes.join(" \u{b7} "),
-                WARNING,
-            ));
-            y += step;
-        }
-        if let Ok(markers) = &st.markers {
-            for (k, marker) in markers.iter().enumerate() {
-                if !st.prefs.is_visible(&marker.name) {
-                    continue;
-                }
-                let [r, g, b] = marker.colour;
-                objects.push(
-                    OverlayObject::new(
-                        format!("legend-{pane}-{k}"),
-                        Shape::Point {
-                            x: x + 6.0 / zoom,
-                            y: y + 2.0 / zoom,
-                        },
-                    )
-                    .with_style(Style {
-                        fill: Rgba::rgb(r, g, b),
-                        stroke: Rgba(0x11, 0x13, 0x18, 0xFF),
-                        stroke_width: 1.0,
-                        point_radius: 6.0,
-                        text_color: TEXT,
-                        ..Style::default()
-                    })
-                    .with_label(format!("{} (predicted)", marker.name))
-                    .with_editable(false),
-                );
-                y += 20.0 / zoom;
+    }
+    if let Ok(markers) = &st.markers {
+        for (k, marker) in markers.iter().enumerate() {
+            if !st.prefs.is_visible(&marker.name) {
+                continue;
             }
+            let [r, g, b] = marker.colour;
+            objects.push(
+                OverlayObject::new(
+                    format!("legend-{pane}-{k}"),
+                    Shape::Point {
+                        x: x + 6.0 / zoom,
+                        y: y + 2.0 / zoom,
+                    },
+                )
+                .with_style(Style {
+                    fill: Rgba::rgb(r, g, b),
+                    stroke: Rgba(0x11, 0x13, 0x18, 0xFF),
+                    stroke_width: 1.0,
+                    point_radius: 6.0,
+                    text_color: TEXT,
+                    ..Style::default()
+                })
+                .with_label(format!("{} (predicted)", marker.name))
+                .with_editable(false),
+            );
+            y += 20.0 / zoom;
         }
     }
-    objects
 }
 
 /// The objects of a file's region layer.
@@ -386,6 +644,8 @@ pub fn refresh_file(host: &Host, st: &mut State, id: FileId) {
 
 /// Everything shown, brought up to date.
 pub fn refresh(host: &Host, st: &mut State) {
+    // First: a host without badges gets the notice in the marks layers.
+    refresh_badges(host, st);
     let ids: Vec<FileId> = st.files.keys().copied().collect();
     for id in ids {
         refresh_file(host, st, id);
@@ -437,17 +697,13 @@ pub fn status_line(st: &State) -> Option<String> {
         }
         _ => {}
     }
-    let mut cells = 0u64;
-    let mut done = 0u64;
+    let mut cells = 0usize;
+    let mut left = 0usize;
     let mut failed = 0usize;
     for file in st.files.values() {
+        cells += file.in_view;
+        left += file.pending.len();
         failed += file.failed.len();
-        for demand in file.panes.values() {
-            if let PaneDemand::Active { cells: c, done: d } = demand {
-                cells += c;
-                done += d;
-            }
-        }
     }
     let readouts = st
         .files
@@ -458,9 +714,10 @@ pub fn status_line(st: &State) -> Option<String> {
         return None;
     }
     let mut parts = vec!["Cellaris (predicted, research use only)".to_string()];
-    if cells > done {
+    if left > 0 {
         parts.push(format!(
-            "{done}/{cells} cells, {:.1} s per window",
+            "{}/{cells} cells, {:.1} s per window",
+            cells.saturating_sub(left),
             st.throughput.seconds_per_window()
         ));
     }
@@ -700,6 +957,25 @@ fn model_card(st: &State) -> Vec<Value> {
     card
 }
 
+/// Said when a pane shows the slide with its colours adjusted: the model
+/// still sees the slide's own pixels.
+pub fn display_note(st: &State, id: FileId) -> Option<String> {
+    let shows = |pane: &PaneId| st.views.get(pane).is_some_and(|v| v.file_id == id);
+    let display = st
+        .focused_pane
+        .filter(shows)
+        .into_iter()
+        .chain(st.views.keys().copied().filter(shows))
+        .filter_map(|pane| st.displays.get(&pane))
+        .find(|display| display.modified)?;
+    let what = display.badge.trim();
+    Some(if what.is_empty() {
+        "the display is adjusted; predictions use the slide's unadjusted colours".to_string()
+    } else {
+        format!("the display is adjusted ({what}); predictions use the slide's unadjusted colours")
+    })
+}
+
 /// The panel's properties.
 pub fn sidebar_properties(st: &State) -> Map<String, Value> {
     let mut out = Map::new();
@@ -792,6 +1068,7 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
                 notes.push(problem.message());
             }
             notes.extend(scale_notes(st, file));
+            notes.extend(display_note(st, file.info.file_id));
             (file.info.filename.clone(), notes.join("\n"))
         }
     };
@@ -799,14 +1076,7 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
     out.insert("slide-notes".into(), json!(notes));
 
     let (cells, done) = file
-        .map(|f| {
-            f.panes
-                .values()
-                .fold((0u64, 0u64), |(c, d), demand| match demand {
-                    PaneDemand::Active { cells, done } => (c + cells, d + done),
-                    _ => (c, d),
-                })
-        })
+        .map(|f| (f.in_view, f.in_view.saturating_sub(f.pending.len())))
         .unwrap_or((0, 0));
     out.insert(
         "progress".into(),
@@ -911,7 +1181,10 @@ pub fn copy_text(st: &State, id: FileId) -> Option<String> {
         ),
         "marker\tmean_arcsinh\tspread\tdensity_r2".to_string(),
     ];
-    for note in scale_notes(st, file) {
+    for note in scale_notes(st, file)
+        .into_iter()
+        .chain(display_note(st, id))
+    {
         lines.insert(lines.len() - 1, format!("# note\t{note}"));
     }
     for (marker, fit) in markers.iter().zip(&readout.fits) {
@@ -1047,13 +1320,9 @@ pub fn example_state() -> State {
         confirm: None,
         started: std::time::Instant::now(),
     });
-    file.panes.insert(
-        1,
-        PaneDemand::Active {
-            cells: 100,
-            done: 40,
-        },
-    );
+    file.panes.insert(1, PaneDemand::Active);
+    file.in_view = 100;
+    file.pending = (0..60).map(|i| Idx::new(i, 0)).collect();
     st.files.insert(1, file);
     st.active_file = Some(1);
     st.views.insert(
@@ -1123,8 +1392,100 @@ mod panel_tests {
     }
 
     #[test]
-    fn the_viewport_badge_says_predicted_and_research_use_only() {
+    fn the_badges_say_predicted_and_research_use_only_and_name_the_colours() {
         let st = example_state();
+        let shown = badges(&st);
+        let (file, notice) = &shown[NOTICE_BADGE];
+        assert_eq!(*file, None, "the notice is over every pane");
+        assert!(notice.contains("PREDICTED") && notice.contains("research use only"));
+        // The legend names each visible marker's colour: there are no
+        // swatches in a badge.
+        assert_eq!(
+            shown[MODEL_BADGE],
+            (
+                None,
+                "Hoechst: yellow \u{b7} Pan-CK: magenta \u{b7} SMA: bluish green".to_string()
+            )
+        );
+        // The slide's own badge, only over panes showing it.
+        let (file, line) = &shown[&slide_badge(1)];
+        assert_eq!(*file, Some(1));
+        assert!(
+            line.starts_with("Computing 40 of 100 cells \u{b7} about"),
+            "{line}"
+        );
+        assert!(
+            line.contains("the model does not record its pixel size"),
+            "{line}"
+        );
+        // Nothing is drawn on the slide but what belongs to it.
+        assert!(marks(&st, 1).iter().all(|o| o.label.is_none()));
+
+        let mut hidden = example_state();
+        hidden.prefs.hidden = vec!["Pan-CK".into()];
+        assert_eq!(
+            badges(&hidden)[MODEL_BADGE].1,
+            "Hoechst: yellow \u{b7} SMA: bluish green (1 hidden)"
+        );
+        let mut off = example_state();
+        off.overlay = false;
+        assert!(badges(&off).is_empty());
+        assert!(marks(&off, 1).is_empty());
+    }
+
+    #[test]
+    fn badges_stay_within_the_hosts_limits() {
+        let mut st = example_state();
+        let template = st.files.remove(&1).unwrap();
+        // Ten slides on screen, each with long notes.
+        for id in 1..=10 {
+            let info = FileInfo {
+                file_id: id,
+                filename: format!("slide-{id}.svs"),
+                stain: Some(format!(
+                    "{} immunohistochemistry",
+                    "very long stain name ".repeat(8)
+                )),
+                ..template.info.clone()
+            };
+            let mut file = FileState::new(info);
+            file.grid = template.grid.clone();
+            file.dark_windows = 123_456;
+            file.unusual_windows = 7;
+            file.tissue_windows = 9;
+            st.files.insert(id, file);
+            let pane = id as PaneId;
+            st.views.insert(
+                pane,
+                ViewInfo {
+                    pane,
+                    file_id: id,
+                    ..st.views[&1]
+                },
+            );
+        }
+        st.focused_pane = Some(9);
+        let shown = badges(&st);
+        assert!(shown.len() <= 8, "{} badges", shown.len());
+        for (id, (_, text)) in &shown {
+            assert!(!id.is_empty() && id.len() <= 64, "{id}");
+            let count = text.trim().chars().count();
+            assert!(
+                (1..=BADGE_CHARS).contains(&count),
+                "{id}: {count} characters"
+            );
+        }
+        assert!(
+            shown.contains_key(&slide_badge(9)),
+            "the focused slide comes first"
+        );
+        assert!(shown[&slide_badge(9)].1.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn hosts_without_badges_get_the_notice_drawn_on_the_slide() {
+        let mut st = example_state();
+        st.badges = Support::No;
         let objects = marks(&st, 1);
         let badge = objects
             .iter()
@@ -1132,6 +1493,12 @@ mod panel_tests {
             .expect("no badge in view");
         let label = badge.label.as_deref().unwrap_or_default();
         assert!(label.contains("PREDICTED") && label.contains("research use only"));
+        let status = objects
+            .iter()
+            .find(|o| o.object_id == "status-1")
+            .and_then(|o| o.label.as_deref())
+            .unwrap_or_default();
+        assert!(status.starts_with("Computing 40 of 100"), "{status}");
         // A legend entry per visible marker, in its colour.
         let legend: Vec<_> = objects
             .iter()
@@ -1147,10 +1514,97 @@ mod panel_tests {
             panic!("the badge is not a point");
         };
         assert!(x > 0.0 && x < 100.0 && y > 0.0 && y < 100.0, "({x}, {y})");
-        // Nothing is shown with the overlay off.
-        let mut off = example_state();
-        off.overlay = false;
-        assert!(marks(&off, 1).is_empty());
+        assert!(badges(&st).len() > 1, "badges are still worked out");
+    }
+
+    #[test]
+    fn a_cells_tooltip_gives_its_predicted_values() {
+        use crate::blend::BlockStat;
+        let block = |od: f32, dark: f32, hoechst: f32, recon: f32| BlockStat {
+            od,
+            coverage: 1.0,
+            dark,
+            means: vec![hoechst, 5.0],
+            recon: Some(recon),
+        };
+        let tissue = TissueCell {
+            planes: Vec::new(),
+            mask: Vec::new(),
+            blocks: vec![
+                block(0.3, 0.0, 6.0, 0.05),
+                block(0.3, 0.0, 7.0, 0.5),
+                // Glass, and a near-black block: left out, as in a readout.
+                block(0.01, 0.0, 99.0, 0.05),
+                block(0.3, 0.9, 99.0, 0.05),
+            ],
+        };
+        let names = ["Hoechst".to_string(), "SMA".to_string()];
+        let rect = Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 30.0,
+        };
+        let object = cell_values(Idx::new(3, 4), rect, &tissue, &names, Some(0.1)).unwrap();
+        assert_eq!(object.object_id, "c3_4");
+        assert_eq!(
+            object.shape,
+            Shape::Rectangle {
+                x: 10.0,
+                y: 20.0,
+                width: 30.0,
+                height: 30.0
+            }
+        );
+        let tooltip = object.tooltip.unwrap();
+        assert!(
+            tooltip.starts_with("Predicted \u{2014} research use only\n"),
+            "{tooltip}"
+        );
+        assert!(
+            tooltip.contains("Hoechst 6.50 \u{b7} SMA 5.00"),
+            "{tooltip}"
+        );
+        assert!(
+            tooltip.contains("over 2 tissue blocks, 1 unlike the training data"),
+            "{tooltip}"
+        );
+        assert!(
+            tooltip.contains("1 near-black blocks left out"),
+            "{tooltip}"
+        );
+        // A cell without a measurable block has no tooltip.
+        let glass = TissueCell {
+            blocks: vec![block(0.01, 0.0, 1.0, 0.0)],
+            ..tissue
+        };
+        assert!(cell_values(Idx::new(0, 0), rect, &glass, &names, None).is_none());
+    }
+
+    #[test]
+    fn an_adjusted_display_is_noted_where_the_slide_is_described() {
+        let mut st = example_state();
+        assert_eq!(display_note(&st, 1), None);
+        st.displays.insert(
+            1,
+            DisplayAdjustments {
+                modified: true,
+                badge: "Colour-normalised (Macenko)".into(),
+                ..Default::default()
+            },
+        );
+        let note = display_note(&st, 1).unwrap();
+        assert!(note.contains("(Colour-normalised (Macenko))"), "{note}");
+        assert!(note.contains("unadjusted colours"), "{note}");
+        let notes = sidebar_properties(&st)["slide-notes"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(notes.contains(&note), "{notes}");
+        let text = copy_text(&st, 1).unwrap();
+        assert!(text.contains(&format!("# note\t{note}")), "{text}");
+        // A pane showing another slide does not count.
+        assert_eq!(display_note(&st, 2), None);
     }
 
     #[test]
