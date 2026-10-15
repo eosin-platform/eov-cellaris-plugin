@@ -287,6 +287,52 @@ fn install_hint() -> String {
     )
 }
 
+/// The version ONNX Runtime reports through `OrtApiBase::GetVersionString`.
+fn reported_version(path: &Path) -> Option<String> {
+    // ort resolves a relative name next to the executable first; so does
+    // this, so that it asks the same library.
+    let path = match std::env::current_exe() {
+        Ok(exe) if path.is_relative() => exe
+            .parent()
+            .map(|dir| dir.join(path))
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| path.to_path_buf()),
+        _ => path.to_path_buf(),
+    };
+    // SAFETY: ort has just loaded this library, so opening it again only
+    // takes another reference to it. OrtGetApiBase and GetVersionString
+    // take no arguments, and the string they return is static.
+    unsafe {
+        let library = libloading::Library::new(&path).ok()?;
+        let get_base: libloading::Symbol<unsafe extern "C" fn() -> *const ort::sys::OrtApiBase> =
+            library.get(b"OrtGetApiBase").ok()?;
+        let base = get_base();
+        if base.is_null() {
+            return None;
+        }
+        let text = ((*base).GetVersionString)();
+        if text.is_null() {
+            return None;
+        }
+        Some(
+            std::ffi::CStr::from_ptr(text)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+}
+
+/// The version in a versioned library name ("libonnxruntime.so.1.22.0").
+pub fn version_from_name(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    let version = name.strip_prefix("libonnxruntime.so.").or_else(|| {
+        name.strip_prefix("libonnxruntime.")
+            .and_then(|rest| rest.strip_suffix(".dylib"))
+    })?;
+    (version.contains('.') && version.chars().all(|c| c.is_ascii_digit() || c == '.'))
+        .then(|| version.to_string())
+}
+
 /// The version in `ort::info()`'s build string ("git-branch=rel-1.22.0").
 pub fn version_from_build_info(info: &str) -> Option<String> {
     let start = info.find("rel-")? + 4;
@@ -321,9 +367,15 @@ pub fn load(search: &Search) -> Result<Loaded, Failure> {
         }));
         match outcome {
             Ok(Ok(())) => {
-                let version = catch_unwind(ort::info)
+                let version = catch_unwind(AssertUnwindSafe(|| reported_version(&candidate.path)))
                     .ok()
-                    .and_then(version_from_build_info);
+                    .flatten()
+                    .or_else(|| version_from_name(&candidate.path))
+                    .or_else(|| {
+                        catch_unwind(ort::info)
+                            .ok()
+                            .and_then(version_from_build_info)
+                    });
                 return Ok(Loaded {
                     path: candidate.path,
                     source: candidate.source,
@@ -510,6 +562,20 @@ mod tests {
                 source: Source::System
             }]
         );
+    }
+
+    #[test]
+    fn versioned_names_give_their_version() {
+        assert_eq!(
+            version_from_name(Path::new("/x/libonnxruntime.so.1.29.0")).as_deref(),
+            Some("1.29.0")
+        );
+        assert_eq!(
+            version_from_name(Path::new("libonnxruntime.1.20.1.dylib")).as_deref(),
+            Some("1.20.1")
+        );
+        assert_eq!(version_from_name(Path::new("libonnxruntime.so")), None);
+        assert_eq!(version_from_name(Path::new("libonnxruntime.so.1")), None);
     }
 
     #[test]

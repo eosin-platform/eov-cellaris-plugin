@@ -1094,3 +1094,137 @@ fn the_manifest_is_valid_for_plugin_api_1() {
         eov_plugin_api::abi::plugin_library_filename(env!("CARGO_PKG_NAME"))
     );
 }
+
+// ---------------------------------------------------------------------------
+// With real ONNX Runtime (opt-in)
+// ---------------------------------------------------------------------------
+
+/// `CELLARIS_SMOKE_ORT` (a runtime library or a directory holding one) and
+/// `CELLARIS_SMOKE_MODEL` (a markers.onnx).
+fn smoke_paths() -> Option<(PathBuf, PathBuf)> {
+    Some((
+        std::env::var_os("CELLARIS_SMOKE_ORT")?.into(),
+        std::env::var_os("CELLARIS_SMOKE_MODEL")?.into(),
+    ))
+}
+
+#[test]
+#[ignore = "needs ONNX Runtime and a model: set CELLARIS_SMOKE_ORT and CELLARIS_SMOKE_MODEL"]
+fn ort_smoke_backend() {
+    let Some((runtime, model)) = smoke_paths() else {
+        return;
+    };
+    let init = test_init("cellaris");
+    let request = LoadRequest {
+        model: Some(model),
+        runtime: Some(runtime),
+        plugin_root: init.plugin_root.clone().into(),
+        data_dir: init.data_dir.clone().into(),
+        threads: 2,
+    };
+    let mut predictor = crate::model::OrtBackend.load(&request).unwrap();
+    let info = predictor.info().clone();
+    println!("{info:#?}");
+    assert_eq!(info.channel_names.len(), 19);
+    assert_eq!(info.window, 256);
+    assert_eq!(info.batch, Batch::Dynamic);
+    assert!(info.recon && info.mpp_recorded && info.runtime.starts_with("ONNX Runtime 1."));
+    let side = 256;
+    let input = vec![0.5f32; 2 * 3 * side * side];
+    let out = predictor.predict(&input, 2).unwrap();
+    assert_eq!((out.n, out.channels, out.side), (2, 19, side));
+    assert_eq!(out.markers.len(), 2 * 19 * side * side);
+    let recon = out.recon.unwrap();
+    assert!(
+        recon.iter().all(|r| (r - 0.5).abs() < 1e-5),
+        "recon {}",
+        recon[0]
+    );
+    // A wrong batch is an error, not a panic.
+    assert!(predictor.predict(&input[..10], 2).is_err());
+    // The stopper interrupts a run; the next run works again.
+    let stop = predictor.stopper().unwrap();
+    stop();
+    let _ = predictor.predict(&input, 2);
+    assert!(predictor.predict(&input, 2).is_ok());
+}
+
+#[test]
+#[ignore = "needs ONNX Runtime and a model: set CELLARIS_SMOKE_ORT and CELLARIS_SMOKE_MODEL"]
+fn ort_smoke_plugin() {
+    let Some((runtime, model)) = smoke_paths() else {
+        return;
+    };
+    let slide = Slide::new(Some(0.25));
+    let v = view(1, 1, 4_000.0, 4_000.0, 400.0, 300.0, 2.0);
+    let host = MockHost::new();
+    {
+        let mut state = host.state();
+        state.snapshot.files = vec![slide.info(1)];
+        state.snapshot.panes = vec![PaneInfo {
+            pane: 1,
+            index: 0,
+            file_id: Some(1),
+            view: Some(v),
+        }];
+        state.snapshot.focused_pane = Some(1);
+        let reader = slide.clone();
+        state.region_reader = Some(Box::new(move |r: &RegionRequest| Ok(reader.read(r))));
+    }
+    let mut init = test_init("cellaris");
+    init.settings
+        .insert("model_path".into(), json!(model.to_string_lossy()));
+    init.settings
+        .insert("runtime_path".into(), json!(runtime.to_string_lossy()));
+    let harness = TestHarness::<Cellaris<OrtBackend>>::with_host(host, init).unwrap();
+    harness
+        .send(HostEvent::FileOpened {
+            file: slide.info(1),
+        })
+        .unwrap();
+    harness
+        .send(HostEvent::ToolbarButtonClicked {
+            button_id: OVERLAY_BUTTON.into(),
+        })
+        .unwrap();
+    let started = Instant::now();
+    wait_for("real predictions", Duration::from_secs(120), || {
+        harness
+            .state()
+            .layers
+            .get(&pred_layer(1))
+            .is_some_and(|l| l.rasters.len() >= 4)
+    });
+    println!("first rasters after {:?}", started.elapsed());
+    let state = harness.state();
+    let raster = state.layers[&pred_layer(1)]
+        .rasters
+        .values()
+        .next()
+        .unwrap();
+    // 128 model px of 0.325 µm over a 0.25 µm/px slide.
+    assert!((raster.width - 166.4).abs() < 1e-9, "{}", raster.width);
+    assert!(
+        state
+            .notifications
+            .iter()
+            .all(|n| n.level != NotifyLevel::Error),
+        "{:?}",
+        state.notifications
+    );
+}
+
+#[test]
+#[ignore = "needs a library that is not ONNX Runtime: set CELLARIS_SMOKE_BAD_ORT; run alone"]
+fn ort_smoke_wrong_library_is_reported() {
+    let Some(bad) = std::env::var_os("CELLARIS_SMOKE_BAD_ORT") else {
+        return;
+    };
+    let failure = crate::runtime::load(&crate::runtime::Search {
+        setting: Some(bad.into()),
+        ..Default::default()
+    })
+    .unwrap_err();
+    println!("{failure:#?}");
+    assert!(failure.detail.contains("OrtGetApiBase"), "{failure:?}");
+}

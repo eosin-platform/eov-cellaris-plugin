@@ -2,7 +2,7 @@
 //! side of the contract: every property it pushes exists and converts, and
 //! every callback it handles is declared.
 //!
-//!     cargo run --manifest-path tools/ui-check/Cargo.toml
+//!     cargo run --manifest-path tools/check/Cargo.toml --bin ui
 
 use cellaris::present;
 use i_slint_compiler::langtype::Type;

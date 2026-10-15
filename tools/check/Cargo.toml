@@ -1,15 +1,17 @@
 [package]
-name = "cellaris-ui-check"
+name = "cellaris-check"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "Compiles the Cellaris panel with eov's Slint interpreter and checks what the plugin sends it"
+description = "Checks of the built plugin against what eov expects: the panel (bin ui) and the library (bin load)"
 
 # Its own workspace: Slint is heavy, and the plugin itself must not need it.
 [workspace]
 
 [dependencies]
+abi_stable = { version = "0.11", default-features = false }
 cellaris = { path = "../.." }
+eov-plugin-api = { path = "../../../../plugin_api", version = "1.0" }
 # The versions eov compiles plugin surfaces with (app/Cargo.toml).
 i-slint-compiler = { version = "=1.17.1", default-features = false }
 slint-interpreter = { version = "=1.17.1", default-features = false, features = ["compat-1-2", "internal", "internal-json", "std"] }

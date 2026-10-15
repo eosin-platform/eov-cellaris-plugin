@@ -519,7 +519,14 @@ impl Backend for OrtBackend {
         let metadata = session
             .metadata()
             .map_err(|e| fail("The model's metadata could not be read", e.to_string()))?;
-        let meta = read_meta(&|key| metadata.custom(key))
+        // Only keys that exist: ONNX Runtime answers "" for absent ones.
+        let custom: std::collections::BTreeMap<String, String> = metadata
+            .custom_keys()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|key| metadata.custom(&key).map(|value| (key, value)))
+            .collect();
+        let meta = read_meta(&|key| custom.get(key).cloned())
             .map_err(|e| fail("The model's metadata is not usable", e))?;
         let producer = metadata.producer().filter(|p| !p.is_empty());
         let graph_title = metadata.name().filter(|n| !n.is_empty());
