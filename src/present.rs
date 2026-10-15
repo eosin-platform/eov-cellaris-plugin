@@ -192,11 +192,41 @@ fn text(id: String, x: f64, y: f64, label: String, colour: Rgba) -> OverlayObjec
 
 /// Short notes on how a slide was matched to the model.
 pub fn scale_notes(st: &State, file: &FileState) -> Vec<String> {
-    let mut notes = Vec::new();
     let Some(model) = st.model.info() else {
-        return notes;
+        return Vec::new();
     };
-    if let Some(grid) = file.grid() {
+    slide_notes(
+        model,
+        file.grid().map(|grid| &**grid),
+        &file.info,
+        WindowCounts {
+            dark: file.dark_windows,
+            tissue: file.tissue_windows,
+            unusual: file.unusual_windows,
+        },
+    )
+}
+
+/// What a slide's windows were found to be, for its notes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowCounts {
+    /// Skipped as not bright-field.
+    pub dark: usize,
+    pub tissue: usize,
+    /// Tissue windows above the model's reconstruction-error threshold.
+    pub unusual: usize,
+}
+
+/// Short notes on how a slide was matched to the model and what its
+/// windows showed: shown in its badge and panel, and in batch summaries.
+pub fn slide_notes(
+    model: &crate::model::ModelInfo,
+    grid: Option<&Grid>,
+    info: &FileInfo,
+    windows: WindowCounts,
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    if let Some(grid) = grid {
         match grid.scale.source {
             ScaleSource::Assumed => notes.push(format!(
                 "pixel size unknown \u{2014} assumed {:.3} \u{b5}m/px",
@@ -216,7 +246,7 @@ pub fn scale_notes(st: &State, file: &FileState) -> Vec<String> {
             notes.push("non-square pixels, resampled per axis".into());
         }
     }
-    if let Some(stain) = &file.info.stain {
+    if let Some(stain) = &info.stain {
         let lower = stain.to_ascii_lowercase();
         if !(lower.contains("h&e")
             || lower.contains("hematoxylin")
@@ -227,16 +257,16 @@ pub fn scale_notes(st: &State, file: &FileState) -> Vec<String> {
             ));
         }
     }
-    if file.dark_windows > 0 {
+    if windows.dark > 0 {
         notes.push(format!(
             "{} windows skipped as not bright-field",
-            file.dark_windows
+            windows.dark
         ));
     }
-    if file.unusual_windows > 0 {
+    if windows.unusual > 0 {
         notes.push(format!(
             "{} of {} windows look unlike the training data",
-            file.unusual_windows, file.tissue_windows
+            windows.unusual, windows.tissue
         ));
     }
     if !model.mpp_recorded {

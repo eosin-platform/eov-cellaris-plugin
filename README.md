@@ -23,6 +23,9 @@ markers over the H&E: Hoechst in yellow, Pan-CK in magenta and SMA in bluish gre
 three that clear the control on the Orion cohort. CD8a was in the first version and came out again,
 because it does not.
 
+Without a window, `eov batch run cellaris:predict` does the same over whole slides and writes the
+values per cell (see [Batch runs](#batch-runs)).
+
 The colours stay distinct for protanopia, deuteranopia and tritanopia (ΔE ≥ 60 between each pair
 under simulation; a test keeps it that way) and stand out against both haematoxylin and eosin. The
 first version's green Pan-CK and amber SMA were a red-green confusion pair.
@@ -188,6 +191,48 @@ apart, so hide some), `batch_size` (windows per run, default 4), `threads` (infe
 default half the CPUs, at most 8), `disk_cache_mb` (default 2048; 0 turns the disk cache off) and
 `overlay_key` (the overlay button's key, default `"x"`; a character or a key name such as `"F7"`,
 `""` for none).
+
+## Batch runs
+
+Without a window, eov can predict whole slides for a cohort:
+
+    eov batch run cellaris:predict SLIDES --out DIR [--param name=value ...]
+
+`SLIDES` are slide files or folders. Each slide's tissue is predicted at the model's pixel size
+exactly as the overlay predicts it, with the same grid, windows and feathered cells, and the
+numbers match a region readout over the same area. Each slide gets a folder in `DIR` with:
+
+- `cells.csv`: one row per 41.6 µm cell with tissue. `x`, `y`, `width` and `height` are the cell in
+  level-0 pixels; `size_um` is its side in µm. `tissue_blocks` and `dark_blocks` count its
+  5.2 µm blocks. `od_mean` is their mean optical density, and `recon_error` their mean
+  reconstruction error. One `<marker>_mean` column per marker holds the mean predicted
+  arcsinh(x/5) intensity over the cell's tissue blocks. The first lines start with `#`: the
+  research-use notice and the model's SHA-256 (`pandas.read_csv(path, comment="#")`).
+- `summary.json`, which eov also records in `DIR/batch.json`:
+  - per marker over the tissue blocks: mean, spread, density r² and percentiles to 0.01;
+  - cells and windows counted by what they were (tissue, glass, near-black, unreadable);
+  - tissue area, and the pixel size used and where it came from;
+  - the model's name and SHA-256, ONNX Runtime's version and the device (CPU);
+  - the slide's warnings, as its badge shows them.
+
+  It names no local paths, so it stays clean when eov runs with `--deidentify`.
+
+| Parameter | Default | |
+|---|---|---|
+| `markers` | `Hoechst,Pan-CK,SMA` | names, or `all` for every channel of the model |
+| `assume_mpp` | `false` | predict slides that report no pixel size as if they were at the model's |
+| `region` | the slide's ROI, else the whole slide | `x,y,width,height` in level-0 pixels |
+| `max_cells` | `0` (no limit) | stop after this many cells with tissue; the summary says it is incomplete |
+| `model`, `runtime` | as in the panel | paths to `markers.onnx` and the ONNX Runtime library; they win over the environment variables |
+| `threads`, `batch_size` | `0` (half the CPUs, at most 8), `4` | inference threads and windows per run |
+
+Memory stays bounded whatever the slide's size: the slide is scanned in strips 32 cells wide, rows
+go straight to the CSV, and the summary keeps sums and fixed histograms. Time does not: 1 cm² of
+tissue is about 58,000 windows, which at about 1.2 s each on a CPU is close to a day, so try
+`region` or `max_cells` first. A slide fails, with the reason in the manifest, when no model or ONNX Runtime
+loads, when it reports no pixel size and `assume_mpp` is off, or when it is coarser than twice the
+model's pixel size. Windows that cannot be read are tried again once. After that their cells are
+left out of the table, and the summary counts them and marks the slide incomplete.
 
 ## The model's metadata
 

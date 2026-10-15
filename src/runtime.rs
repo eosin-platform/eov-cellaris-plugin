@@ -107,6 +107,8 @@ impl Probe for Disk {
 /// Where a candidate came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
+    /// A batch run's `--param runtime`.
+    Param,
     Env(&'static str),
     Setting,
     Bundled,
@@ -117,6 +119,7 @@ pub enum Source {
 impl Source {
     pub fn describe(&self) -> String {
         match self {
+            Source::Param => "--param runtime".to_string(),
             Source::Env(name) => name.to_string(),
             Source::Setting => "the runtime chosen in the Cellaris panel".to_string(),
             Source::Bundled => "the plugin package".to_string(),
@@ -135,6 +138,8 @@ pub struct Candidate {
 /// Inputs of the search.
 #[derive(Clone, Debug, Default)]
 pub struct Search {
+    /// A batch run's own choice: it wins over the environment.
+    pub param: Option<PathBuf>,
     pub env_cellaris: Option<OsString>,
     pub env_ort: Option<OsString>,
     pub setting: Option<PathBuf>,
@@ -151,6 +156,7 @@ impl Search {
     ) -> Self {
         let var = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty());
         Self {
+            param: None,
             env_cellaris: var("CELLARIS_ORT_DYLIB"),
             env_ort: var("ORT_DYLIB_PATH"),
             setting,
@@ -185,6 +191,7 @@ pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Ca
         _ => "libonnxruntime.so",
     };
     let explicit = [
+        (search.param.clone(), Source::Param),
         (
             search.env_cellaris.clone().map(PathBuf::from),
             Source::Env("CELLARIS_ORT_DYLIB"),

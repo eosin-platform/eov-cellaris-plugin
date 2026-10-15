@@ -876,6 +876,7 @@ impl<B: Backend> Worker<B> {
                 } else {
                     st.prefs.threads
                 },
+                ..Default::default()
             }
         };
         self.publish_ui(true);
@@ -1735,6 +1736,25 @@ fn tissue_outcome(
     channels: Channels,
     analysis: resample::Analysis,
 ) -> Outcome {
+    let (planes, unusual) = window_planes(prediction, k, markers, info, channels, &analysis.mask);
+    Outcome::Tissue {
+        planes,
+        blocks: analysis.blocks,
+        unusual,
+    }
+}
+
+/// Window `k` of a prediction as the planes its cells blend
+/// (`channels × side²`), and whether its tissue is above the model's
+/// reconstruction-error threshold.
+pub(crate) fn window_planes(
+    prediction: &crate::model::Prediction,
+    k: usize,
+    markers: &[Marker],
+    info: &ModelInfo,
+    channels: Channels,
+    mask: &[f32],
+) -> (Vec<f32>, bool) {
     let side = prediction.side;
     let area = side * side;
     let mut planes = vec![0f32; channels.count() * area];
@@ -1746,7 +1766,7 @@ fn tissue_outcome(
             *out = markers::intensity(*value, info.raw_intensity);
         }
     }
-    planes[channels.mask() * area..(channels.mask() + 1) * area].copy_from_slice(&analysis.mask);
+    planes[channels.mask() * area..(channels.mask() + 1) * area].copy_from_slice(mask);
     let mut unusual = false;
     if let (Some(index), Some(recon)) = (channels.recon(), &prediction.recon) {
         let source = &recon[k * area..(k + 1) * area];
@@ -1754,16 +1774,12 @@ fn tissue_outcome(
         if let Some(threshold) = info.recon_threshold {
             let (sum, weight) = source
                 .iter()
-                .zip(&analysis.mask)
+                .zip(mask)
                 .fold((0f32, 0f32), |(s, w), (r, m)| (s + r * m, w + m));
             unusual = weight > 0.0 && sum / weight > threshold;
         }
     }
-    Outcome::Tissue {
-        planes,
-        blocks: analysis.blocks,
-        unusual,
-    }
+    (planes, unusual)
 }
 
 /// Records a finished cell: readout, raster (drawn later, outside the

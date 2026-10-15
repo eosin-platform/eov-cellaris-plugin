@@ -10,7 +10,9 @@
 //! - [`model`] and [`runtime`] load the ONNX model and ONNX Runtime.
 //! - [`engine`] runs it all on a worker thread; [`present`] shows it.
 //! - [`region`] measures a drawn region on the same blended cells.
+//! - [`batch`] predicts whole slides without a window, for `eov batch`.
 
+pub mod batch;
 pub mod blend;
 pub mod cache;
 pub mod config;
@@ -58,6 +60,12 @@ pub struct Cellaris<B: Backend = OrtBackend> {
     shared: Arc<Shared>,
     worker: Mutex<Option<JoinHandle<()>>>,
     dialogs: Mutex<Vec<(String, Choice)>>,
+    /// Without a window (`eov batch`): only batch slides are handled.
+    headless: bool,
+    batch: batch::BatchRunner,
+    /// For batch runs: the directories, and the settings eov started with.
+    paths: Paths,
+    prefs: Prefs,
     _backend: PhantomData<fn() -> B>,
 }
 
@@ -490,6 +498,35 @@ impl<B: Backend> Plugin for Cellaris<B> {
         for problem in &problems {
             host.info(format!("Cellaris {problem}"));
         }
+        let paths = Paths {
+            plugin_root: PathBuf::from(&init.plugin_root),
+            data_dir: PathBuf::from(&init.data_dir),
+            cache_dir: PathBuf::from(&init.cache_dir),
+        };
+        // Offered in the window too, for `eov batch list`; hosts from
+        // before batch runs answer Unsupported.
+        if let Err(error) = host.register_batch_command(batch::command())
+            && !error.is_unsupported()
+        {
+            host.warn(format!(
+                "Cellaris could not offer its batch command: {error}"
+            ));
+        }
+        if init.headless {
+            // No window: no buttons, tool, panel or overlay worker.
+            let state = State::new(prefs.clone(), paths.clone());
+            return Ok(Self {
+                host,
+                shared: Arc::new(Shared::new(state)),
+                worker: Mutex::new(None),
+                dialogs: Mutex::new(Vec::new()),
+                headless: true,
+                batch: batch::BatchRunner::default(),
+                paths,
+                prefs,
+                _backend: PhantomData,
+            });
+        }
         // The host adds the key to the tooltip, or refuses it if taken.
         host.add_toolbar_button(ToolbarButtonSpec {
             button_id: OVERLAY_BUTTON.into(),
@@ -518,12 +555,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
         tool.edit_layers = Vec::new();
         host.register_tool(tool).map_err(host_err)?;
 
-        let paths = Paths {
-            plugin_root: PathBuf::from(&init.plugin_root),
-            data_dir: PathBuf::from(&init.data_dir),
-            cache_dir: PathBuf::from(&init.cache_dir),
-        };
-        let mut state = State::new(prefs, paths);
+        let mut state = State::new(prefs.clone(), paths.clone());
         state.setting_problems = problems;
         let shared = Arc::new(Shared::new(state));
         let worker = Worker::new(host.clone(), Arc::clone(&shared), Arc::new(B::default()));
@@ -536,12 +568,40 @@ impl<B: Backend> Plugin for Cellaris<B> {
             shared,
             worker: Mutex::new(Some(handle)),
             dialogs: Mutex::new(Vec::new()),
+            headless: false,
+            batch: batch::BatchRunner::default(),
+            paths,
+            prefs,
             _backend: PhantomData,
         })
     }
 
     fn on_event(&self, event: HostEvent) -> Result<(), String> {
         match event {
+            HostEvent::BatchRun {
+                run_id,
+                command_id,
+                file,
+                output_dir,
+                params,
+            } => self.batch.submit::<B>(
+                &self.host,
+                &self.paths,
+                &self.prefs,
+                batch::Job {
+                    run_id,
+                    command_id,
+                    file,
+                    output_dir: PathBuf::from(output_dir),
+                    params,
+                },
+            ),
+            HostEvent::Shutdown => {
+                self.shared.shut_down();
+                self.batch.stop();
+            }
+            // Without a window, slides come only as batch runs.
+            _ if self.headless => {}
             HostEvent::Ready { restore_sidebar } => {
                 if let Ok(snapshot) = self.host.snapshot() {
                     for file in snapshot.files {
@@ -668,13 +728,15 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 }
                 self.refresh(&mut st);
             }
-            HostEvent::Shutdown => self.shared.shut_down(),
             _ => {}
         }
         Ok(())
     }
 
     fn ui_callback(&self, _surface_id: &str, name: &str, args: &[Value]) -> Result<Value, String> {
+        if self.headless {
+            return Ok(Value::Null);
+        }
         let flag = || args.first().and_then(Value::as_bool).unwrap_or(false);
         match name {
             "toggle-overlay" => {
@@ -720,6 +782,8 @@ impl<B: Backend> Plugin for Cellaris<B> {
 
     fn shutdown(&self) {
         self.shared.shut_down();
+        // A slide being predicted ends as failed ("stopped").
+        self.batch.shut_down(Duration::from_secs(3));
         let handle = self.worker.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(handle) = handle {
             // A prediction is interrupted, but a slow slide read is not; do

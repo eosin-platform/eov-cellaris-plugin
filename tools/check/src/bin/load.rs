@@ -109,6 +109,9 @@ fn run() -> Result<(), String> {
         if !state.tools.contains_key("cellaris_region") {
             return Err("no region tool".into());
         }
+        if !state.batch_commands.contains_key("predict") {
+            return Err("no batch command predict".into());
+        }
     }
     send(
         &plugin,

@@ -107,6 +107,44 @@ pub fn select(channel_names: &[String], wanted: &[String]) -> Result<Vec<Marker>
     Ok(markers)
 }
 
+/// Resolves markers by name for measuring, not display: any number of the
+/// model's channels, with or without a display window (an unknown one gets
+/// a placeholder, since nothing is drawn). Names are matched as in
+/// [`select`].
+pub fn resolve(channel_names: &[String], wanted: &[String]) -> Result<Vec<Marker>, String> {
+    if wanted.is_empty() {
+        return Err("no markers are selected".to_string());
+    }
+    let mut markers: Vec<Marker> = Vec::with_capacity(wanted.len());
+    for (index, name) in wanted.iter().enumerate() {
+        let name = name.trim();
+        if markers.iter().any(|m| m.name == name) {
+            return Err(format!("{name} is selected twice"));
+        }
+        let channel = channel_names
+            .iter()
+            .position(|candidate| candidate.trim() == name)
+            .ok_or_else(|| {
+                format!(
+                    "the model has no channel named {name} (it has {})",
+                    channel_names.join(", ")
+                )
+            })?;
+        let (low, high) = WINDOWS
+            .iter()
+            .find(|(known, _, _)| *known == name)
+            .map_or((0.0, 1.0), |&(_, low, high)| (low, high));
+        markers.push(Marker {
+            name: name.to_string(),
+            channel,
+            low,
+            high,
+            colour: PALETTE[index % MAX_MARKERS],
+        });
+    }
+    Ok(markers)
+}
+
 /// The model channels a display window is known for, in model order.
 pub fn displayable(channel_names: &[String]) -> Vec<String> {
     channel_names

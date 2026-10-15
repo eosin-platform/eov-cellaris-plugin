@@ -1543,6 +1543,7 @@ fn ort_smoke_backend() {
         plugin_root: init.plugin_root.clone().into(),
         data_dir: init.data_dir.clone().into(),
         threads: 2,
+        ..Default::default()
     };
     let mut predictor = crate::model::OrtBackend.load(&request).unwrap();
     let info = predictor.info().clone();
@@ -1893,3 +1894,5 @@ fn a_slide_that_disappears_ends_its_readout_job() {
             .any(|args| args["error"] == json!("the slide was closed"))
     });
 }
+
+mod batch_runs;

@@ -130,6 +130,10 @@ pub struct LoadRequest {
     pub data_dir: PathBuf,
     /// Intra-op threads.
     pub threads: usize,
+    /// A batch run's own model and runtime (`--param model`, `--param
+    /// runtime`): they win over the environment variables.
+    pub param_model: Option<PathBuf>,
+    pub param_runtime: Option<PathBuf>,
 }
 
 /// Why a model could not be loaded: a line for the user and the details.
@@ -443,11 +447,14 @@ fn is_f32(outlet: &ort::value::Outlet) -> bool {
 
 impl Backend for OrtBackend {
     fn load(&self, request: &LoadRequest) -> Result<Box<dyn Predictor>, LoadError> {
-        let search = runtime::Search::from_env(
-            request.runtime.clone(),
-            Some(request.plugin_root.clone()),
-            Some(request.data_dir.clone()),
-        );
+        let search = runtime::Search {
+            param: request.param_runtime.clone(),
+            ..runtime::Search::from_env(
+                request.runtime.clone(),
+                Some(request.plugin_root.clone()),
+                Some(request.data_dir.clone()),
+            )
+        };
         let loaded = runtime::load(&search).map_err(|f| LoadError::new(f.summary, f.detail))?;
         let runtime = format!(
             "ONNX Runtime {} from {}",
@@ -455,14 +462,26 @@ impl Backend for OrtBackend {
             loaded.path.display()
         );
 
-        let path = locate_model(
-            std::env::var_os("CELLARIS_MODEL").filter(|v| !v.is_empty()),
-            request.model.as_deref(),
-            &request.data_dir,
-            &request.plugin_root,
-            &|path| path.is_file(),
-        )
-        .map_err(|reason| LoadError::new("No marker model", reason))?;
+        let path = match &request.param_model {
+            Some(path) if path.is_file() => path.clone(),
+            Some(path) => {
+                return Err(LoadError::new(
+                    "No marker model",
+                    format!(
+                        "--param model points at {}, which does not exist",
+                        path.display()
+                    ),
+                ));
+            }
+            None => locate_model(
+                std::env::var_os("CELLARIS_MODEL").filter(|v| !v.is_empty()),
+                request.model.as_deref(),
+                &request.data_dir,
+                &request.plugin_root,
+                &|path| path.is_file(),
+            )
+            .map_err(|reason| LoadError::new("No marker model", reason))?,
+        };
         let fail = |summary: &str, detail: String| {
             LoadError::new(summary, format!("{}: {detail}", path.display()))
         };
