@@ -160,7 +160,8 @@ view; work starts at the centre of each view and the panes take turns.
 
 Slides that do not report their pixel size are not computed unless *Assume the model's pixel size*
 is on, and then the badge says the scale is assumed. Slides coarser than the model are upsampled
-and flagged as less reliable; more than twice as coarse (1 µm/px for this model) is refused. A slide
+and flagged as less reliable (a 20× scan at 0.5 µm/px is 1.5× coarser); more than twice as
+coarse (past 0.65 µm/px for this model, such as a 10× scan) is refused. A slide
 whose metadata names a stain other than H&E is flagged.
 
 Settings are kept by eov, in `settings.json` in the data directory above. A few have no control in
