@@ -1,6 +1,11 @@
 id = "cellaris"
 name = "Cellaris"
-version = "0.1.0"
+version = "1.0.0"
+description = "Predicted Orion multiplex-IF markers overlaid on H&E (research use only)"
+repository = "https://github.com/eosin-platform/eov-cellaris-plugin"
+
+[environment]
+version = ">=1.0.0, <2.0.0"
 
 [icon]
 kind = "svg"

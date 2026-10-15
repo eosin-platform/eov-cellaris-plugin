@@ -1,6 +1,6 @@
 [package]
 name = "cellaris"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Predicted Orion multiplex-IF markers overlaid on H&E, as an EOV viewport filter"
 repository = "https://github.com/eosin-platform/eov-cellaris-plugin"
@@ -18,7 +18,7 @@ crate-type = ["cdylib", "rlib"]
 abi_stable = "0.11"
 ndarray = "0.17"
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "api-24", "load-dynamic"] }
-eov-plugin-api = "0.4"
+eov-plugin-api = { path = "../../plugin_api", version = "1.0.0" }
 serde_json = "1"
 
 [profile.release]
