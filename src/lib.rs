@@ -27,8 +27,8 @@ pub mod runtime;
 mod tests;
 
 use config::{
-    OVERLAY_BUTTON, OVERLAY_ICON, OVERLAY_KEY, PANEL_BUTTON, PANEL_COMPONENT, PANEL_ICON, PANEL_UI,
-    PANEL_WIDTH, Prefs, REGION_ICON, REGION_TOOL, keys,
+    OVERLAY_BUTTON, OVERLAY_ICON, PANEL_BUTTON, PANEL_COMPONENT, PANEL_ICON, PANEL_UI, PANEL_WIDTH,
+    Prefs, REGION_ICON, REGION_TOOL, keys,
 };
 use engine::{
     FileState, ModelState, Paths, Shared, State, Support, Worker, pred_layer, region_layer,
@@ -495,7 +495,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
             button_id: OVERLAY_BUTTON.into(),
             tooltip: "Cellaris: predicted markers over H&E (research use only)".into(),
             icon_svg: OVERLAY_ICON.into(),
-            hotkey: Some(Hotkey::key(OVERLAY_KEY)),
+            hotkey: (!prefs.overlay_key.is_empty()).then(|| Hotkey::key(&prefs.overlay_key)),
             order: 0,
             ..Default::default()
         })
@@ -654,10 +654,14 @@ impl<B: Backend> Plugin for Cellaris<B> {
             HostEvent::RegistrationRefused { what, id, reason } => {
                 // eov has warned and logged it; the panel keeps it in view.
                 let mut st = self.lock();
-                let problem = if what == "hotkey" {
-                    reason
-                } else {
-                    format!("eov refused the {what} of {id}: {reason}")
+                let problem = match (what.as_str(), id.as_str()) {
+                    ("hotkey", OVERLAY_BUTTON) => format!(
+                        "{reason} Another key can be set as {} in Cellaris's settings.json \
+                         (\"\" for none).",
+                        keys::OVERLAY_KEY
+                    ),
+                    ("hotkey", _) => reason,
+                    _ => format!("eov refused the {what} of {id}: {reason}"),
                 };
                 if !st.setting_problems.contains(&problem) {
                     st.setting_problems.push(problem);

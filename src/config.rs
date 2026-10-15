@@ -6,9 +6,10 @@ use serde::Serialize;
 
 /// Toggles the predicted-marker overlay on every open slide.
 pub const OVERLAY_BUTTON: &str = "cellaris_overlay";
-/// The overlay button's key. eov binds f, m, n, r, d, i, the digits and
-/// + = -; the annotations plugin's tools take v . c p g b o l t h.
-pub const OVERLAY_KEY: &str = "x";
+/// The overlay button's key unless the `overlay_key` setting says
+/// otherwise. eov binds f, m, n, r, d, i, the digits and + = - (users can
+/// change those); the annotations plugin's tools take v . c p g b o l t h.
+pub const DEFAULT_OVERLAY_KEY: &str = "x";
 /// Shows or hides the Cellaris panel.
 pub const PANEL_BUTTON: &str = "cellaris_panel";
 /// Draws a region to measure.
@@ -52,6 +53,8 @@ pub struct Prefs {
     pub assume_mpp: bool,
     /// Disk cache budget; 0 turns it off.
     pub disk_cache_mb: u64,
+    /// The overlay button's key; empty for none.
+    pub overlay_key: String,
 }
 
 impl Default for Prefs {
@@ -67,6 +70,7 @@ impl Default for Prefs {
             runtime_path: None,
             assume_mpp: false,
             disk_cache_mb: 2048,
+            overlay_key: DEFAULT_OVERLAY_KEY.to_string(),
         }
     }
 }
@@ -82,6 +86,7 @@ pub mod keys {
     pub const RUNTIME: &str = "runtime_path";
     pub const ASSUME_MPP: &str = "assume_mpp";
     pub const DISK_CACHE: &str = "disk_cache_mb";
+    pub const OVERLAY_KEY: &str = "overlay_key";
 }
 
 impl Prefs {
@@ -137,6 +142,14 @@ impl Prefs {
                     Some(mb) => prefs.disk_cache_mb = mb,
                     _ => bad(key, value),
                 },
+                // A character or a named key such as "F2"; eov refuses keys
+                // it or another plugin uses.
+                keys::OVERLAY_KEY => match value.as_str().map(str::trim) {
+                    Some(name) if name.chars().count() <= 16 => {
+                        prefs.overlay_key = name.to_string()
+                    }
+                    _ => bad(key, value),
+                },
                 _ => {}
             }
         }
@@ -160,13 +173,24 @@ mod tests {
         settings.insert("markers".into(), json!(["Hoechst", "CD8a"]));
         settings.insert("batch_size".into(), json!(1000));
         settings.insert("display_mode".into(), json!("fluorescence"));
+        settings.insert("overlay_key".into(), json!(" F7 "));
         settings.insert("unrelated".into(), json!(true));
         let (prefs, problems) = Prefs::from_settings(&settings);
         assert_eq!(prefs.opacity, 0.5);
         assert_eq!(prefs.markers, vec!["Hoechst", "CD8a"]);
         assert_eq!(prefs.mode, DisplayMode::Fluorescence);
         assert_eq!(prefs.batch_size, Prefs::default().batch_size);
+        assert_eq!(prefs.overlay_key, "F7");
         assert_eq!(problems.len(), 1, "{problems:?}");
+        // No key at all, or a value that is no key.
+        for (value, key) in [
+            (json!(""), ""),
+            (json!(3), "x"),
+            (json!("x".repeat(17)), "x"),
+        ] {
+            let settings = Map::from_iter([("overlay_key".to_string(), value)]);
+            assert_eq!(Prefs::from_settings(&settings).0.overlay_key, key);
+        }
     }
 
     #[test]

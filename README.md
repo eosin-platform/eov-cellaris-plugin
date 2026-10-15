@@ -150,7 +150,8 @@ The toolbar gets three things:
 - **Cellaris: predicted markers** (key X) turns the overlay on and off for every open slide. The
   model loads the first time something needs it; if that fails, the panel says why, and turning
   the overlay on again, *Retry* or choosing another model tries again, without restarting eov. If
-  another plugin already uses X, eov says so and the panel repeats it.
+  eov or another plugin already uses X, eov says so and the panel repeats it; the `overlay_key`
+  setting below picks another key.
 - **Cellaris panel** shows the legend, the per-marker toggles, opacity, a fluorescence-style mode
   (colour on black over all tissue), the region readout and the model card.
 - **Cellaris region readout**, a polygon tool.
@@ -184,7 +185,9 @@ Settings are kept by eov, in `settings.json` in the data directory above. A few 
 the panel yet and can be set there while eov is closed: `markers` (the channels to predict, up to
 six of the model's, default `["Hoechst", "Pan-CK", "SMA"]`; past three, colours are harder to tell
 apart, so hide some), `batch_size` (windows per run, default 4), `threads` (inference threads,
-default half the CPUs, at most 8) and `disk_cache_mb` (default 2048; 0 turns the disk cache off).
+default half the CPUs, at most 8), `disk_cache_mb` (default 2048; 0 turns the disk cache off) and
+`overlay_key` (the overlay button's key, default `"x"`; a character or a key name such as `"F7"`,
+`""` for none).
 
 ## The model's metadata
 

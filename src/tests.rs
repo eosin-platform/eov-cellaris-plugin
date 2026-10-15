@@ -1267,6 +1267,20 @@ fn the_overlay_has_a_key_and_a_refused_key_is_shown_in_the_panel() {
         .unwrap_or_default()
         .to_string();
     assert!(detail.contains(reason), "{detail}");
+    assert!(detail.contains("set as overlay_key"), "{detail}");
+}
+
+#[test]
+fn the_overlay_key_can_be_changed_or_turned_off_in_the_settings() {
+    for (setting, hotkey) in [(json!("F7"), Some(Hotkey::key("F7"))), (json!(""), None)] {
+        let mut init = test_init("cellaris");
+        init.settings.insert("overlay_key".into(), setting);
+        let harness = TestHarness::<Plugin>::with_host(MockHost::new(), init).unwrap();
+        assert_eq!(
+            harness.state().toolbar_buttons[OVERLAY_BUTTON].hotkey,
+            hotkey
+        );
+    }
 }
 
 #[test]
