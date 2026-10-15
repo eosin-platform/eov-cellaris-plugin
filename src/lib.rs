@@ -542,9 +542,10 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 }
                 self.refresh(&mut st);
             }
-            HostEvent::ActiveChanged { file_id, .. } => {
+            HostEvent::ActiveChanged { pane, file_id } => {
                 let mut st = self.lock();
                 st.active_file = file_id;
+                st.focused_pane = pane;
                 self.refresh(&mut st);
             }
             HostEvent::ViewChanged { view } => {

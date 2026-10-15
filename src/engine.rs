@@ -259,6 +259,8 @@ pub struct State {
     pub files: BTreeMap<FileId, FileState>,
     pub views: BTreeMap<PaneId, ViewInfo>,
     pub active_file: Option<FileId>,
+    /// The pane the user is working in.
+    pub focused_pane: Option<PaneId>,
     pub model: ModelState,
     /// The resolved markers, or why they could not be.
     pub markers: Result<Vec<Marker>, String>,
@@ -296,6 +298,7 @@ impl State {
             files: BTreeMap::new(),
             views: BTreeMap::new(),
             active_file: None,
+            focused_pane: None,
             model: ModelState::Idle,
             markers: Err("the model is not loaded".to_string()),
             load_wanted: false,
@@ -696,6 +699,7 @@ impl<B: Backend> Worker<B> {
             .iter()
             .filter_map(|pane| pane.view.map(|view| (pane.pane, view)))
             .collect();
+        st.focused_pane = snapshot.focused_pane;
         st.active_file = snapshot
             .focused_pane
             .and_then(|pane| snapshot.panes.iter().find(|p| p.pane == pane))

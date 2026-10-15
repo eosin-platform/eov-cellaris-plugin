@@ -252,7 +252,19 @@ pub fn marks(st: &State, id: FileId) -> Vec<OverlayObject> {
         }
     }
     let notes = scale_notes(st, file);
-    for (pane, view) in st.views.iter().filter(|(_, v)| v.file_id == id) {
+    // A layer belongs to a slide and is drawn in every pane showing it, so
+    // one badge per slide: in the focused pane when it shows this slide,
+    // else in the first pane that does. (One per pane would show up in the
+    // others too.)
+    let shows = |pane: &PaneId| st.views.get(pane).is_some_and(|v| v.file_id == id);
+    let pane = st.focused_pane.filter(shows).or_else(|| {
+        st.views
+            .iter()
+            .find(|(_, v)| v.file_id == id)
+            .map(|(pane, _)| *pane)
+    });
+    let badged = pane.and_then(|pane| st.views.get_key_value(&pane));
+    if let Some((pane, view)) = badged {
         let zoom = view.zoom.max(1e-9);
         let x = view.visible.x + 12.0 / zoom;
         let mut y = view.visible.y + 14.0 / zoom;

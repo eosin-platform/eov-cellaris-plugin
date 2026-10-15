@@ -152,8 +152,10 @@ The toolbar gets three things:
   (colour on black over all tissue), the region readout and the model card.
 - **Cellaris region readout**, a polygon tool.
 
-On the slide, each pane carries a badge — *PREDICTED — research use only, not for diagnosis* — with
-progress and warnings under it, and a legend of the markers shown. Areas still being computed are
+On the slide, the pane you are working in carries a badge — *PREDICTED — research use only, not
+for diagnosis* — with progress and warnings under it, and a legend of the markers shown; the status
+bar says the same while predictions are on. (With one slide in two panes, the badge follows the
+focus: overlay layers belong to a slide, not a pane.) Areas still being computed are
 veiled; areas that failed are outlined in red and retried, backing off, up to five times. Glass,
 areas without image data and near-black areas are never painted. Split views compute each pane's
 view; work starts at the centre of each view and the panes take turns.

@@ -527,10 +527,49 @@ fn both_panes_of_a_split_view_are_computed() {
         rects.iter().any(|r| in_rect(r, &left.visible))
             && rects.iter().any(|r| in_rect(r, &right.visible))
     });
-    // Each pane gets its own badge.
-    let marks = rig.objects(&marks_layer(1));
-    assert!(marks.iter().any(|o| o.object_id == "badge-1"));
-    assert!(marks.iter().any(|o| o.object_id == "badge-2"));
+    // One badge for the slide, in the focused pane: the slide's layer is
+    // drawn in both panes, so a badge per pane would show up in the other.
+    let badges = |rig: &Rig| -> Vec<String> {
+        rig.objects(&marks_layer(1))
+            .into_iter()
+            .filter(|o| o.object_id.starts_with("badge-"))
+            .map(|o| o.object_id)
+            .collect()
+    };
+    assert_eq!(badges(&rig), vec!["badge-1"]);
+    // It follows the focus.
+    rig.harness.state().snapshot.focused_pane = Some(2);
+    rig.harness
+        .send(HostEvent::ActiveChanged {
+            pane: Some(2),
+            file_id: Some(1),
+        })
+        .unwrap();
+    assert_eq!(badges(&rig), vec!["badge-2"]);
+}
+
+#[test]
+fn two_slides_side_by_side_each_carry_a_badge() {
+    let left = view(1, 1, 4_000.0, 4_000.0, 100.0, 100.0, 2.0);
+    let right = view(2, 2, 4_000.0, 4_000.0, 100.0, 100.0, 2.0);
+    let rig = Rig::new(
+        &[(1, Slide::new(Some(0.325))), (2, Slide::new(Some(0.5)))],
+        &[left, right],
+        FakeConfig::default(),
+    );
+    rig.click(OVERLAY_BUTTON);
+    wait_for("both badges", LONG, || {
+        rig.objects(&marks_layer(1))
+            .iter()
+            .any(|o| o.object_id == "badge-1")
+            && rig
+                .objects(&marks_layer(2))
+                .iter()
+                .any(|o| o.object_id == "badge-2")
+    });
+    wait_for("both slides", LONG, || {
+        rig.rasters(1) > 0 && rig.rasters(2) > 0
+    });
 }
 
 #[test]
