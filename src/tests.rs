@@ -727,7 +727,7 @@ fn failed_reads_are_shown_and_retried() {
             .state()
             .notifications
             .iter()
-            .any(|n| n.message.contains("failed")
+            .any(|n| n.message.contains("could not compute")
                 && n.detail.as_deref().is_some_and(|d| d.contains("went away")))
     );
     // After the back-off the same windows are read again and succeed.
@@ -1043,6 +1043,47 @@ fn predictions_come_back_from_the_disk_cache() {
         0,
         "cached cells were predicted again"
     );
+}
+
+fn cached_cells(cache_dir: &Path) -> usize {
+    std::fs::read_dir(cache_dir.join("cells"))
+        .map(|shelves| {
+            shelves
+                .filter_map(Result::ok)
+                .filter_map(|shelf| std::fs::read_dir(shelf.path()).ok())
+                .map(|cells| cells.count())
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+#[test]
+fn the_disk_cache_starts_once_the_slide_identity_is_known() {
+    // eov publishes a slide before it has computed its identity.
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 100.0, 100.0, 2.0);
+    let rig = Rig::new(&[(1, slide.clone())], &[v], FakeConfig::default());
+    let cache_dir = rig.data_dir.parent().unwrap().join("cache");
+    let anonymous = FileInfo {
+        identity: None,
+        ..slide.info(1)
+    };
+    rig.harness.state().snapshot.files = vec![anonymous.clone()];
+    rig.harness
+        .send(HostEvent::FileOpened { file: anonymous })
+        .unwrap();
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the first view", LONG, || view_done(&rig, 1));
+    assert_eq!(cached_cells(&cache_dir), 0, "cached without an identity");
+
+    // The identity arrives; cells computed from then on are kept.
+    rig.harness.state().snapshot.files = vec![slide.info(1)];
+    let moved = view(1, 1, 6_000.0, 6_000.0, 100.0, 100.0, 2.0);
+    rig.harness.state().snapshot.panes[0].view = Some(moved);
+    rig.harness
+        .send(HostEvent::ViewChanged { view: moved })
+        .unwrap();
+    wait_for("cells on disk", LONG, || cached_cells(&cache_dir) > 0);
 }
 
 #[test]

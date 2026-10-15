@@ -20,9 +20,12 @@ pub const MASK_LOW: f32 = 0.02;
 pub const MASK_HIGH: f32 = 0.06;
 /// Radius, in model pixels, of the box blur under the paint mask.
 const MASK_BLUR: usize = 4;
-/// Pixels darker than this in every channel count as "dark".
+/// Pixels darker than this in every channel count as "dark": not
+/// bright-field H&E (fluorescence background, black ink, debris). They are
+/// masked out like glass.
 const DARK_LEVEL: f32 = 30.0 / 255.0;
-/// A window that is mostly dark is not a bright-field image.
+/// A window without paintable tissue that is mostly dark is reported as
+/// such.
 const DARK_SHARE: f32 = 0.6;
 
 /// A window on the model grid.
@@ -190,8 +193,8 @@ pub enum WindowKind {
     Tissue,
     /// Glass or no data only: nothing to predict, paint or measure.
     Background,
-    /// Mostly near-black: not a bright-field image (fluorescence, pen,
-    /// debris); the model was not trained on anything like it.
+    /// Nothing to paint, and mostly near-black: not a bright-field image
+    /// (fluorescence, black ink, debris).
     Dark,
 }
 
@@ -200,6 +203,8 @@ pub enum WindowKind {
 pub struct BlockBase {
     pub od: f32,
     pub coverage: f32,
+    /// Share of the block's pixels that are dark.
+    pub dark: f32,
 }
 
 /// A window's tissue mask and block statistics.
@@ -249,6 +254,7 @@ pub fn analyse(window: &WindowImage) -> Analysis {
     let side = window.side;
     let area = side * side;
     let mut od = vec![0f32; area];
+    let mut dark_pixels = vec![0f32; area];
     let mut dark = 0usize;
     let mut covered = 0usize;
     for (index, density) in od.iter_mut().enumerate() {
@@ -260,14 +266,19 @@ pub fn analyse(window: &WindowImage) -> Analysis {
             covered += 1;
             if r.max(g).max(b) < DARK_LEVEL {
                 dark += 1;
+                dark_pixels[index] = 1.0;
             }
         }
     }
     let blurred = box_blur(&od, side, MASK_BLUR);
+    let dark_blurred = box_blur(&dark_pixels, side, MASK_BLUR);
     let mask: Vec<f32> = blurred
         .iter()
         .zip(&window.coverage)
-        .map(|(od, coverage)| smoothstep(MASK_LOW, MASK_HIGH, *od) * coverage)
+        .zip(&dark_blurred)
+        .map(|((od, coverage), dark)| {
+            smoothstep(MASK_LOW, MASK_HIGH, *od) * coverage * (1.0 - dark).clamp(0.0, 1.0)
+        })
         .collect();
 
     let per = side / BLOCK;
@@ -276,25 +287,30 @@ pub fn analyse(window: &WindowImage) -> Analysis {
         let (bx, by) = (index % per, index / per);
         let mut od_sum = 0f32;
         let mut coverage_sum = 0f32;
+        let mut dark_sum = 0f32;
         for y in by * BLOCK..(by + 1) * BLOCK {
             for x in bx * BLOCK..(bx + 1) * BLOCK {
                 od_sum += od[y * side + x];
                 coverage_sum += window.coverage[y * side + x];
+                dark_sum += dark_pixels[y * side + x];
             }
         }
         let n = (BLOCK * BLOCK) as f32;
         *block = BlockBase {
             od: od_sum / n,
             coverage: coverage_sum / n,
+            dark: dark_sum / n,
         };
     }
 
-    let kind = if covered > 0 && dark as f32 > DARK_SHARE * covered as f32 {
-        WindowKind::Dark
-    } else if mask.iter().all(|m| *m <= 0.0) {
-        WindowKind::Background
-    } else {
+    // Judged per pixel, so a window's verdict holds for every cell in it:
+    // a window with nothing to paint has no cell with anything to paint.
+    let kind = if mask.iter().any(|m| *m > 0.0) {
         WindowKind::Tissue
+    } else if covered > 0 && dark as f32 > DARK_SHARE * covered as f32 {
+        WindowKind::Dark
+    } else {
+        WindowKind::Background
     };
     Analysis { kind, mask, blocks }
 }
@@ -443,11 +459,28 @@ mod tests {
     }
 
     #[test]
-    fn a_mostly_black_window_is_out_of_domain() {
+    fn black_is_masked_out_like_glass() {
         let dark = window(64, |_, _| ([0.02, 0.03, 0.02], 1.0));
         assert_eq!(analyse(&dark).kind, WindowKind::Dark);
         let dense = window(64, |_, _| ([0.35, 0.2, 0.45], 1.0));
         assert_eq!(analyse(&dense).kind, WindowKind::Tissue);
+        // Ink over the left half of tissue: the tissue is still predicted
+        // and painted, the ink is neither.
+        let inked = window(64, |x, _| {
+            if x < 32 {
+                ([0.02, 0.02, 0.03], 1.0)
+            } else {
+                ([0.85, 0.55, 0.7], 1.0)
+            }
+        });
+        let analysis = analyse(&inked);
+        assert_eq!(analysis.kind, WindowKind::Tissue);
+        assert!(analysis.mask[10 * 64 + 8] < 1e-6, "ink was painted");
+        assert!(
+            analysis.mask[10 * 64 + 56] > 0.99,
+            "tissue next to ink was not"
+        );
+        assert!(analysis.blocks[0].dark > 0.99 && analysis.blocks[3].dark < 1e-6);
     }
 
     #[test]

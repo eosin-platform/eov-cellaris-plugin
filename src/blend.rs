@@ -187,6 +187,8 @@ impl Accum {
 pub struct BlockStat {
     pub od: f32,
     pub coverage: f32,
+    /// Share of dark (not bright-field) pixels.
+    pub dark: f32,
     /// Mean predicted intensity per marker (arcsinh scale).
     pub means: Vec<f32>,
     /// Mean reconstruction error, when the model reports one.
@@ -291,6 +293,7 @@ pub fn finalize(
             BlockStat {
                 od: base.od,
                 coverage: base.coverage,
+                dark: base.dark,
                 means: (0..markers.len())
                     .map(|k| mean(&values[k * area..(k + 1) * area]))
                     .collect(),
@@ -437,7 +440,8 @@ mod tests {
         let bases = vec![
             BlockBase {
                 od: 0.3,
-                coverage: 1.0
+                coverage: 1.0,
+                dark: 0.0,
             };
             per * per
         ];

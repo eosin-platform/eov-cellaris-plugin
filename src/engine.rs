@@ -283,6 +283,7 @@ pub struct State {
     /// What the status bar and the panel last showed.
     pub last_status: Option<Option<String>>,
     pub last_sidebar: Option<Map<String, Value>>,
+    pub last_panel_open: Option<bool>,
 }
 
 impl State {
@@ -311,6 +312,7 @@ impl State {
             paths,
             last_status: None,
             last_sidebar: None,
+            last_panel_open: None,
         }
     }
 
@@ -684,9 +686,13 @@ impl<B: Backend> Worker<B> {
         let open: BTreeSet<FileId> = snapshot.files.iter().map(|f| f.file_id).collect();
         st.files.retain(|id, _| open.contains(id));
         for info in &snapshot.files {
-            st.files
-                .entry(info.file_id)
-                .or_insert_with(|| FileState::new(info.clone()));
+            match st.files.get_mut(&info.file_id) {
+                Some(file) if file.info != *info => file.info = info.clone(),
+                Some(_) => {}
+                None => {
+                    st.files.insert(info.file_id, FileState::new(info.clone()));
+                }
+            }
         }
         let created = ensure_layers(&self.host, &mut st);
         drop(st);
@@ -823,16 +829,20 @@ impl<B: Backend> Worker<B> {
         for file in st.files.values_mut() {
             if file.grid.is_none() {
                 file.grid = Some(scale_for(&file.info, &model, &st.prefs));
-                file.shelf = match (file.grid(), &file.info.identity) {
-                    (Some(grid), Some(identity)) if disk_on => Some(Shelf::new(
-                        &st.paths.cache_dir.join("cells"),
-                        &cache::key(identity, &model.sha256, grid, &markers, model.recon),
-                        grid.stride,
-                        markers.len(),
-                        model.recon,
-                    )),
-                    _ => None,
-                };
+            }
+            // The identity can arrive after the file (the host computes it).
+            if file.shelf.is_none()
+                && disk_on
+                && let (Some(grid), Some(identity)) = (file.grid(), &file.info.identity)
+            {
+                file.shelf = Some(Shelf::new(
+                    &st.paths.cache_dir.join("cells"),
+                    &cache::key(identity, &model.sha256, grid, &markers, model.recon),
+                    grid.stride,
+                    markers.len(),
+                    model.recon,
+                ));
+                file.disk_misses.clear();
             }
         }
 
@@ -1335,13 +1345,12 @@ impl<B: Backend> Worker<B> {
                 );
             }
         }
-        if !failures.is_empty() {
-            let first = failures[0].clone();
+        if let Some(first) = failures.first() {
             notify_once(
                 &self.host,
                 st,
-                &format!("{} Cellaris windows failed; retrying", failures.len()),
-                &first,
+                "Cellaris could not compute part of the slide; retrying",
+                first,
             );
         }
         evict(st, publish);
@@ -1562,6 +1571,7 @@ fn finish_cell(
     }
     if let Some(shelf) = &file.shelf {
         publish.writes.push((shelf.clone(), cell, data.clone()));
+        file.disk_misses.remove(&cell);
     }
     file.cells.insert(cell, (data, tick));
 }

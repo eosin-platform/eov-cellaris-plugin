@@ -16,7 +16,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Bump whenever what a cell holds, or how it is computed, changes.
-const FORMAT: u32 = 1;
+const FORMAT: u32 = 2;
 const MAGIC: &[u8; 4] = b"CELC";
 
 /// The cache key of a slide's cells.
@@ -67,6 +67,7 @@ fn encode(data: &CellData, stride: usize, markers: usize, recon: bool) -> Vec<u8
             for block in &cell.blocks {
                 out.extend_from_slice(&block.od.to_le_bytes());
                 out.extend_from_slice(&block.coverage.to_le_bytes());
+                out.extend_from_slice(&block.dark.to_le_bytes());
                 for mean in &block.means {
                     out.extend_from_slice(&mean.to_le_bytes());
                 }
@@ -112,6 +113,7 @@ fn decode(bytes: &[u8], stride: usize, markers: usize, recon: bool) -> Option<Ce
             for _ in 0..per * per {
                 let od = float()?;
                 let coverage = float()?;
+                let dark = float()?;
                 let means = (0..markers)
                     .map(|_| float())
                     .collect::<Option<Vec<f32>>>()?;
@@ -123,6 +125,7 @@ fn decode(bytes: &[u8], stride: usize, markers: usize, recon: bool) -> Option<Ce
                 blocks.push(BlockStat {
                     od,
                     coverage,
+                    dark,
                     means,
                     recon,
                 });
@@ -244,6 +247,7 @@ mod tests {
                 .map(|i| BlockStat {
                     od: i as f32 / 10.0,
                     coverage: 1.0,
+                    dark: 0.0,
                     means: (0..markers).map(|k| k as f32 + 0.5).collect(),
                     recon: Some(0.25),
                 })
@@ -274,7 +278,7 @@ mod tests {
         let other = Shelf::new(&root, "k", 32, 2, true);
         assert_eq!(other.load(Idx::new(2, 5)), None);
         // A damaged file is a miss, not a panic.
-        fs::write(shelf.path(Idx::new(2, 5)), b"CELC\x01\x00\x00\x00\x02\x20").unwrap();
+        fs::write(shelf.path(Idx::new(2, 5)), b"CELC\x02\x00\x00\x00\x02\x20").unwrap();
         assert_eq!(shelf.load(Idx::new(2, 5)), None);
         let _ = fs::remove_dir_all(root);
     }

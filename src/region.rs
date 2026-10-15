@@ -16,6 +16,8 @@ use std::collections::BTreeSet;
 pub const MIN_BLOCKS: usize = 30;
 /// Blocks must lie this fully on the slide to be measured.
 const MIN_COVERAGE: f32 = 0.99;
+/// Blocks with more dark (not bright-field) pixels than this are skipped.
+const MAX_DARK: f32 = 0.25;
 
 /// A region drawn or chosen on a slide, in level-0 pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -247,6 +249,8 @@ pub struct Readout {
     pub unusual_blocks: usize,
     /// Cells skipped as not bright-field.
     pub dark_cells: usize,
+    /// Tissue blocks skipped for dark (not bright-field) pixels.
+    pub dark_blocks: usize,
     pub state: ReadoutState,
     /// Windows the region needed when it was drawn.
     pub windows: usize,
@@ -264,6 +268,7 @@ impl Readout {
             recon_blocks: 0,
             unusual_blocks: 0,
             dark_cells: 0,
+            dark_blocks: 0,
             state: ReadoutState::Running,
             windows,
         }
@@ -305,6 +310,10 @@ impl Readout {
                     }
                     let (x, y) = grid.block_center(cell, index % per, index / per);
                     if !self.region.contains(x, y) {
+                        continue;
+                    }
+                    if block.dark > MAX_DARK {
+                        self.dark_blocks += 1;
                         continue;
                     }
                     for (fit, mean) in self.fits.iter_mut().zip(&block.means) {
@@ -474,6 +483,7 @@ mod tests {
                 .map(|index| BlockStat {
                     od,
                     coverage: 1.0,
+                    dark: 0.0,
                     means: vec![means(index)],
                     recon: Some(0.1),
                 })

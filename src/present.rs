@@ -397,7 +397,11 @@ pub fn refresh(host: &Host, st: &mut State) {
         host.set_status(status.as_deref());
         st.last_status = Some(status);
     }
-    let _ = host.set_toolbar_button_active(PANEL_BUTTON, st.sidebar.is_some());
+    let open = st.sidebar.is_some();
+    if st.last_panel_open != Some(open) {
+        let _ = host.set_toolbar_button_active(PANEL_BUTTON, open);
+        st.last_panel_open = Some(open);
+    }
     if let Some(sidebar) = &st.sidebar {
         let properties = sidebar_properties(st);
         if st.last_sidebar.as_ref() != Some(&properties) {
@@ -491,15 +495,12 @@ fn readout_properties(st: &State, out: &mut Map<String, Value>) {
     let file = st.active_file.and_then(|id| st.files.get(&id));
     let job = file.and_then(|f| f.readout.as_ref());
     let has_region = file.is_some_and(|f| f.region.is_some());
+    let waiting = match (&st.model, &st.markers) {
+        (ModelState::Ready(_), Err(problem)) => format!("Cannot measure: {problem}"),
+        _ => "Waiting for the model\u{2026}".to_string(),
+    };
     let (status, detail, progress, rows, running, can_copy) = match job {
-        None if has_region => (
-            "Waiting for the model\u{2026}".to_string(),
-            String::new(),
-            0.0,
-            Vec::new(),
-            false,
-            false,
-        ),
+        None if has_region => (waiting, String::new(), 0.0, Vec::new(), false, false),
         None => (
             "Pick the Cellaris region tool and outline some tissue, or measure the region of \
              interest."
@@ -553,10 +554,10 @@ fn readout_properties(st: &State, out: &mut Map<String, Value>) {
                 };
                 details.push(format!("Mean reconstruction error {recon:.3}{unusual}."));
             }
-            if readout.dark_cells > 0 {
+            if readout.dark_cells > 0 || readout.dark_blocks > 0 {
                 details.push(format!(
-                    "{} cells skipped as not bright-field.",
-                    readout.dark_cells
+                    "{} blocks and {} cells skipped as near-black (not bright-field H&E).",
+                    readout.dark_blocks, readout.dark_cells
                 ));
             }
             if let Some(file) = file {
