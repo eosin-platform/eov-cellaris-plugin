@@ -17,7 +17,7 @@
 //!    overlay layer, which the host draws off the UI thread on any backend
 //!    (CEL-8).
 
-use crate::blend::{Accum, CellData, Channels, Ramp, bit, expected_bits, finalize};
+use crate::blend::{Accum, CellData, Channels, Ramp, TissueCell, bit, expected_bits, finalize};
 use crate::cache::{self, Shelf};
 use crate::config::Prefs;
 use crate::geometry::{Grid, Idx, ReadPlan, Scale, ScaleProblem};
@@ -529,50 +529,35 @@ struct WindowResult {
 /// What a pass hands to the host.
 #[derive(Default)]
 pub struct Publish {
-    /// The generation the rasters were computed for.
+    /// The generation the cells were computed for.
     generation: u64,
-    rasters: Vec<(FileId, Idx, Rect, Vec<u8>)>,
+    /// How cells are drawn, as it was when they were queued.
+    display: Option<Display>,
+    /// Raster side in model pixels.
+    side: u32,
+    /// Cells to draw and upload, with their level-0 rectangles.
+    renders: Vec<(FileId, Idx, Rect, Arc<TissueCell>)>,
     removals: Vec<(FileId, Vec<Idx>)>,
     writes: Vec<(Shelf, Idx, CellData)>,
 }
 
-/// Sends removals and rasters to the host. Called with the state locked, so
-/// that a raster computed before an invalidation can never land after it.
-pub fn send(host: &Host, st: &State, publish: &mut Publish) {
-    for (file, cells) in publish.removals.drain(..) {
+impl Publish {
+    /// Notes how the state draws cells now, for the cells queued with it.
+    fn follow(&mut self, st: &State) {
+        self.display = st.display();
+        self.side = st.model.info().map_or(0, |m| (m.window / 2) as u32);
+    }
+}
+
+/// Removes cells' rasters from the host.
+pub fn remove_rasters(host: &Host, removals: Vec<(FileId, Vec<Idx>)>) {
+    for (file, cells) in removals {
         if cells.is_empty() {
             continue;
         }
         let _ = host
             .layer(pred_layer(file))
             .remove(cells.into_iter().map(cell_object).collect());
-    }
-    let rasters = std::mem::take(&mut publish.rasters);
-    if publish.generation != st.generation {
-        return;
-    }
-    let Some(side) = st.model.info().map(|m| m.window / 2) else {
-        return;
-    };
-    for (file, cell, rect, rgba) in rasters {
-        if !st
-            .files
-            .get(&file)
-            .is_some_and(|f| f.uploaded.contains(&cell))
-        {
-            continue;
-        }
-        let image = Image {
-            width: side as u32,
-            height: side as u32,
-            data: rgba,
-        };
-        if let Err(error) =
-            host.layer(pred_layer(file))
-                .put_raster(cell_object(cell), rect, image, true)
-        {
-            host.debug(format!("raster upload failed: {error}"));
-        }
     }
 }
 
@@ -744,11 +729,7 @@ impl<B: Backend> Worker<B> {
                 self.predictor = None;
                 st.model = ModelState::Idle;
                 st.markers = Err("the model is not loaded".to_string());
-                let mut publish = Publish {
-                    removals: st.invalidate(),
-                    ..Default::default()
-                };
-                send(&self.host, st, &mut publish);
+                remove_rasters(&self.host, st.invalidate());
             }
             if self.predictor.is_some() || !st.load_wanted || !st.needs_model() {
                 return false;
@@ -807,11 +788,7 @@ impl<B: Backend> Worker<B> {
                 }
                 st.model = ModelState::Ready(info);
                 self.predictor = Some(predictor);
-                let mut publish = Publish {
-                    removals: st.invalidate(),
-                    ..Default::default()
-                };
-                send(&self.host, st, &mut publish);
+                remove_rasters(&self.host, st.invalidate());
             }
             Err(error) => {
                 self.host
@@ -1304,7 +1281,7 @@ impl<B: Backend> Worker<B> {
             markers: markers.len(),
             recon: info.as_ref().is_some_and(|m| m.recon),
         };
-        let display = st.display();
+        publish.follow(st);
         let tick = st.tick;
         let now = Instant::now();
         let mut failures = Vec::new();
@@ -1385,16 +1362,7 @@ impl<B: Backend> Worker<B> {
                 }
             }
             for (cell, data) in finished {
-                finish_cell(
-                    file,
-                    grid,
-                    cell,
-                    data,
-                    tick,
-                    display.as_ref(),
-                    threshold,
-                    publish,
-                );
+                finish_cell(file, grid, cell, data, tick, threshold, publish, false);
             }
         }
         if let Some(first) = failures.first() {
@@ -1419,7 +1387,7 @@ impl<B: Backend> Worker<B> {
         if st.generation != generation {
             return;
         }
-        let display = st.display();
+        publish.follow(st);
         let threshold = st.model.info().and_then(|m| m.recon_threshold);
         let tick = st.tick;
         for (id, cell, data) in loaded {
@@ -1432,18 +1400,7 @@ impl<B: Backend> Worker<B> {
             match data {
                 Some(data) if !file.cells.contains_key(&cell) => {
                     file.accums.remove(&cell);
-                    let mut nothing = Publish::default();
-                    finish_cell(
-                        file,
-                        &grid,
-                        cell,
-                        data,
-                        tick,
-                        display.as_ref(),
-                        threshold,
-                        &mut nothing,
-                    );
-                    publish.rasters.append(&mut nothing.rasters);
+                    finish_cell(file, &grid, cell, data, tick, threshold, publish, true);
                 }
                 Some(_) => {}
                 None => {
@@ -1456,10 +1413,12 @@ impl<B: Backend> Worker<B> {
 
     /// Draws cells again after the display changed, a pass at a time.
     fn rerender(&mut self, publish: &mut Publish) -> bool {
-        let mut st = self.shared.lock();
-        let Some(display) = st.display() else {
+        let mut guard = self.shared.lock();
+        let st = &mut *guard;
+        if st.display().is_none() || st.generation != publish.generation {
             return false;
-        };
+        }
+        publish.follow(st);
         let mut budget = RERENDER;
         for (id, file) in st.files.iter_mut() {
             let Some(grid) = file.grid().cloned() else {
@@ -1472,8 +1431,8 @@ impl<B: Backend> Worker<B> {
                 };
                 if let Some((CellData::Tissue(tissue), _)) = file.cells.get(&cell) {
                     publish
-                        .rasters
-                        .push((*id, cell, grid.cell_rect(cell), display.render(tissue)));
+                        .renders
+                        .push((*id, cell, grid.cell_rect(cell), Arc::clone(tissue)));
                     budget -= 1;
                 }
             }
@@ -1483,10 +1442,49 @@ impl<B: Backend> Worker<B> {
 
     // -- publishing --------------------------------------------------------------
 
+    /// Sends a pass's results. Cells are drawn and uploaded without the
+    /// state lock (it would stall the UI thread's handlers); a cell that was
+    /// invalidated, reset or evicted meanwhile is then removed again, so the
+    /// host never keeps a stale raster.
     fn publish(&mut self, mut publish: Publish) {
+        remove_rasters(&self.host, std::mem::take(&mut publish.removals));
+        if let Some(display) = publish.display.take()
+            && !publish.renders.is_empty()
+            && publish.side > 0
         {
-            let st = self.shared.lock();
-            send(&self.host, &st, &mut publish);
+            let mut sent = Vec::with_capacity(publish.renders.len());
+            for (file, cell, rect, tissue) in publish.renders.drain(..) {
+                let image = Image {
+                    width: publish.side,
+                    height: publish.side,
+                    data: display.render(&tissue),
+                };
+                match self.host.layer(pred_layer(file)).put_raster(
+                    cell_object(cell),
+                    rect,
+                    image,
+                    true,
+                ) {
+                    Ok(()) => sent.push((file, cell)),
+                    Err(error) => self.host.debug(format!("raster upload failed: {error}")),
+                }
+            }
+            let stale: BTreeMap<FileId, Vec<Idx>> = {
+                let st = self.shared.lock();
+                let mut stale: BTreeMap<FileId, Vec<Idx>> = BTreeMap::new();
+                for (file, cell) in sent {
+                    let current = st.generation == publish.generation
+                        && st
+                            .files
+                            .get(&file)
+                            .is_some_and(|f| f.uploaded.contains(&cell));
+                    if !current {
+                        stale.entry(file).or_default().push(cell);
+                    }
+                }
+                stale
+            };
+            remove_rasters(&self.host, stale.into_iter().collect());
         }
         for (shelf, cell, data) in publish.writes {
             if let Err(error) = shelf.store(cell, &data) {
@@ -1588,7 +1586,8 @@ fn tissue_outcome(
     }
 }
 
-/// Records a finished cell: readout, raster and disk.
+/// Records a finished cell: readout, raster (drawn later, outside the
+/// lock) and disk (unless it came from there).
 #[allow(clippy::too_many_arguments)]
 fn finish_cell(
     file: &mut FileState,
@@ -1596,9 +1595,9 @@ fn finish_cell(
     cell: Idx,
     data: CellData,
     tick: u64,
-    display: Option<&Display>,
     threshold: Option<f32>,
     publish: &mut Publish,
+    from_disk: bool,
 ) {
     if let Some(job) = file.readout.as_mut() {
         let was_running = job.readout.is_running();
@@ -1610,19 +1609,18 @@ fn finish_cell(
             host_job.finish(None);
         }
     }
-    if let (Some(display), CellData::Tissue(tissue)) = (display, &data)
+    if let CellData::Tissue(tissue) = &data
         && file.layers
     {
-        publish.rasters.push((
-            grid.file_id,
-            cell,
-            grid.cell_rect(cell),
-            display.render(tissue),
-        ));
+        publish
+            .renders
+            .push((grid.file_id, cell, grid.cell_rect(cell), Arc::clone(tissue)));
         file.uploaded.insert(cell);
     }
     if let Some(shelf) = &file.shelf {
-        publish.writes.push((shelf.clone(), cell, data.clone()));
+        if !from_disk {
+            publish.writes.push((shelf.clone(), cell, data.clone()));
+        }
         file.disk_misses.remove(&cell);
     }
     file.cells.insert(cell, (data, tick));
@@ -1736,6 +1734,104 @@ fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Batch, ModelInfo};
+    use eov_plugin_api::testing::MockHost;
+
+    #[derive(Default)]
+    struct NoBackend;
+
+    impl Backend for NoBackend {
+        fn load(&self, _: &LoadRequest) -> Result<Box<dyn Predictor>, LoadError> {
+            Err(LoadError::new("no model", "tests do not load one"))
+        }
+    }
+
+    fn model() -> ModelInfo {
+        ModelInfo {
+            path: "m.onnx".into(),
+            bytes: 0,
+            sha256: "0".repeat(64),
+            channel_names: crate::markers::DEFAULT_MARKERS.map(String::from).to_vec(),
+            raw_intensity: true,
+            mpp: 0.325,
+            mpp_recorded: true,
+            window: 64,
+            batch: Batch::Dynamic,
+            recon: false,
+            recon_threshold: None,
+            title: None,
+            version: None,
+            description: None,
+            producer: None,
+            training_data: None,
+            license: None,
+            runtime: String::new(),
+            threads: 1,
+            notes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_raster_drawn_for_a_cell_dropped_meanwhile_is_taken_back() {
+        let mock = MockHost::new();
+        let host = Host::from_ffi(mock.to_ffi());
+        host.create_layer(LayerSpec::new(pred_layer(1), 1)).unwrap();
+        let mut st = State::new(Prefs::default(), Paths::default());
+        let info = model();
+        st.markers = markers::select(&info.channel_names, &st.prefs.markers);
+        st.model = ModelState::Ready(Arc::new(info));
+        let mut file = FileState::new(FileInfo {
+            file_id: 1,
+            ..Default::default()
+        });
+        file.layers = true;
+        // Cell (0, 0) is still wanted; (1, 0) was evicted while it was drawn.
+        file.uploaded.insert(Idx::new(0, 0));
+        st.files.insert(1, file);
+        let mut publish = Publish::default();
+        publish.follow(&st);
+        let shared = Arc::new(Shared::new(st));
+        let tissue = Arc::new(TissueCell {
+            planes: vec![200; 3 * 32 * 32],
+            mask: vec![255; 32 * 32],
+            blocks: Vec::new(),
+        });
+        let rect = |i: f64| Rect {
+            x: i * 32.0,
+            y: 0.0,
+            width: 32.0,
+            height: 32.0,
+        };
+        publish.renders = vec![
+            (1, Idx::new(0, 0), rect(0.0), Arc::clone(&tissue)),
+            (1, Idx::new(1, 0), rect(1.0), tissue),
+        ];
+        let mut worker = Worker::new(host, Arc::clone(&shared), Arc::new(NoBackend));
+        worker.publish(publish);
+        let state = mock.state();
+        let rasters: Vec<&String> = state.layers[&pred_layer(1)].rasters.keys().collect();
+        assert_eq!(rasters, vec!["c0_0"], "a dropped cell kept its raster");
+
+        // After an invalidation every raster of the old generation goes.
+        drop(state);
+        let mut publish = Publish::default();
+        publish.follow(&shared.lock());
+        let removals = shared.lock().invalidate();
+        assert_eq!(removals, vec![(1, vec![Idx::new(0, 0)])]);
+        publish.renders = vec![(
+            1,
+            Idx::new(0, 0),
+            rect(0.0),
+            Arc::new(TissueCell {
+                planes: vec![9; 3 * 32 * 32],
+                mask: vec![255; 32 * 32],
+                blocks: Vec::new(),
+            }),
+        )];
+        remove_rasters(&Host::from_ffi(mock.to_ffi()), removals);
+        worker.publish(publish);
+        assert!(mock.state().layers[&pred_layer(1)].rasters.is_empty());
+    }
 
     #[test]
     fn retries_back_off_and_then_stop() {

@@ -476,7 +476,7 @@ mod tests {
     }
 
     fn tissue(per: usize, od: f32, means: impl Fn(usize) -> f32) -> CellData {
-        CellData::Tissue(Box::new(TissueCell {
+        CellData::Tissue(std::sync::Arc::new(TissueCell {
             planes: vec![],
             mask: vec![],
             blocks: (0..per * per)

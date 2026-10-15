@@ -13,6 +13,7 @@
 use crate::geometry::BLOCK;
 use crate::markers::Marker;
 use crate::resample::BlockBase;
+use std::sync::Arc;
 
 /// Weights across one window side.
 #[derive(Clone, Debug, PartialEq)]
@@ -213,13 +214,14 @@ pub enum CellData {
     Empty,
     /// Not bright-field H&E (mostly black); skipped.
     Dark,
-    Tissue(Box<TissueCell>),
+    /// Shared, so it can be drawn and stored without holding any lock.
+    Tissue(Arc<TissueCell>),
 }
 
 impl CellData {
     pub fn tissue(&self) -> Option<&TissueCell> {
         match self {
-            CellData::Tissue(cell) => Some(cell),
+            CellData::Tissue(cell) => Some(cell.as_ref()),
             _ => None,
         }
     }
@@ -301,7 +303,7 @@ pub fn finalize(
             }
         })
         .collect();
-    CellData::Tissue(Box::new(TissueCell {
+    CellData::Tissue(Arc::new(TissueCell {
         planes,
         mask,
         blocks: stats,

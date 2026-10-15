@@ -130,7 +130,7 @@ fn decode(bytes: &[u8], stride: usize, markers: usize, recon: bool) -> Option<Ce
                     recon,
                 });
             }
-            CellData::Tissue(Box::new(TissueCell {
+            CellData::Tissue(std::sync::Arc::new(TissueCell {
                 planes,
                 mask,
                 blocks,
@@ -240,7 +240,7 @@ mod tests {
 
     fn tissue(stride: usize, markers: usize) -> CellData {
         let per = stride / BLOCK;
-        CellData::Tissue(Box::new(TissueCell {
+        CellData::Tissue(std::sync::Arc::new(TissueCell {
             planes: (0..markers * stride * stride).map(|i| i as u8).collect(),
             mask: vec![200; stride * stride],
             blocks: (0..per * per)
