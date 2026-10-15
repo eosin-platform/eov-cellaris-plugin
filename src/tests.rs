@@ -13,7 +13,7 @@ use crate::engine::{marks_layer, pred_layer, region_layer, values_layer};
 use crate::model::{Batch, LoadError, LoadRequest, ModelInfo, Prediction, Predictor};
 use crate::present::{MODEL_BADGE, NOTICE_BADGE, slide_badge};
 use crate::resample::optical_density;
-use eov_plugin_api::testing::{MockHost, TestHarness, test_init};
+use eov_plugin_api::testing::{MockHost, MockState, TestHarness, test_init};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -306,14 +306,36 @@ struct Rig {
 
 impl Rig {
     fn new(slides: &[(FileId, Slide)], views: &[ViewInfo], fake: FakeConfig) -> Self {
-        Self::with_reader(slides, views, fake, None)
+        Self::build(slides, views, fake, None, |_| {})
     }
 
+    /// The first `fail_first` reads fail.
     fn with_reader(
         slides: &[(FileId, Slide)],
         views: &[ViewInfo],
         fake: FakeConfig,
         fail_first: Option<usize>,
+    ) -> Self {
+        Self::build(slides, views, fake, fail_first, |_| {})
+    }
+
+    /// With the mock host set up by `setup` before the plugin, and its
+    /// worker, start (e.g. to emulate an older host).
+    fn with_host(
+        slides: &[(FileId, Slide)],
+        views: &[ViewInfo],
+        fake: FakeConfig,
+        setup: impl FnOnce(&mut MockState),
+    ) -> Self {
+        Self::build(slides, views, fake, None, setup)
+    }
+
+    fn build(
+        slides: &[(FileId, Slide)],
+        views: &[ViewInfo],
+        fake: FakeConfig,
+        fail_first: Option<usize>,
+        setup: impl FnOnce(&mut MockState),
     ) -> Self {
         let host = MockHost::new();
         let requests: Arc<Mutex<Vec<RegionRequest>>> = Arc::default();
@@ -345,6 +367,7 @@ impl Rig {
                 let slide = slides.get(&request.file_id).ok_or("no such slide")?;
                 Ok(slide.read(request))
             }));
+            setup(&mut state);
         }
         let init = test_init("cellaris");
         let data_dir = PathBuf::from(&init.data_dir);
@@ -679,11 +702,43 @@ fn the_badges_name_the_predictions_and_stay_put_during_a_pan() {
 }
 
 #[test]
+fn an_older_host_without_passive_tooltips_gets_no_values_layer() {
+    // Released 1.0 hosts have neither `layer.set_min_zoom` nor tooltips
+    // on non-interactive layers.
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::with_host(
+        &[(1, slide.clone()), (2, slide.clone())],
+        &[v],
+        FakeConfig::default(),
+        |state| state.unsupported = vec!["layer.set_min_zoom".into()],
+    );
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    assert!(rig.rasters(1) > 0);
+    // Asked once; the layer it was asked for is gone, and no other slide
+    // got one.
+    assert_eq!(rig.harness.calls_to("layer.set_min_zoom").len(), 1);
+    let state = rig.harness.state();
+    assert!(!state.layers.contains_key(&values_layer(1)));
+    assert!(!state.layers.contains_key(&values_layer(2)));
+    assert!(state.layers.contains_key(&pred_layer(2)));
+    let values_calls = state
+        .calls
+        .iter()
+        .filter(|call| call.args["layer_id"] == json!(values_layer(1)))
+        .count();
+    // Created, asked, removed: nothing more.
+    assert_eq!(values_calls, 2, "the values layer was still updated");
+}
+
+#[test]
 fn an_older_host_without_badges_gets_the_notice_on_the_slide() {
     let slide = Slide::new(Some(0.325));
     let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
-    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
-    rig.harness.state().unsupported = vec!["badge.set".into()];
+    let rig = Rig::with_host(&[(1, slide)], &[v], FakeConfig::default(), |state| {
+        state.unsupported = vec!["badge.set".into()];
+    });
     rig.click(OVERLAY_BUTTON);
     let badge = |rig: &Rig| {
         rig.objects(&marks_layer(1))
@@ -1131,13 +1186,15 @@ fn a_readout_of_the_roi_follows_the_roi() {
 fn an_adjusted_display_is_noted_in_the_panel() {
     let slide = Slide::new(Some(0.325));
     let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
-    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
-    rig.harness.state().display = DisplayAdjustments {
-        gamma: 1.4,
-        modified: true,
-        badge: "Gamma 1.4".into(),
-        ..Default::default()
-    };
+    // Set before the worker first asks.
+    let rig = Rig::with_host(&[(1, slide)], &[v], FakeConfig::default(), |state| {
+        state.display = DisplayAdjustments {
+            gamma: 1.4,
+            modified: true,
+            badge: "Gamma 1.4".into(),
+            ..Default::default()
+        };
+    });
     rig.click(PANEL_BUTTON);
     let notes = |rig: &Rig| {
         rig.sidebar()["slide-notes"]
@@ -1168,11 +1225,24 @@ fn an_adjusted_display_is_noted_in_the_panel() {
 fn an_older_host_without_display_info_is_asked_once() {
     let slide = Slide::new(Some(0.325));
     let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
-    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
-    rig.harness.state().unsupported = vec!["view.display".into()];
+    let rig = Rig::with_host(&[(1, slide)], &[v], FakeConfig::default(), |state| {
+        state.unsupported = vec!["view.display".into()];
+    });
+    wait_for("the question", LONG, || {
+        !rig.harness.calls_to("view.display").is_empty()
+    });
+    // A second pane appears: it is not asked about either.
+    let other = view(2, 1, 6_000.0, 6_000.0, 200.0, 200.0, 2.0);
+    rig.harness.state().snapshot.panes.push(PaneInfo {
+        pane: 2,
+        index: 1,
+        file_id: Some(1),
+        view: Some(other),
+    });
     rig.click(OVERLAY_BUTTON);
-    wait_for("the whole view", LONG, || view_done(&rig, 1));
-    assert!(rig.harness.calls_to("view.display").len() <= 1);
+    // Both views computed (the slide's badge counts both panes).
+    wait_for("both views", LONG, || view_done(&rig, 1));
+    assert_eq!(rig.harness.calls_to("view.display").len(), 1);
 }
 
 #[test]
@@ -1706,20 +1776,23 @@ fn two_panes_on_the_same_view_do_not_double_the_counts() {
     // Every read fails, so every cell in view is pending and failed.
     let rig = Rig::with_reader(&[(1, slide)], &[a, b], FakeConfig::default(), Some(10_000));
     rig.click(OVERLAY_BUTTON);
+    // The text that matched, not a later read (which may be between
+    // retries, with no failure in it).
+    let mut text = String::new();
     wait_for("failures in the badge", LONG, || {
-        rig.slide_line(1).contains("failed")
+        text = rig.slide_line(1);
+        text.contains("failed")
     });
-    // "Computing 0 of N cells · M failed, retrying": M can be at most N,
-    // and N is the cells in view, each counted once.
-    let text = rig.slide_line(1);
+    // "Computing 0 of N cells · M failed, retrying". The view is 2 × 2
+    // cells of 32 px, so N is 4 (8 if the two panes were added up), and M
+    // can be at most N.
     let numbers: Vec<usize> = text
         .split(|c: char| !c.is_ascii_digit())
         .filter_map(|n| n.parse().ok())
         .collect();
     assert!(numbers.len() >= 3, "{text}");
+    assert_eq!(numbers[1], 4, "{text}");
     assert!(numbers[2] <= numbers[1], "{text}");
-    let cells = 64.0f64 / 32.0;
-    assert!(numbers[1] as f64 <= (cells + 1.0) * (cells + 1.0), "{text}");
 }
 
 #[test]

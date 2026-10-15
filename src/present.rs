@@ -299,13 +299,13 @@ fn slide_line(st: &State, file: &FileState) -> Option<Line> {
         let mut line = format!("Computing {done} of {} cells", file.in_view);
         let failed = file.failed.len();
         if failed > 0 {
-            let retrying = file.failures.values().any(|f| !f.given_up());
+            // Only failures of cells in view count: others are not retried.
             line.push_str(&format!(
                 " \u{b7} {failed} failed{}",
-                if retrying {
-                    ", retrying"
-                } else {
+                if file.stuck > 0 {
                     " (Retry in the Cellaris panel)"
+                } else {
+                    ", retrying"
                 }
             ));
         } else {

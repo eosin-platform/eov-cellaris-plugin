@@ -179,6 +179,9 @@ pub struct FileState {
     pub in_view: usize,
     pub pending: Vec<Idx>,
     pub failed: Vec<Idx>,
+    /// Failed cells that wait on a window given up: they stay failed until
+    /// the user retries.
+    pub stuck: usize,
     pub dark_windows: usize,
     pub tissue_windows: usize,
     /// Windows above the model's reconstruction-error threshold.
@@ -212,6 +215,7 @@ impl FileState {
             in_view: 0,
             pending: Vec::new(),
             failed: Vec::new(),
+            stuck: 0,
             dark_windows: 0,
             tissue_windows: 0,
             unusual_windows: 0,
@@ -235,6 +239,7 @@ impl FileState {
         self.in_view = 0;
         self.pending.clear();
         self.failed.clear();
+        self.stuck = 0;
         self.values_zoom = None;
         self.dark_windows = 0;
         self.tissue_windows = 0;
@@ -316,6 +321,9 @@ pub struct State {
     pub displays: BTreeMap<PaneId, DisplayAdjustments>,
     /// Whether the host answers `view.display`.
     pub displays_known: Support,
+    /// Whether the host shows the tooltips of non-interactive layers. Hosts
+    /// without `layer.set_min_zoom` predate them, and get no values layer.
+    pub tooltips: Support,
 }
 
 /// Whether the host has a method that came after API 1.0's first release.
@@ -360,6 +368,7 @@ impl State {
             shown_badges: BTreeMap::new(),
             displays: BTreeMap::new(),
             displays_known: Support::Unknown,
+            tooltips: Support::Unknown,
         }
     }
 
@@ -592,8 +601,9 @@ pub struct Publish {
     display: Option<Display>,
     /// Raster side in model pixels.
     side: u32,
-    /// The markers' names and the model's reconstruction-error threshold,
-    /// for the value tooltips.
+    /// Whether cells get value tooltips, with the markers' names and the
+    /// model's reconstruction-error threshold for them.
+    tooltips: bool,
     names: Vec<String>,
     threshold: Option<f32>,
     renders: Vec<Render>,
@@ -614,23 +624,27 @@ impl Publish {
             .map(|markers| markers.iter().map(|m| m.name.clone()).collect())
             .unwrap_or_default();
         self.threshold = st.model.info().and_then(|m| m.recon_threshold);
+        self.tooltips = st.tooltips != Support::No;
     }
 }
 
-/// Removes cells from the host: their rasters and their value tooltips.
-pub fn remove_rasters(host: &Host, removals: Vec<(FileId, Vec<Idx>)>) {
+/// Removes cells from the host: their rasters, and their value tooltips
+/// when the host has them.
+pub fn remove_rasters(host: &Host, removals: Vec<(FileId, Vec<Idx>)>, tooltips: bool) {
     for (file, cells) in removals {
-        remove_cells(host, file, cells);
+        remove_cells(host, file, cells, tooltips);
     }
 }
 
 /// Removes one slide's cells from the host.
-pub fn remove_cells(host: &Host, file: FileId, cells: Vec<Idx>) {
+pub fn remove_cells(host: &Host, file: FileId, cells: Vec<Idx>, tooltips: bool) {
     if cells.is_empty() {
         return;
     }
     let ids: Vec<String> = cells.into_iter().map(cell_object).collect();
-    let _ = host.layer(values_layer(file)).remove(ids.clone());
+    if tooltips {
+        let _ = host.layer(values_layer(file)).remove(ids.clone());
+    }
     let _ = host.layer(pred_layer(file)).remove(ids);
 }
 
@@ -844,7 +858,8 @@ impl<B: Backend> Worker<B> {
                 self.predictor = None;
                 st.model = ModelState::Idle;
                 st.markers = Err("the model is not loaded".to_string());
-                remove_rasters(&self.host, st.invalidate());
+                let tooltips = st.tooltips != Support::No;
+                remove_rasters(&self.host, st.invalidate(), tooltips);
             }
             if self.predictor.is_some() || !st.load_wanted || !st.needs_model() {
                 return false;
@@ -903,7 +918,8 @@ impl<B: Backend> Worker<B> {
                 }
                 st.model = ModelState::Ready(info);
                 self.predictor = Some(predictor);
-                remove_rasters(&self.host, st.invalidate());
+                let tooltips = st.tooltips != Support::No;
+                remove_rasters(&self.host, st.invalidate(), tooltips);
             }
             Err(error) => {
                 self.host
@@ -957,6 +973,7 @@ impl<B: Backend> Worker<B> {
             file.in_view = 0;
             file.pending.clear();
             file.failed.clear();
+            file.stuck = 0;
         }
         let views: Vec<ViewInfo> = st.views.values().copied().collect();
         let mut seen: HashSet<(FileId, Idx)> = HashSet::new();
@@ -986,11 +1003,17 @@ impl<B: Backend> Worker<B> {
                 for cell in &cells {
                     if !file.cells.contains_key(cell) && seen.insert((view.file_id, *cell)) {
                         file.pending.push(*cell);
-                        if missing_windows(file, &grid, *cell)
+                        let blocking: Vec<&Failure> = missing_windows(file, &grid, *cell)
                             .iter()
-                            .any(|w| file.failures.get(w).is_some_and(|f| f.blocks(now)))
-                        {
+                            .filter_map(|w| file.failures.get(w))
+                            .filter(|f| f.blocks(now))
+                            .collect();
+                        if !blocking.is_empty() {
+                            let stuck = blocking.iter().any(|f| f.given_up());
                             file.failed.push(*cell);
+                            if stuck {
+                                file.stuck += 1;
+                            }
                         }
                     }
                 }
@@ -1578,9 +1601,9 @@ impl<B: Backend> Worker<B> {
     /// invalidated, reset or evicted meanwhile is then removed again, so the
     /// host never keeps a stale raster.
     fn publish(&mut self, mut publish: Publish) {
-        remove_rasters(&self.host, std::mem::take(&mut publish.removals));
+        let tooltips = publish.tooltips;
+        remove_rasters(&self.host, std::mem::take(&mut publish.removals), tooltips);
         for (file, zoom) in std::mem::take(&mut publish.min_zooms) {
-            // Hosts before the method still draw the layer at every zoom.
             let _ = self.host.layer(values_layer(file)).set_min_zoom(Some(zoom));
         }
         if let Some(display) = publish.display.take()
@@ -1608,6 +1631,7 @@ impl<B: Backend> Worker<B> {
                     }
                 }
                 if render.new
+                    && tooltips
                     && let Some(object) = present::cell_values(
                         render.cell,
                         render.rect,
@@ -1640,7 +1664,7 @@ impl<B: Backend> Worker<B> {
                 }
                 stale
             };
-            remove_rasters(&self.host, stale.into_iter().collect());
+            remove_rasters(&self.host, stale.into_iter().collect(), tooltips);
         }
         for (shelf, cell, data) in publish.writes {
             if let Err(error) = shelf.store(cell, &data) {
@@ -1776,7 +1800,7 @@ fn finish_cell(
             new: true,
         });
         file.uploaded.insert(cell);
-        if file.values_zoom.is_none() {
+        if publish.tooltips && file.values_zoom.is_none() {
             let (w, h) = grid.cell_size();
             let zoom = TOOLTIP_CELL_PX / w.min(h).max(1e-9);
             file.values_zoom = Some(zoom);
@@ -1868,22 +1892,39 @@ pub fn ensure_layers(host: &Host, st: &mut State) -> Vec<FileId> {
             .at_z(95)
             .editable(true)
             .with_style(present::region_style());
-        // Not interactive, so it takes no clicks from other tools: the host
-        // shows the tooltips of such layers when nothing else is hovered.
-        let values = LayerSpec {
-            visible: overlay,
-            ..LayerSpec::new(values_layer(*id), *id)
-                .named("Cellaris \u{2014} predicted values (research use only)")
-                .at_z(-59)
-                .with_style(present::values_style())
-        };
-        let ok = [predicted, values, marks, region]
-            .into_iter()
-            .all(|spec| host.create_layer(spec).is_ok());
-        if ok {
-            file.layers = true;
-            created.push(*id);
+        let mut specs = vec![predicted, marks, region];
+        if st.tooltips != Support::No {
+            // Not interactive, so it takes no clicks from other tools: the
+            // host shows the tooltips of such layers when nothing else is
+            // hovered.
+            specs.push(LayerSpec {
+                visible: overlay,
+                ..LayerSpec::new(values_layer(*id), *id)
+                    .named("Cellaris \u{2014} predicted values (research use only)")
+                    .at_z(-59)
+                    .with_style(present::values_style())
+            });
         }
+        if !specs
+            .into_iter()
+            .all(|spec| host.create_layer(spec).is_ok())
+        {
+            continue;
+        }
+        if st.tooltips == Support::Unknown {
+            // Hosts without `set_min_zoom` also predate passive tooltips:
+            // there the layer would hold objects nobody ever sees.
+            match host.layer(values_layer(*id)).set_min_zoom(None) {
+                Ok(()) => st.tooltips = Support::Yes,
+                Err(error) if error.is_unsupported() => {
+                    st.tooltips = Support::No;
+                    let _ = host.layer(values_layer(*id)).remove_layer();
+                }
+                Err(_) => {}
+            }
+        }
+        file.layers = true;
+        created.push(*id);
     }
     created
 }
@@ -2023,10 +2064,110 @@ mod tests {
                 blocks: Vec::new(),
             }),
         )];
-        remove_rasters(&Host::from_ffi(mock.to_ffi()), removals);
+        remove_rasters(&Host::from_ffi(mock.to_ffi()), removals, true);
         worker.publish(publish);
         assert!(mock.state().layers[&pred_layer(1)].rasters.is_empty());
         assert!(mock.state().layers[&values_layer(1)].objects.is_empty());
+    }
+
+    #[test]
+    fn only_failures_of_cells_in_view_decide_whether_they_are_retried() {
+        let mock = MockHost::new();
+        let host = Host::from_ffi(mock.to_ffi());
+        let mut st = State::new(Prefs::default(), Paths::default());
+        let model = model();
+        st.markers = markers::select(&model.channel_names, &st.prefs.markers);
+        st.model = ModelState::Ready(Arc::new(model.clone()));
+        st.overlay = true;
+        let info = FileInfo {
+            file_id: 1,
+            width: 10_000,
+            height: 10_000,
+            mpp_x: Some(0.325),
+            mpp_y: Some(0.325),
+            ..Default::default()
+        };
+        let grid = Arc::new(scale_for(&info, &model, &st.prefs).unwrap());
+        let mut file = FileState::new(info);
+        file.grid = Some(Ok(Arc::clone(&grid)));
+        st.files.insert(1, file);
+        // 2 × 2 cells of 32 px in view.
+        let visible = Rect {
+            x: 3_200.0,
+            y: 3_200.0,
+            width: 64.0,
+            height: 64.0,
+        };
+        st.views.insert(
+            1,
+            ViewInfo {
+                pane: 1,
+                file_id: 1,
+                zoom: 2.0,
+                visible,
+                center_x: 3_232.0,
+                center_y: 3_232.0,
+                ..Default::default()
+            },
+        );
+        let in_view: HashSet<Idx> = grid
+            .cells_by_distance(&visible, 3_232.0, 3_232.0)
+            .into_iter()
+            .flat_map(|cell| grid.covering(cell).map(|(window, _, _)| window))
+            .collect();
+        let now = Instant::now();
+        let failure = |attempts| Failure {
+            attempts,
+            retry_at: now + Duration::from_secs(60),
+            error: "unreadable".into(),
+        };
+        let shared = Arc::new(Shared::new(st));
+        let worker = Worker::new(host, Arc::clone(&shared), Arc::new(NoBackend));
+        let line = || {
+            present::badges(&shared.lock())
+                .get(&present::slide_badge(1))
+                .map(|(_, text)| text.clone())
+                .unwrap_or_default()
+        };
+
+        // Every window in view was given up; a window elsewhere still waits
+        // for its retry, but it is never retried while nobody needs it.
+        {
+            let mut st = shared.lock();
+            let file = st.files.get_mut(&1).unwrap();
+            for window in &in_view {
+                file.failures.insert(*window, failure(MAX_ATTEMPTS));
+            }
+            file.failures.insert(Idx::new(0, 0), failure(1));
+        }
+        let plan = worker.plan();
+        assert!(plan.windows.is_empty());
+        {
+            let st = shared.lock();
+            assert_eq!((st.files[&1].failed.len(), st.files[&1].stuck), (4, 4));
+        }
+        assert!(
+            line().contains("4 failed (Retry in the Cellaris panel)"),
+            "{}",
+            line()
+        );
+
+        // In view they wait for a retry; one given up elsewhere does not
+        // matter.
+        {
+            let mut st = shared.lock();
+            let file = st.files.get_mut(&1).unwrap();
+            for window in &in_view {
+                file.failures.insert(*window, failure(1));
+            }
+            file.failures.insert(Idx::new(0, 0), failure(MAX_ATTEMPTS));
+        }
+        worker.plan();
+        {
+            let st = shared.lock();
+            assert_eq!((st.files[&1].failed.len(), st.files[&1].stuck), (4, 0));
+        }
+        assert!(line().contains("4 failed, retrying"), "{}", line());
     }
 
     #[test]

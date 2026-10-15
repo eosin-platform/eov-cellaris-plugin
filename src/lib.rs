@@ -31,7 +31,8 @@ use config::{
     PANEL_WIDTH, Prefs, REGION_ICON, REGION_TOOL, keys,
 };
 use engine::{
-    FileState, ModelState, Paths, Shared, State, Worker, pred_layer, region_layer, values_layer,
+    FileState, ModelState, Paths, Shared, State, Support, Worker, pred_layer, region_layer,
+    values_layer,
 };
 use eov_plugin_api::prelude::*;
 use markers::DisplayMode;
@@ -92,10 +93,13 @@ impl<B: Backend> Cellaris<B> {
             // Also a retry after a failed load (CEL-6).
             st.load_wanted = true;
         }
+        let tooltips = st.tooltips != Support::No;
         for (id, file) in &st.files {
             if file.layers {
                 let _ = self.host.layer(pred_layer(*id)).set_visible(on);
-                let _ = self.host.layer(values_layer(*id)).set_visible(on);
+                if tooltips {
+                    let _ = self.host.layer(values_layer(*id)).set_visible(on);
+                }
             }
         }
         let _ = self.host.set_toolbar_button_active(OVERLAY_BUTTON, on);
@@ -171,10 +175,11 @@ impl<B: Backend> Cellaris<B> {
             })
             .map(|(id, _)| *id)
             .collect();
+        let tooltips = st.tooltips != Support::No;
         for id in ids {
             if let Some(file) = st.files.get_mut(&id) {
                 let cells = file.reset();
-                engine::remove_cells(&self.host, id, cells);
+                engine::remove_cells(&self.host, id, cells, tooltips);
             }
         }
         self.refresh(&mut st);
