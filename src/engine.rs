@@ -1162,7 +1162,18 @@ impl<B: Backend> Worker<B> {
             )
         };
         let Some(info) = info else {
-            return Vec::new();
+            // Every planned window must come back, or it would stay in
+            // flight and never be planned again.
+            return plan
+                .windows
+                .iter()
+                .map(|planned| WindowResult {
+                    file: planned.file,
+                    window: planned.window,
+                    grid: Arc::clone(&planned.grid),
+                    outcome: Outcome::Failed("the model is not loaded".to_string()),
+                })
+                .collect();
         };
         let side = info.window;
         let channels = Channels {
