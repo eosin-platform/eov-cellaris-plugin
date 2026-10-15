@@ -579,6 +579,19 @@ impl<B: Backend> Plugin for Cellaris<B> {
                     self.set_region(file_id, Region::from_shape(&shape));
                 }
             }
+            HostEvent::ObjectsDeleteRequested { objects } => {
+                let files: Vec<FileId> = {
+                    let st = self.lock();
+                    st.files
+                        .keys()
+                        .copied()
+                        .filter(|id| objects.iter().any(|o| o.layer_id == region_layer(*id)))
+                        .collect()
+                };
+                for file_id in files {
+                    self.set_region(file_id, None);
+                }
+            }
             HostEvent::ConfirmResult {
                 request_id,
                 confirmed,

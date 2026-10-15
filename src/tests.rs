@@ -904,6 +904,21 @@ fn the_roi_can_be_measured_and_cleared() {
         .unwrap();
     assert!(rig.objects(&region_layer(1)).is_empty());
     assert_eq!(rig.sidebar()["has-region"], json!(false));
+
+    // Selecting the region and pressing Delete clears it too.
+    rig.harness
+        .ui_callback("panel", "measure-roi", vec![])
+        .unwrap();
+    assert_eq!(rig.objects(&region_layer(1)).len(), 1);
+    rig.harness
+        .send(HostEvent::ObjectsDeleteRequested {
+            objects: vec![ObjectRef {
+                layer_id: region_layer(1),
+                object_id: "region".into(),
+            }],
+        })
+        .unwrap();
+    assert!(rig.objects(&region_layer(1)).is_empty());
 }
 
 #[test]
