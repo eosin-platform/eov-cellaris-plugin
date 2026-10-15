@@ -1,6 +1,7 @@
-//! Marker selection, fixed display windows, the palette, and compositing.
+//! Marker selection, display windows, the palette, and compositing.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Markers predicted by default: the ones whose gain over the controls
 /// clears zero on Orion, and in SMA's case on Xenium too.
@@ -10,7 +11,10 @@ pub const DEFAULT_MARKERS: [&str; 3] = ["Hoechst", "Pan-CK", "SMA"];
 pub const MAX_MARKERS: usize = 6;
 
 /// arcsinh(x / 5) at the 1st and 99.5th percentile of measured Orion IF,
-/// 400 tiles across 16 slides. Fixed, so an empty tile looks empty.
+/// 400 tiles across 16 slides: the default display windows. They are fixed,
+/// not stretched to what is in view, so an empty tile looks empty; users can
+/// set their own per marker (`display_windows`), which changes only how
+/// predictions are drawn, never their values.
 const WINDOWS: [(&str, f32, f32); 19] = [
     ("Hoechst", 4.08, 8.82),
     ("AF1", 4.49, 6.73),
@@ -35,6 +39,82 @@ const WINDOWS: [(&str, f32, f32); 19] = [
 
 /// The arcsinh cofactor of the display transform.
 const COFACTOR: f32 = 5.0;
+
+/// Cells keep each marker's arcsinh value over this range in 16 bits (a
+/// step of 0.00024), so a display window can change without predicting
+/// again.
+pub const PLANE_LOW: f32 = -4.0;
+pub const PLANE_HIGH: f32 = 12.0;
+/// The narrowest display window.
+pub const MIN_WINDOW: f32 = 0.05;
+
+/// A value on the arcsinh scale as a cell keeps it.
+pub fn quantize(value: f32) -> u16 {
+    let unit = (value - PLANE_LOW) / (PLANE_HIGH - PLANE_LOW);
+    (unit.clamp(0.0, 1.0) * f32::from(u16::MAX)).round() as u16
+}
+
+/// The value a cell kept.
+pub fn dequantize(stored: u16) -> f32 {
+    PLANE_LOW + f32::from(stored) / f32::from(u16::MAX) * (PLANE_HIGH - PLANE_LOW)
+}
+
+/// A marker's display window as cellaris ships it, if it knows one.
+pub fn default_window(name: &str) -> Option<(f32, f32)> {
+    WINDOWS
+        .iter()
+        .find(|(known, _, _)| *known == name)
+        .map(|&(_, low, high)| (low, high))
+}
+
+/// Where a marker's window can be set: its default's width again on either
+/// side, within what cells keep.
+pub fn window_range(name: &str) -> (f32, f32) {
+    let (low, high) = default_window(name).unwrap_or((0.0, 10.0));
+    let width = high - low;
+    ((low - width).max(PLANE_LOW), (high + width).min(PLANE_HIGH))
+}
+
+/// Whether `[low, high]` can be a window for `name`.
+pub fn window_is_valid(name: &str, low: f32, high: f32) -> bool {
+    let (min, max) = window_range(name);
+    low.is_finite()
+        && high.is_finite()
+        && low >= min - 1e-4
+        && high <= max + 1e-4
+        && high - low >= MIN_WINDOW - 1e-4
+}
+
+/// A window as asked for, kept within [`window_range`] and at least
+/// [`MIN_WINDOW`] wide: when the ends cross, the one that moved (from
+/// `current`) stops short of the other.
+pub fn fit_window(name: &str, (low, high): (f32, f32), current: (f32, f32)) -> (f32, f32) {
+    let (min, max) = window_range(name);
+    let (mut low, mut high) = (low.clamp(min, max), high.clamp(min, max));
+    if high - low < MIN_WINDOW {
+        if (low - current.0).abs() > (high - current.1).abs() {
+            low = (high - MIN_WINDOW).max(min);
+            high = low + MIN_WINDOW;
+        } else {
+            high = (low + MIN_WINDOW).min(max);
+            low = high - MIN_WINDOW;
+        }
+    }
+    (low, high)
+}
+
+/// Applies the user's windows, by marker name; the rest keep their
+/// defaults.
+pub fn apply_windows(markers: &mut [Marker], windows: &BTreeMap<String, [f32; 2]>) {
+    for marker in markers {
+        if let Some(&[low, high]) = windows.get(&marker.name)
+            && window_is_valid(&marker.name, low, high)
+        {
+            marker.low = low;
+            marker.high = high;
+        }
+    }
+}
 
 /// Colours in marker order. The first three (yellow, magenta, bluish green)
 /// stay at least ΔE 60 apart under simulated protanopia, deuteranopia and
@@ -64,10 +144,22 @@ pub struct Marker {
 }
 
 impl Marker {
-    /// One value on the arcsinh scale as 0–255 of the fixed window.
+    /// One value on the arcsinh scale as 0–255 of its window.
     pub fn display(&self, value: f32) -> u8 {
         let unit = ((value - self.low) / (self.high - self.low)).clamp(0.0, 1.0);
         (unit * 255.0).round() as u8
+    }
+
+    /// The window differs from the one cellaris ships.
+    pub fn is_adjusted(&self) -> bool {
+        default_window(&self.name).is_some_and(|(low, high)| {
+            (low - self.low).abs() > 1e-4 || (high - self.high).abs() > 1e-4
+        })
+    }
+
+    /// "arcsinh 4.08–8.82".
+    pub fn window_text(&self) -> String {
+        format!("arcsinh {:.2}\u{2013}{:.2}", self.low, self.high)
     }
 }
 
@@ -175,12 +267,14 @@ pub enum DisplayMode {
     Fluorescence,
 }
 
-/// Composites display-scaled marker planes (`markers × n`, 0–255) and a
-/// tissue mask (`n`, 0–255) into straight-alpha RGBA.
+/// Composites marker planes as cells keep them (`markers × n`, see
+/// [`quantize`]), each through its display window, and a tissue mask (`n`,
+/// 0–255) into straight-alpha RGBA.
 pub fn composite(
-    planes: &[u8],
+    planes: &[u16],
     mask: &[u8],
     colours: &[[u8; 3]],
+    windows: &[(f32, f32)],
     visible: &[bool],
     mode: DisplayMode,
     out: &mut Vec<u8>,
@@ -191,6 +285,15 @@ pub fn composite(
     let tints: Vec<[f32; 3]> = colours
         .iter()
         .map(|c| c.map(|lane| f32::from(lane) / 255.0))
+        .collect();
+    // Stored value to 0–1 of each window: q · scale + offset.
+    let step = (PLANE_HIGH - PLANE_LOW) / f32::from(u16::MAX);
+    let maps: Vec<(f32, f32)> = windows
+        .iter()
+        .map(|&(low, high)| {
+            let width = (high - low).max(MIN_WINDOW);
+            (step / width, (PLANE_LOW - low) / width)
+        })
         .collect();
     for index in 0..n {
         let tissue = f32::from(mask[index]) / 255.0;
@@ -203,7 +306,8 @@ pub fn composite(
             if !visible.get(k).copied().unwrap_or(false) {
                 continue;
             }
-            let value = f32::from(planes[k * n + index]) / 255.0;
+            let (scale, offset) = maps.get(k).copied().unwrap_or((0.0, 0.0));
+            let value = (f32::from(planes[k * n + index]) * scale + offset).clamp(0.0, 1.0);
             strongest = strongest.max(value);
             for (lane, t) in rgb.iter_mut().zip(tint) {
                 *lane += value * t;
@@ -312,14 +416,16 @@ mod tests {
     #[test]
     fn overlay_mode_leaves_glass_and_unstained_tissue_alone() {
         let colours = [PALETTE[0], PALETTE[1]];
+        let windows = [(4.0, 6.0), (4.0, 6.0)];
         // Pixels: glass, tissue with no signal, tissue with marker 0 at half.
-        let planes = [0, 0, 128, 0, 0, 0];
+        let planes = [4.0, 4.0, 5.0, 4.0, 4.0, 4.0].map(quantize);
         let mask = [0, 255, 255];
         let mut out = Vec::new();
         composite(
             &planes,
             &mask,
             &colours,
+            &windows,
             &[true, true],
             DisplayMode::Overlay,
             &mut out,
@@ -334,6 +440,7 @@ mod tests {
             &planes,
             &mask,
             &colours,
+            &windows,
             &[false, true],
             DisplayMode::Overlay,
             &mut out,
@@ -345,12 +452,76 @@ mod tests {
             &planes,
             &mask,
             &colours,
+            &windows,
             &[true, true],
             DisplayMode::Fluorescence,
             &mut out,
         );
         assert_eq!(&out[4..8], &[0, 0, 0, 255]);
         assert_eq!(out[3], 0, "glass is still left alone");
+    }
+
+    #[test]
+    fn a_display_window_changes_the_drawing_not_the_values() {
+        // Kept to 0.0003 over the whole range.
+        for value in [-4.0f32, 0.0, 4.08, 5.5, 8.82, 12.0] {
+            assert!(
+                (dequantize(quantize(value)) - value).abs() < 3e-4,
+                "{value}"
+            );
+        }
+        assert_eq!(quantize(-10.0), 0);
+        assert_eq!(quantize(20.0), u16::MAX);
+        let planes = [quantize(5.0)];
+        let drawn = |window| {
+            let mut out = Vec::new();
+            composite(
+                &planes,
+                &[255],
+                &[PALETTE[0]],
+                &[window],
+                &[true],
+                DisplayMode::Overlay,
+                &mut out,
+            );
+            out[3]
+        };
+        // 5.0 is half way up 4–6, all the way up 3–5, nothing in 6–8.
+        assert!((127..=129).contains(&drawn((4.0, 6.0))));
+        assert_eq!(drawn((3.0, 5.0)), 255);
+        assert_eq!(drawn((6.0, 8.0)), 0);
+
+        let mut markers = select(&orion(), &["Hoechst".to_string(), "SMA".to_string()]).unwrap();
+        assert!(!markers[0].is_adjusted());
+        assert_eq!(markers[0].window_text(), "arcsinh 4.08\u{2013}8.82");
+        let mut windows = BTreeMap::new();
+        windows.insert("Hoechst".to_string(), [5.0, 7.5]);
+        // Outside what the range allows: ignored.
+        windows.insert("SMA".to_string(), [-3.9, 13.0]);
+        apply_windows(&mut markers, &windows);
+        assert_eq!((markers[0].low, markers[0].high), (5.0, 7.5));
+        assert!(markers[0].is_adjusted());
+        assert!(!markers[1].is_adjusted());
+        // The default's width either side, within what cells keep.
+        let (min, max) = window_range("Hoechst");
+        assert!((min - (4.08 - 4.74)).abs() < 1e-4, "{min}");
+        assert_eq!(max, PLANE_HIGH);
+        assert!(!window_is_valid("Hoechst", 6.0, 6.01));
+        // Dragging an end past the other stops it short of it.
+        let near =
+            |(a, b): (f32, f32), (c, d): (f32, f32)| (a - c).abs() < 1e-5 && (b - d).abs() < 1e-5;
+        assert!(near(
+            fit_window("Hoechst", (8.0, 7.0), (5.0, 7.0)),
+            (6.95, 7.0)
+        ));
+        assert!(near(
+            fit_window("Hoechst", (5.0, 4.0), (5.0, 7.0)),
+            (5.0, 5.05)
+        ));
+        assert!(near(
+            fit_window("Hoechst", (-9.0, 99.0), (5.0, 7.0)),
+            (min, max)
+        ));
     }
 
     // -- colour-vision deficiency ------------------------------------------

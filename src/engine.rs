@@ -324,6 +324,8 @@ pub struct State {
     /// Whether the host shows the tooltips of non-interactive layers. Hosts
     /// without `layer.set_min_zoom` predate them, and get no values layer.
     pub tooltips: Support,
+    /// The marker whose display window the panel is editing.
+    pub window_editor: Option<usize>,
 }
 
 /// Whether the host has a method that came after API 1.0's first release.
@@ -369,6 +371,7 @@ impl State {
             displays: BTreeMap::new(),
             displays_known: Support::Unknown,
             tooltips: Support::Unknown,
+            window_editor: None,
         }
     }
 
@@ -394,6 +397,7 @@ impl State {
         let markers = self.markers.as_ref().ok()?;
         Some(Display {
             colours: markers.iter().map(|m| m.colour).collect(),
+            windows: markers.iter().map(|m| (m.low, m.high)).collect(),
             visible: markers
                 .iter()
                 .map(|m| self.prefs.is_visible(&m.name))
@@ -407,6 +411,8 @@ impl State {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Display {
     pub colours: Vec<[u8; 3]>,
+    /// Each marker's display window.
+    pub windows: Vec<(f32, f32)>,
     pub visible: Vec<bool>,
     pub mode: markers::DisplayMode,
 }
@@ -418,6 +424,7 @@ impl Display {
             &cell.planes,
             &cell.mask,
             &self.colours,
+            &self.windows,
             &self.visible,
             self.mode,
             &mut out,
@@ -909,6 +916,9 @@ impl<B: Backend> Worker<B> {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner()) = predictor.stopper();
                 st.markers = markers::select(&info.channel_names, &st.prefs.markers);
+                if let Ok(selected) = &mut st.markers {
+                    markers::apply_windows(selected, &st.prefs.windows);
+                }
                 if let Err(problem) = st.markers.clone() {
                     notify_once(
                         &self.host,
@@ -2034,7 +2044,7 @@ mod tests {
         publish.follow(&st);
         let shared = Arc::new(Shared::new(st));
         let tissue = Arc::new(TissueCell {
-            planes: vec![200; 3 * 32 * 32],
+            planes: vec![50_000; 3 * 32 * 32],
             mask: vec![255; 32 * 32],
             blocks: vec![crate::blend::BlockStat {
                 od: 0.3,

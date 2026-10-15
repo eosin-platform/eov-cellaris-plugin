@@ -300,7 +300,14 @@ fn legend_line(st: &State) -> Option<String> {
     let shown: Vec<String> = markers
         .iter()
         .filter(|m| st.prefs.is_visible(&m.name))
-        .map(|m| format!("{}: {}", m.name, markers::colour_name(m.colour)))
+        .map(|m| {
+            let mut entry = format!("{}: {}", m.name, markers::colour_name(m.colour));
+            if m.is_adjusted() {
+                // Brightness then depends on the user's window.
+                entry.push_str(&format!(" ({})", m.window_text()));
+            }
+            entry
+        })
         .collect();
     if shown.is_empty() {
         return Some("Every marker is hidden (see the Cellaris panel)".into());
@@ -603,7 +610,11 @@ fn in_slide_badge(st: &State, id: FileId, file: &FileState, objects: &mut Vec<Ov
                     text_color: TEXT,
                     ..Style::default()
                 })
-                .with_label(format!("{} (predicted)", marker.name))
+                .with_label(if marker.is_adjusted() {
+                    format!("{} (predicted, {})", marker.name, marker.window_text())
+                } else {
+                    format!("{} (predicted)", marker.name)
+                })
                 .with_editable(false),
             );
             y += 20.0 / zoom;
@@ -1130,17 +1141,31 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
         json!(st.prefs.mode == DisplayMode::Fluorescence),
     );
     out.insert("assume-mpp".into(), json!(st.prefs.assume_mpp));
+    let adjusted = |name: &str, (low, high): (f32, f32)| {
+        markers::default_window(name)
+            .is_some_and(|(l, h)| (l - low).abs() > 1e-4 || (h - high).abs() > 1e-4)
+    };
+    let row = |name: &str, colour: [u8; 3], (low, high): (f32, f32), shown: bool| {
+        let adjusted = adjusted(name, (low, high));
+        json!({
+            "name": name,
+            "colour": markers::hex(colour),
+            "visible": st.prefs.is_visible(name),
+            "window": if shown {
+                format!(
+                    "arcsinh {low:.2}\u{2013}{high:.2}{}",
+                    if adjusted { ", yours" } else { "" }
+                )
+            } else {
+                String::new()
+            },
+            "adjusted": adjusted,
+        })
+    };
     let rows: Vec<Value> = match &st.markers {
         Ok(markers) => markers
             .iter()
-            .map(|m| {
-                json!({
-                    "name": m.name,
-                    "colour": markers::hex(m.colour),
-                    "visible": st.prefs.is_visible(&m.name),
-                    "window": format!("arcsinh {:.2}\u{2013}{:.2}", m.low, m.high),
-                })
-            })
+            .map(|m| row(&m.name, m.colour, (m.low, m.high), true))
             .collect(),
         Err(_) => st
             .prefs
@@ -1148,16 +1173,41 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
             .iter()
             .enumerate()
             .map(|(k, name)| {
-                json!({
-                    "name": name,
-                    "colour": markers::hex(markers::PALETTE[k.min(markers::PALETTE.len() - 1)]),
-                    "visible": st.prefs.is_visible(name),
-                    "window": "",
-                })
+                let window = st
+                    .prefs
+                    .windows
+                    .get(name)
+                    .map(|&[low, high]| (low, high))
+                    .or_else(|| markers::default_window(name))
+                    .unwrap_or((0.0, 1.0));
+                let colour = markers::PALETTE[k.min(markers::PALETTE.len() - 1)];
+                row(name, colour, window, false)
             })
             .collect(),
     };
+    // The window editor: one marker at a time, below the list, so that the
+    // list can change while a slider is dragged.
+    let edited = st.window_editor.and_then(|index| {
+        let marker = st.markers.as_ref().ok()?.get(index)?;
+        Some((index, marker))
+    });
     out.insert("markers".into(), json!(rows));
+    let (index, low, high, (min, max), is_adjusted) = match edited {
+        Some((index, m)) => (
+            index as i64,
+            m.low,
+            m.high,
+            markers::window_range(&m.name),
+            m.is_adjusted(),
+        ),
+        None => (-1, 0.0, 1.0, (0.0, 1.0), false),
+    };
+    out.insert("window-editor".into(), json!(index));
+    out.insert("window-low".into(), json!(low));
+    out.insert("window-high".into(), json!(high));
+    out.insert("window-min".into(), json!(min));
+    out.insert("window-max".into(), json!(max));
+    out.insert("window-adjusted".into(), json!(is_adjusted));
     out.insert("model-card".into(), json!(model_card(st)));
     readout_properties(st, &mut out);
     out
@@ -1273,6 +1323,9 @@ pub const PANEL_CALLBACKS: &[&str] = &[
     "choose-runtime",
     "retry",
     "close-panel",
+    "set-window",
+    "reset-window",
+    "edit-window",
 ];
 
 /// A state with a loaded model, a slide, a view and a finished readout, for
@@ -1355,6 +1408,12 @@ pub fn example_state() -> State {
     file.pending = (0..60).map(|i| Idx::new(i, 0)).collect();
     st.files.insert(1, file);
     st.active_file = Some(1);
+    // Pan-CK's display window is the user's, and open in the panel.
+    st.prefs.windows.insert("Pan-CK".into(), [4.5, 6.5]);
+    if let Ok(markers) = &mut st.markers {
+        markers::apply_windows(markers, &st.prefs.windows);
+    }
+    st.window_editor = Some(1);
     st.views.insert(
         1,
         ViewInfo {
@@ -1390,6 +1449,7 @@ mod panel_tests {
             .filter_map(|line| match kind {
                 "property" => line
                     .strip_prefix("in property <")
+                    .or_else(|| line.strip_prefix("in-out property <"))
                     .and_then(|rest| rest.split_once('>'))
                     .map(|(_, rest)| rest.trim().trim_end_matches(';')),
                 _ => line
@@ -1430,11 +1490,14 @@ mod panel_tests {
         assert!(notice.contains("PREDICTED") && notice.contains("research use only"));
         // The legend names each visible marker's colour: there are no
         // swatches in a badge.
+        // Pan-CK's window is the user's: the legend says so.
         assert_eq!(
             shown[MODEL_BADGE],
             (
                 None,
-                "Hoechst: yellow \u{b7} Pan-CK: magenta \u{b7} SMA: bluish green".to_string()
+                "Hoechst: yellow \u{b7} Pan-CK: magenta (arcsinh 4.50\u{2013}6.50) \u{b7} SMA: \
+                 bluish green"
+                    .to_string()
             )
         );
         // The slide's own badge, only over panes showing it.

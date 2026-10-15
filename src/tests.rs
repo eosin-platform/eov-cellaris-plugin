@@ -330,6 +330,20 @@ impl Rig {
         Self::build(slides, views, fake, None, setup)
     }
 
+    /// With these settings saved from an earlier session.
+    fn with_settings(
+        slides: &[(FileId, Slide)],
+        views: &[ViewInfo],
+        fake: FakeConfig,
+        settings: Value,
+    ) -> Self {
+        Self::build(slides, views, fake, None, |state| {
+            if let Value::Object(map) = settings {
+                state.settings = map;
+            }
+        })
+    }
+
     fn build(
         slides: &[(FileId, Slide)],
         views: &[ViewInfo],
@@ -369,7 +383,9 @@ impl Rig {
             }));
             setup(&mut state);
         }
-        let init = test_init("cellaris");
+        let mut init = test_init("cellaris");
+        // The host hands the plugin what it saved.
+        init.settings = host.state().settings.clone();
         let data_dir = PathBuf::from(&init.data_dir);
         assert!(
             data_dir.starts_with(std::env::temp_dir()),
@@ -443,8 +459,13 @@ impl Rig {
 }
 
 /// Every cell in view is shown: the notice and legend are up, the slide's
-/// badge has no progress, and nothing is veiled as pending.
+/// badge has no progress, nothing is veiled as pending, and there are
+/// predictions (every view this is used for has tissue; without them, the
+/// rest also holds before the first pass has planned anything).
 fn view_done(rig: &Rig, file_id: FileId) -> bool {
+    if rig.rasters(file_id) == 0 {
+        return false;
+    }
     let notice = rig
         .badge(NOTICE_BADGE)
         .is_some_and(|(file, text)| file.is_none() && text.contains("research use only"));
@@ -730,6 +751,108 @@ fn an_older_host_without_passive_tooltips_gets_no_values_layer() {
         .count();
     // Created, asked, removed: nothing more.
     assert_eq!(values_calls, 2, "the values layer was still updated");
+}
+
+#[test]
+fn display_windows_change_the_drawing_not_the_values_and_are_kept() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide.clone())], &[v], FakeConfig::default());
+    rig.click(OVERLAY_BUTTON);
+    rig.click(PANEL_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    let pixels = |rig: &Rig| -> Vec<u8> {
+        rig.harness.state().layers[&pred_layer(1)]
+            .rasters
+            .values()
+            .flat_map(|r| r.pixels.data.clone())
+            .collect()
+    };
+    let before = pixels(&rig);
+    let predicted = rig.seen().windows.load(Ordering::SeqCst);
+    let tooltips = rig.objects(&values_layer(1));
+
+    // Hoechst (marker 0) between 5 and 6: drawn again from the kept values.
+    rig.harness
+        .ui_callback("panel", "edit-window", vec![json!(0)])
+        .unwrap();
+    assert_eq!(rig.sidebar()["window-editor"], json!(0));
+    rig.harness
+        .ui_callback(
+            "panel",
+            "set-window",
+            vec![json!(0), json!(5.0), json!(6.0)],
+        )
+        .unwrap();
+    wait_for("the cells drawn again", LONG, || pixels(&rig) != before);
+    assert_eq!(rig.seen().windows.load(Ordering::SeqCst), predicted);
+    assert_eq!(rig.objects(&values_layer(1)), tooltips, "values changed");
+    assert_eq!(
+        rig.harness.state().settings.get("display_windows"),
+        Some(&json!({"Hoechst": [5.0, 6.0]}))
+    );
+    let panel = rig.sidebar();
+    assert_eq!(
+        (panel["window-low"].clone(), panel["window-high"].clone()),
+        (json!(5.0), json!(6.0))
+    );
+    assert_eq!(panel["window-adjusted"], json!(true));
+    assert_eq!(
+        panel["markers"][0]["window"],
+        json!("arcsinh 5.00\u{2013}6.00, yours")
+    );
+    // The legend says whose window it is.
+    assert!(
+        rig.badge(MODEL_BADGE)
+            .unwrap()
+            .1
+            .starts_with("Hoechst: yellow (arcsinh 5.00\u{2013}6.00)"),
+        "{:?}",
+        rig.badge(MODEL_BADGE)
+    );
+    // A crossed window is fitted, not refused.
+    rig.harness
+        .ui_callback(
+            "panel",
+            "set-window",
+            vec![json!(0), json!(7.0), json!(6.0)],
+        )
+        .unwrap();
+    let low = rig.sidebar()["window-low"].as_f64().unwrap();
+    assert!((low - 5.95).abs() < 1e-4, "{low}");
+
+    // Reset: the defaults, and the first drawing.
+    rig.harness
+        .ui_callback("panel", "reset-window", vec![json!(0)])
+        .unwrap();
+    assert_eq!(
+        rig.harness.state().settings.get("display_windows"),
+        Some(&json!({}))
+    );
+    assert_eq!(rig.sidebar()["window-adjusted"], json!(false));
+    wait_for("the default drawing", LONG, || pixels(&rig) == before);
+    assert_eq!(rig.seen().windows.load(Ordering::SeqCst), predicted);
+}
+
+#[test]
+fn display_windows_come_back_in_the_next_session() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 100.0, 100.0, 2.0);
+    let rig = Rig::with_settings(
+        &[(1, slide)],
+        &[v],
+        FakeConfig::default(),
+        json!({"display_windows": {"SMA": [4.0, 5.5], "Nope": [1.0, 2.0]}}),
+    );
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the legend", LONG, || {
+        rig.badge(MODEL_BADGE)
+            .is_some_and(|(_, text)| text.contains("SMA: bluish green (arcsinh 4.00\u{2013}5.50)"))
+    });
+    rig.click(PANEL_BUTTON);
+    let panel = rig.sidebar();
+    assert_eq!(panel["markers"][2]["adjusted"], json!(true));
+    assert_eq!(panel["markers"][0]["adjusted"], json!(false));
 }
 
 #[test]

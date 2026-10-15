@@ -155,8 +155,9 @@ The toolbar gets three things:
   the overlay on again, *Retry* or choosing another model tries again, without restarting eov. If
   eov or another plugin already uses X, eov says so and the panel repeats it; the `overlay_key`
   setting below picks another key.
-- **Cellaris panel** shows the legend, the per-marker toggles, opacity, a fluorescence-style mode
-  (colour on black over all tissue), the region readout and the model card.
+- **Cellaris panel** shows the legend, the per-marker toggles and display windows, opacity, a
+  fluorescence-style mode (colour on black over all tissue), the region readout and the model
+  card.
 - **Cellaris region readout**, a polygon tool.
 
 While the overlay is on, the top of every pane showing a slide carries badges, fixed to the pane
@@ -183,6 +184,14 @@ is on, and then the slide's badge says the scale is assumed. Slides coarser than
 upsampled and flagged as less reliable (a 20× scan at 0.5 µm/px is 1.5× coarser); more than twice
 as coarse (past 0.65 µm/px for this model, such as a 10× scan) is refused. A slide whose metadata
 names a stain other than H&E is flagged.
+
+Each marker's display window is the arcsinh range drawn from no colour to full colour. By default
+it runs from the 1st to the 99.5th percentile of measured Orion IF, fixed rather than stretched to
+what is in view, so an empty area looks empty. Click a marker's window in the panel to set its
+black and white points; *Reset* goes back to the default. Windows are kept between sessions, and
+the legend shows any that are not the default. They change only how predictions are drawn:
+readouts, values on hover and batch runs give the same numbers whatever the windows. Cells keep
+their values (in 16 bits), so a window is redrawn at once, without predicting again.
 
 Settings are kept by eov, in `settings.json` in the data directory above. A few have no control in
 the panel yet and can be set there while eov is closed: `markers` (the channels to predict, up to
@@ -229,10 +238,11 @@ numbers match a region readout over the same area. Each slide gets a folder in `
 Memory stays bounded whatever the slide's size: the slide is scanned in strips 32 cells wide, rows
 go straight to the CSV, and the summary keeps sums and fixed histograms. Time does not: 1 cm² of
 tissue is about 58,000 windows, which at about 1.2 s each on a CPU is close to a day, so try
-`region` or `max_cells` first. A slide fails, with the reason in the manifest, when no model or ONNX Runtime
-loads, when it reports no pixel size and `assume_mpp` is off, or when it is coarser than twice the
-model's pixel size. Windows that cannot be read are tried again once. After that their cells are
-left out of the table, and the summary counts them and marks the slide incomplete.
+`region` or `max_cells` first. A slide fails, with the reason in the manifest, when no model or
+ONNX Runtime loads, when it reports no pixel size and `assume_mpp` is off, or when it is coarser
+than twice the model's pixel size. Windows that cannot be read are tried again once. After that
+their cells are left out of the table, and the summary counts them and marks the slide
+incomplete.
 
 ## The model's metadata
 
@@ -288,8 +298,9 @@ SHA-256 beside it. CI builds, tests and packages on Linux, macOS and Windows, x8
 ## Intended use, safety and privacy
 
 - Research and education only. Not for primary diagnosis or any clinical decision.
-- Predictions are not measurements. The display windows are fixed from one cohort (Orion CRC,
-  1st–99.5th percentile of measured IF), so values outside it saturate.
+- Predictions are not measurements. The default display windows come from one cohort (Orion CRC,
+  1st–99.5th percentile of measured IF); values outside a window saturate in the drawing, though
+  not in readouts or batch runs.
 - Nothing detects every input the model was not trained on. The plugin flags what it can: an
   unknown, assumed or mismatched pixel size, a stain other than H&E in the slide's metadata,
   near-black areas, and windows above the model's reconstruction-error threshold when the model

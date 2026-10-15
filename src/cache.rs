@@ -3,9 +3,10 @@
 //!
 //! A cell is stored under a key made of everything that decides its
 //! contents: the slide's identity (from the host), the model file's
-//! SHA-256, the grid, the markers and their display windows, and the format
-//! version. Slides without an identity are not cached. Files are written
-//! atomically and the directory is pruned, oldest first, to its budget.
+//! SHA-256, the grid, the markers, and the format version (display windows
+//! do not: cells keep values, and windows apply when they are drawn).
+//! Slides without an identity are not cached. Files are written atomically
+//! and the directory is pruned, oldest first, to its budget.
 
 use crate::blend::{BlockStat, CellData, TissueCell};
 use crate::geometry::{BLOCK, Grid, Idx};
@@ -16,7 +17,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Bump whenever what a cell holds, or how it is computed, changes.
-const FORMAT: u32 = 2;
+/// 3: 16-bit planes of values instead of display-scaled bytes.
+const FORMAT: u32 = 3;
 const MAGIC: &[u8; 4] = b"CELC";
 
 /// The cache key of a slide's cells.
@@ -40,10 +42,7 @@ pub fn key(
         grid.sx, grid.sy, grid.window, grid.level, grid.stride, grid.downsample
     ));
     for marker in markers {
-        put(format!(
-            "{} {} {:.4} {:.4}",
-            marker.name, marker.channel, marker.low, marker.high
-        ));
+        put(format!("{} {}", marker.name, marker.channel));
     }
     put(format!("recon {recon}"));
     let digest = hasher.finalize();
@@ -63,7 +62,9 @@ fn encode(data: &CellData, stride: usize, markers: usize, recon: bool) -> Vec<u8
             out.push(markers as u8);
             out.push(u8::from(recon));
             out.extend_from_slice(&cell.mask);
-            out.extend_from_slice(&cell.planes);
+            for value in &cell.planes {
+                out.extend_from_slice(&value.to_le_bytes());
+            }
             for block in &cell.blocks {
                 out.extend_from_slice(&block.od.to_le_bytes());
                 out.extend_from_slice(&block.coverage.to_le_bytes());
@@ -102,7 +103,12 @@ fn decode(bytes: &[u8], stride: usize, markers: usize, recon: bool) -> Option<Ce
             }
             let area = stride * stride;
             let mask = take(area)?.to_vec();
-            let planes = take(markers * area)?.to_vec();
+            let planes = take(2 * markers * area)?
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| u16::from_le_bytes(*pair))
+                .collect();
             let per = stride / BLOCK;
             let mut float = || {
                 take(4)
@@ -241,7 +247,9 @@ mod tests {
     fn tissue(stride: usize, markers: usize) -> CellData {
         let per = stride / BLOCK;
         CellData::Tissue(std::sync::Arc::new(TissueCell {
-            planes: (0..markers * stride * stride).map(|i| i as u8).collect(),
+            planes: (0..markers * stride * stride)
+                .map(|i| (i * 2_851) as u16)
+                .collect(),
             mask: vec![200; stride * stride],
             blocks: (0..per * per)
                 .map(|i| BlockStat {
@@ -305,6 +313,10 @@ mod tests {
         finer.sx *= 1.01;
         assert_ne!(base, key("slide", "abc", &finer, &markers, true));
         assert_eq!(base, key("slide", "abc", &grid, &markers, true));
+        // Cells keep values: display windows do not change them.
+        let mut windowed = markers.clone();
+        windowed[0].low += 1.0;
+        assert_eq!(base, key("slide", "abc", &grid, &windowed, true));
     }
 
     #[test]

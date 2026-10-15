@@ -9,6 +9,8 @@ export struct MarkerRow {
     colour: color,
     visible: bool,
     window: string,
+    // The display window differs from the one cellaris ships.
+    adjusted: bool,
 }
 
 export struct ReadoutRow {
@@ -163,6 +165,15 @@ export component CellarisPanel inherits Rectangle {
     in property <bool> fluorescence: false;
     in property <bool> assume-mpp: false;
     in property <[MarkerRow]> markers: [];
+    // The marker whose display window is being edited (-1: none), and its
+    // window. The sliders are bound both ways, so that what the plugin sends
+    // moves them even after a drag.
+    in property <int> window-editor: -1;
+    in-out property <float> window-low: 0;
+    in-out property <float> window-high: 1;
+    in property <float> window-min: 0;
+    in property <float> window-max: 1;
+    in property <bool> window-adjusted: false;
     in property <[CardRow]> model-card: [];
     in property <string> readout-status: "";
     in property <string> readout-detail: "";
@@ -186,6 +197,9 @@ export component CellarisPanel inherits Rectangle {
     callback choose-runtime();
     callback retry();
     callback close-panel();
+    callback set-window(int, float, float);
+    callback reset-window(int);
+    callback edit-window(int);
 
     background: Colours.surface;
 
@@ -315,11 +329,98 @@ export component CellarisPanel inherits Rectangle {
                         colour: row.colour;
                     }
                 }
+                Rectangle {
+                    min-width: window-label.preferred-width;
+                    window-label := Text {
+                        text: row.window == "" ? "" : row.window + (index == root.window-editor ? " \u{25be}" : " \u{25b8}");
+                        color: row.adjusted ? Colours.notice-text : Colours.muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        enabled: row.window != "";
+                        clicked => {
+                            root.edit-window(index);
+                        }
+                    }
+                }
+            }
+
+            if root.window-editor >= 0: VerticalLayout {
+                spacing: 2px;
+                padding-left: 22px;
                 Text {
-                    text: row.window;
+                    text: "Display window of " + root.markers[root.window-editor].name + " (arcsinh)";
                     color: Colours.muted;
                     font-size: 11px;
-                    vertical-alignment: center;
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: "Black";
+                        color: Colours.text;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        min-width: 34px;
+                    }
+                    Slider {
+                        minimum: root.window-min;
+                        maximum: root.window-max;
+                        value <=> root.window-low;
+                        horizontal-stretch: 1;
+                        changed(value) => {
+                            root.set-window(root.window-editor, value, root.window-high);
+                        }
+                    }
+                    Text {
+                        text: (round(root.window-low * 100) / 100) + "";
+                        color: Colours.muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        min-width: 34px;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: "White";
+                        color: Colours.text;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        min-width: 34px;
+                    }
+                    Slider {
+                        minimum: root.window-min;
+                        maximum: root.window-max;
+                        value <=> root.window-high;
+                        horizontal-stretch: 1;
+                        changed(value) => {
+                            root.set-window(root.window-editor, root.window-low, value);
+                        }
+                    }
+                    Text {
+                        text: (round(root.window-high * 100) / 100) + "";
+                        color: Colours.muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        min-width: 34px;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Note {
+                        text: "Only how predictions are drawn changes; readouts and batch runs keep their values.";
+                        horizontal-stretch: 1;
+                        height: self.preferred-height;
+                    }
+                    Action {
+                        text: "Reset";
+                        enabled: root.window-adjusted;
+                        horizontal-stretch: 0;
+                        clicked => {
+                            root.reset-window(root.window-editor);
+                        }
+                    }
                 }
             }
 

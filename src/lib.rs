@@ -158,6 +158,56 @@ impl<B: Backend> Cellaris<B> {
         self.shared.wake();
     }
 
+    /// Sets (`Some`) or resets (`None`) a marker's display window. Only the
+    /// drawing changes: cells keep their values and are drawn again, and
+    /// readouts, tooltips and batch runs are not affected.
+    fn set_window(&self, index: usize, window: Option<(f32, f32)>) {
+        let mut st = self.lock();
+        let Some(name) = st.prefs.markers.get(index).cloned() else {
+            return;
+        };
+        let Some(default) = markers::default_window(&name) else {
+            return;
+        };
+        let current = st
+            .markers
+            .as_ref()
+            .ok()
+            .and_then(|m| m.iter().find(|m| m.name == name))
+            .map_or(default, |m| (m.low, m.high));
+        let (low, high) = match window {
+            Some(wanted) => markers::fit_window(&name, wanted, current),
+            None => default,
+        };
+        if (low, high) == current && window.is_some() {
+            return;
+        }
+        if (low - default.0).abs() < 1e-4 && (high - default.1).abs() < 1e-4 {
+            st.prefs.windows.remove(&name);
+        } else {
+            st.prefs.windows.insert(name.clone(), [low, high]);
+        }
+        if let Ok(selected) = &mut st.markers {
+            for marker in selected.iter_mut().filter(|m| m.name == name) {
+                marker.low = low;
+                marker.high = high;
+            }
+        }
+        let windows = st.prefs.windows.clone();
+        self.redraw_all(&mut st);
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::WINDOWS, &windows);
+        self.shared.wake();
+    }
+
+    /// Opens a marker's window editor in the panel, or closes it.
+    fn edit_window(&self, index: usize) {
+        let mut st = self.lock();
+        st.window_editor = (st.window_editor != Some(index)).then_some(index);
+        self.refresh(&mut st);
+    }
+
     fn set_mode(&self, mode: DisplayMode) {
         let mut st = self.lock();
         st.prefs.mode = mode;
@@ -759,6 +809,19 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 DisplayMode::Overlay
             }),
             "set-assume-mpp" => self.set_assume_mpp(flag()),
+            "set-window" | "reset-window" | "edit-window" => {
+                let index = args.first().and_then(Value::as_u64).unwrap_or(u64::MAX) as usize;
+                let value = |k: usize| args.get(k).and_then(Value::as_f64).map(|v| v as f32);
+                match name {
+                    "set-window" => {
+                        if let (Some(low), Some(high)) = (value(1), value(2)) {
+                            self.set_window(index, Some((low, high)));
+                        }
+                    }
+                    "reset-window" => self.set_window(index, None),
+                    _ => self.edit_window(index),
+                }
+            }
             "measure-roi" => self.measure_roi()?,
             "draw-region" => self.host.activate_tool(REGION_TOOL).map_err(host_err)?,
             "clear-region" => {

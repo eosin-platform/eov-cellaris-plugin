@@ -3,6 +3,7 @@
 use crate::markers::{DEFAULT_MARKERS, DisplayMode, MAX_MARKERS};
 use eov_plugin_api::prelude::{Map, Value};
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Toggles the predicted-marker overlay on every open slide.
 pub const OVERLAY_BUTTON: &str = "cellaris_overlay";
@@ -55,6 +56,9 @@ pub struct Prefs {
     pub disk_cache_mb: u64,
     /// The overlay button's key; empty for none.
     pub overlay_key: String,
+    /// Display windows set by the user, by marker name: `[low, high]` on
+    /// the arcsinh scale.
+    pub windows: BTreeMap<String, [f32; 2]>,
 }
 
 impl Default for Prefs {
@@ -71,6 +75,7 @@ impl Default for Prefs {
             assume_mpp: false,
             disk_cache_mb: 2048,
             overlay_key: DEFAULT_OVERLAY_KEY.to_string(),
+            windows: BTreeMap::new(),
         }
     }
 }
@@ -87,6 +92,7 @@ pub mod keys {
     pub const ASSUME_MPP: &str = "assume_mpp";
     pub const DISK_CACHE: &str = "disk_cache_mb";
     pub const OVERLAY_KEY: &str = "overlay_key";
+    pub const WINDOWS: &str = "display_windows";
 }
 
 impl Prefs {
@@ -95,6 +101,7 @@ impl Prefs {
     pub fn from_settings(settings: &Map<String, Value>) -> (Prefs, Vec<String>) {
         let mut prefs = Prefs::default();
         let mut problems = Vec::new();
+        let mut refused = Vec::new();
         let mut bad = |key: &str, value: &Value| {
             problems.push(format!("ignored the setting {key} = {value}"));
         };
@@ -150,9 +157,28 @@ impl Prefs {
                     }
                     _ => bad(key, value),
                 },
+                // {"Hoechst": [4.5, 8.0], …}; a window that cannot be one is
+                // dropped and reported.
+                keys::WINDOWS => {
+                    match serde_json::from_value::<BTreeMap<String, [f32; 2]>>(value.clone()) {
+                        Ok(windows) => {
+                            for (name, [low, high]) in windows {
+                                if crate::markers::window_is_valid(&name, low, high) {
+                                    prefs.windows.insert(name, [low, high]);
+                                } else {
+                                    refused.push(format!(
+                                        "ignored the display window {low}\u{2013}{high} of {name}"
+                                    ));
+                                }
+                            }
+                        }
+                        Err(_) => bad(key, value),
+                    }
+                }
                 _ => {}
             }
         }
+        problems.extend(refused);
         (prefs, problems)
     }
 
@@ -191,6 +217,25 @@ mod tests {
             let settings = Map::from_iter([("overlay_key".to_string(), value)]);
             assert_eq!(Prefs::from_settings(&settings).0.overlay_key, key);
         }
+    }
+
+    #[test]
+    fn display_windows_are_kept_when_they_can_be_windows() {
+        let mut settings = Map::new();
+        settings.insert(
+            "display_windows".into(),
+            json!({"Hoechst": [5.0, 7.5], "SMA": [6.0, 4.0], "Pan-CK": [-50.0, 5.0]}),
+        );
+        let (prefs, problems) = Prefs::from_settings(&settings);
+        assert_eq!(prefs.windows.len(), 1);
+        assert_eq!(prefs.windows["Hoechst"], [5.0, 7.5]);
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        settings.insert("display_windows".into(), json!([1, 2]));
+        let (prefs, problems) = Prefs::from_settings(&settings);
+        assert!(
+            prefs.windows.is_empty() && problems.len() == 1,
+            "{problems:?}"
+        );
     }
 
     #[test]

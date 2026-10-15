@@ -11,7 +11,7 @@
 //! measured is what is painted (CEL-5).
 
 use crate::geometry::BLOCK;
-use crate::markers::Marker;
+use crate::markers::{Marker, quantize};
 use crate::resample::BlockBase;
 use std::sync::Arc;
 
@@ -199,8 +199,9 @@ pub struct BlockStat {
 /// A cell with tissue in it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TissueCell {
-    /// Display-scaled markers, `markers × stride²`, 0–255.
-    pub planes: Vec<u8>,
+    /// Markers on the arcsinh scale as [`quantize`] keeps them, `markers ×
+    /// stride²`; display windows apply when they are drawn.
+    pub planes: Vec<u16>,
     /// Paint mask, `stride²`, 0–255.
     pub mask: Vec<u8>,
     /// Row-major blocks, `(stride / BLOCK)²`.
@@ -266,13 +267,13 @@ pub fn finalize(
     if mask.iter().all(|m| *m == 0) {
         return CellData::Empty;
     }
-    let mut planes = vec![0u8; markers.len() * area];
-    for (k, marker) in markers.iter().enumerate() {
+    let mut planes = vec![0u16; markers.len() * area];
+    for k in 0..markers.len() {
         for (out, value) in planes[k * area..(k + 1) * area]
             .iter_mut()
             .zip(&values[k * area..(k + 1) * area])
         {
-            *out = marker.display(*value);
+            *out = quantize(*value);
         }
     }
     let per = stride / BLOCK;
@@ -455,8 +456,9 @@ mod tests {
         assert!((cell.blocks[1].means[0] - 55.5).abs() < 1e-2);
         assert_eq!(cell.blocks[0].od, 0.3);
         assert_eq!(
-            cell.planes[0], 255,
-            "values past the window clip in display only"
+            cell.planes[0],
+            u16::MAX,
+            "values past what cells keep clip there, but not in block means"
         );
     }
 
