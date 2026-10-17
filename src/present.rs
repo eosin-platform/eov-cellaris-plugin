@@ -1209,8 +1209,40 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
     out.insert("window-max".into(), json!(max));
     out.insert("window-adjusted".into(), json!(is_adjusted));
     out.insert("model-card".into(), json!(model_card(st)));
+    download_properties(st, &mut out);
     readout_properties(st, &mut out);
     out
+}
+
+/// The *Download model…* form.
+fn download_properties(st: &State, out: &mut Map<String, Value>) {
+    let (note, error) = match (&st.model_fetch, &st.download_note) {
+        (Some(_), _) => (
+            "eov is asking you, or downloading it (see the status bar)\u{2026}".to_string(),
+            false,
+        ),
+        (None, Some(note)) => (note.clone(), true),
+        (None, None) => (
+            "eov checks the download against this SHA-256 and keeps it in its model store; it is then Cellaris's model. Without an address, the copy your administrator gave eov is used.".to_string(),
+            false,
+        ),
+    };
+    out.insert(
+        "can-download".into(),
+        json!(st.model_store != crate::engine::Support::No),
+    );
+    out.insert("download-open".into(), json!(st.download_open));
+    out.insert("download-busy".into(), json!(st.model_fetch.is_some()));
+    out.insert(
+        "download-url".into(),
+        json!(st.prefs.model_url.clone().unwrap_or_default()),
+    );
+    out.insert(
+        "download-sha256".into(),
+        json!(st.prefs.model_sha256.clone().unwrap_or_default()),
+    );
+    out.insert("download-note".into(), json!(note));
+    out.insert("download-note-error".into(), json!(error));
 }
 
 /// The active slide's readout as tab-separated text, with its provenance.
@@ -1326,6 +1358,8 @@ pub const PANEL_CALLBACKS: &[&str] = &[
     "set-window",
     "reset-window",
     "edit-window",
+    "toggle-download",
+    "download-model",
 ];
 
 /// A state with a loaded model, a slide, a view and a finished readout, for

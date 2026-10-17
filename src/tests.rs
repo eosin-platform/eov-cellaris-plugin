@@ -76,6 +76,8 @@ struct Seen {
     loads: AtomicUsize,
     windows: AtomicUsize,
     batches: Mutex<Vec<usize>>,
+    /// The model each load was asked for.
+    models: Mutex<Vec<Option<PathBuf>>>,
 }
 
 fn seen(data_dir: &Path) -> Arc<Seen> {
@@ -106,6 +108,7 @@ impl Backend for FakeBackend {
             .unwrap_or_default();
         let seen = seen(&request.data_dir);
         seen.loads.fetch_add(1, Ordering::SeqCst);
+        seen.models.lock().unwrap().push(request.model.clone());
         if let Some(reason) = &config.fail_load {
             return Err(LoadError::new("No marker model", reason.clone()));
         }
@@ -2019,3 +2022,195 @@ fn a_slide_that_disappears_ends_its_readout_job() {
 }
 
 mod batch_runs;
+
+// -- downloading the model ------------------------------------------------------
+
+const MODEL_URL: &str = "https://models.example.org/cellaris/markers.onnx";
+
+fn stored(sha256: &str, path: &Path) -> eov_plugin_api::protocol::ModelRecord {
+    eov_plugin_api::protocol::ModelRecord {
+        sha256: sha256.into(),
+        path: path.to_string_lossy().into_owned(),
+        file_name: "markers.onnx".into(),
+        size: 1,
+        name: Some("Cellaris marker model".into()),
+        ..Default::default()
+    }
+}
+
+/// The panel open with the *Download model…* form.
+fn download_form(rig: &Rig) {
+    rig.click(PANEL_BUTTON);
+    rig.harness
+        .ui_callback("panel", "toggle-download", vec![])
+        .unwrap();
+    wait_for("the download form", LONG, || {
+        rig.sidebar().get("download-open") == Some(&json!(true))
+    });
+}
+
+#[test]
+fn the_model_is_downloaded_through_eov_and_becomes_the_model() {
+    let rig = Rig::new(&[], &[], FakeConfig::default());
+    download_form(&rig);
+    let sha256 = "ab".repeat(32);
+    rig.harness
+        .ui_callback(
+            "panel",
+            "download-model",
+            vec![json!(MODEL_URL), json!(sha256.to_uppercase())],
+        )
+        .unwrap();
+    let (request, args) = rig.harness.last_model_fetch().expect("eov was asked");
+    assert_eq!(args.url.as_deref(), Some(MODEL_URL));
+    assert_eq!(args.sha256, sha256, "the hash is sent as eov keeps it");
+    // The address and hash are kept for the next time and for batch runs.
+    {
+        let state = rig.harness.state();
+        assert_eq!(state.settings.get("model_url"), Some(&json!(MODEL_URL)));
+        assert_eq!(state.settings.get("model_sha256"), Some(&json!(sha256)));
+    }
+    wait_for("the busy form", LONG, || {
+        rig.sidebar().get("download-busy") == Some(&json!(true))
+    });
+    // A second click while eov asks does not ask again.
+    rig.harness
+        .ui_callback(
+            "panel",
+            "download-model",
+            vec![json!(MODEL_URL), json!(sha256)],
+        )
+        .unwrap();
+    assert_eq!(rig.harness.state().model_fetches.len(), 1);
+
+    // eov's answer: the stored file is the model from now on.
+    let path = rig.data_dir.join("store").join("markers.onnx");
+    rig.harness
+        .finish_model_fetch(&request, Ok(stored(&sha256, &path)))
+        .unwrap();
+    let saved = json!(path.to_string_lossy());
+    wait_for("the saved model path", LONG, || {
+        rig.harness.state().settings.get("model_path") == Some(&saved)
+    });
+    // It loads when something needs it, as a chosen model does.
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the model loaded from the store", LONG, || {
+        rig.seen()
+            .models
+            .lock()
+            .unwrap()
+            .contains(&Some(path.clone()))
+    });
+    let sidebar = rig.sidebar();
+    assert_eq!(sidebar.get("download-open"), Some(&json!(false)));
+    assert_eq!(sidebar.get("download-busy"), Some(&json!(false)));
+}
+
+#[test]
+fn bad_hashes_declined_and_failed_downloads_are_explained() {
+    let rig = Rig::new(&[], &[], FakeConfig::default());
+    download_form(&rig);
+    let note = |rig: &Rig| {
+        rig.sidebar()
+            .get("download-note")
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    // Without a usable hash nothing is asked.
+    rig.harness
+        .ui_callback(
+            "panel",
+            "download-model",
+            vec![json!(MODEL_URL), json!("abc")],
+        )
+        .unwrap();
+    wait_for("the hash note", LONG, || {
+        note(&rig).as_str().is_some_and(|n| n.contains("SHA-256"))
+    });
+    assert!(rig.harness.state().model_fetches.is_empty());
+
+    // Declined by the user: nothing to explain.
+    let sha256 = "cd".repeat(32);
+    let ask = |rig: &Rig| {
+        rig.harness
+            .ui_callback(
+                "panel",
+                "download-model",
+                vec![json!(MODEL_URL), json!(sha256)],
+            )
+            .unwrap();
+        rig.harness.last_model_fetch().unwrap().0
+    };
+    let request = ask(&rig);
+    rig.harness.cancel_model_fetch(&request).unwrap();
+    wait_for("the idle form", LONG, || {
+        rig.sidebar().get("download-busy") == Some(&json!(false))
+    });
+    assert!(
+        !note(&rig)
+            .as_str()
+            .unwrap_or_default()
+            .contains("cancelled"),
+        "{}",
+        note(&rig)
+    );
+
+    // Failed: the panel says why, and the old model stays.
+    let request = ask(&rig);
+    assert_ne!(request, rig.harness.state().model_fetches[0].0);
+    rig.harness
+        .finish_model_fetch(&request, Err("the server answered 404".into()))
+        .unwrap();
+    wait_for("the failure", LONG, || {
+        note(&rig).as_str().is_some_and(|n| n.contains("404"))
+    });
+    assert_eq!(rig.harness.state().settings.get("model_path"), None);
+}
+
+#[test]
+fn hosts_without_a_model_store_offer_no_download() {
+    let rig = Rig::with_host(&[], &[], FakeConfig::default(), |state| {
+        state
+            .unsupported
+            .extend(["model.fetch".to_string(), "model.resolve".to_string()]);
+    });
+    download_form(&rig);
+    rig.harness
+        .ui_callback(
+            "panel",
+            "download-model",
+            vec![json!(MODEL_URL), json!("ef".repeat(32))],
+        )
+        .unwrap();
+    wait_for("the explanation", LONG, || {
+        rig.sidebar()
+            .get("download-note")
+            .and_then(Value::as_str)
+            .is_some_and(|n| n.contains("cannot download models"))
+    });
+    assert_eq!(rig.sidebar().get("can-download"), Some(&json!(false)));
+    assert!(rig.harness.state().model_fetches.is_empty());
+}
+
+#[test]
+fn a_stored_model_named_by_its_hash_is_the_model() {
+    let sha256 = "12".repeat(32);
+    let path = std::env::temp_dir()
+        .join("eov-cellaris-test-store")
+        .join("markers.onnx");
+    let rig = Rig::with_host(&[], &[], FakeConfig::default(), |state| {
+        state.settings.insert("model_sha256".into(), json!(sha256));
+        state.add_model(stored(&sha256, &path));
+    });
+    assert_eq!(rig.harness.calls_to("model.resolve").len(), 1);
+    // Turning the overlay on loads the stored file.
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the model loaded from the store", LONG, || {
+        rig.seen()
+            .models
+            .lock()
+            .unwrap()
+            .contains(&Some(path.clone()))
+    });
+}

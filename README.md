@@ -128,6 +128,14 @@ directory, or choose it in the Cellaris panel (*Choose model…*):
 (`$EOV_DATA_DIR/plugins/cellaris/` when eov's data directory is redirected; the panel shows the
 path it looks in.) Version 0.1 looked in `~/.eov/plugins/cellaris/`; move the model from there.
 
+**Downloading it.** Sites that host the model can have eov fetch it: *Download model…* in the
+panel takes the model's address and SHA-256, asks eov to download it (eov asks you first, obeys
+its network policy, and refuses a file whose SHA-256 differs), keeps it in eov's model store and
+makes it the model. The address and hash are kept (`model_url`, `model_sha256` in the plugin's
+settings), and a model with that hash already in eov's store, downloaded before or imported with
+`eov model import markers.onnx --sha256 <HEX>` on a machine without network access, is used
+without asking, also in batch runs. No public address is built in.
+
 **ONNX Runtime**, when the package does not bundle it, is looked for in this order:
 
 1. `CELLARIS_ORT_DYLIB`, the runtime chosen in the panel (*Choose runtime…*), or `ORT_DYLIB_PATH`

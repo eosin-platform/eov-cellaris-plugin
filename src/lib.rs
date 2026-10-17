@@ -523,6 +523,101 @@ impl<B: Backend> Cellaris<B> {
         self.shared.wake();
     }
 
+    // -- downloading the model ------------------------------------------------------
+
+    fn toggle_download(&self) {
+        let mut st = self.lock();
+        st.download_open = !st.download_open;
+        st.download_note = None;
+        self.refresh(&mut st);
+    }
+
+    /// *Download*: asks eov for the model at `url` with `sha256`, which are
+    /// kept for next time. eov answers at once when its model store has
+    /// the model; otherwise it asks the user, downloads it and checks it.
+    fn download(&self, url: &str, sha256: &str) {
+        let mut st = self.lock();
+        if st.model_fetch.is_some() {
+            return;
+        }
+        let Some(sha256) = config::parse_sha256(sha256) else {
+            st.download_note = Some(
+                "Enter the model's SHA-256 (64 hex digits): the download is checked against it."
+                    .into(),
+            );
+            self.refresh(&mut st);
+            return;
+        };
+        let url = Some(url.trim().to_string()).filter(|url| !url.is_empty());
+        st.prefs.model_url = url.clone();
+        st.prefs.model_sha256 = Some(sha256.clone());
+        drop(st);
+        match &url {
+            Some(url) => self.persist(keys::MODEL_URL, url),
+            None => {
+                let _ = self.host.remove_setting(keys::MODEL_URL);
+            }
+        }
+        self.persist(keys::MODEL_SHA256, &sha256);
+        let asked = self.host.fetch_model(ModelFetchArgs {
+            url,
+            sha256,
+            name: Some("Cellaris marker model".into()),
+            ..Default::default()
+        });
+        let mut st = self.lock();
+        match asked {
+            Ok(request) => {
+                st.model_fetch = Some(request);
+                st.model_store = Support::Yes;
+                st.download_note = None;
+            }
+            Err(error) if error.is_unsupported() => {
+                st.model_store = Support::No;
+                st.download_note = Some(
+                    "This eov cannot download models: choose the model file with Choose model\u{2026}"
+                        .into(),
+                );
+            }
+            Err(error) => st.download_note = Some(error.message),
+        }
+        self.refresh(&mut st);
+    }
+
+    /// eov's answer: the downloaded model is the model from now on, loaded
+    /// and checked like one chosen in the panel.
+    fn fetched(
+        &self,
+        request_id: &str,
+        path: Option<String>,
+        error: Option<String>,
+        cancelled: bool,
+    ) {
+        let mut st = self.lock();
+        if st.model_fetch.as_deref() != Some(request_id) {
+            return;
+        }
+        st.model_fetch = None;
+        let Some(path) = path else {
+            // eov has told the user why; the panel keeps it in view.
+            st.download_note = error.filter(|_| !cancelled);
+            self.refresh(&mut st);
+            return;
+        };
+        st.prefs.model_path = Some(path.clone());
+        st.reload = true;
+        st.load_wanted = true;
+        st.notified.clear();
+        st.download_open = false;
+        st.download_note = None;
+        drop(st);
+        self.persist(keys::MODEL, &path);
+        let mut st = self.lock();
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
     fn add_file(&self, info: FileInfo) {
         let mut st = self.lock();
         let id = info.file_id;
@@ -542,12 +637,34 @@ impl<B: Backend> Cellaris<B> {
     }
 }
 
+/// The model the site set for *Download model…* (`model_sha256`) is the
+/// model when eov's model store has it and none was chosen, also in batch
+/// runs. Says whether the host keeps models.
+fn use_stored_model(host: &Host, prefs: &mut Prefs) -> Support {
+    let Some(sha256) = prefs.model_sha256.clone() else {
+        return Support::Unknown;
+    };
+    match host.resolve_model(&sha256) {
+        Ok(found) => {
+            if prefs.model_path.is_none()
+                && let Some(model) = found
+            {
+                prefs.model_path = Some(model.path);
+            }
+            Support::Yes
+        }
+        Err(error) if error.is_unsupported() => Support::No,
+        Err(_) => Support::Unknown,
+    }
+}
+
 impl<B: Backend> Plugin for Cellaris<B> {
     fn create(host: Host, init: PluginInit) -> Result<Self, String> {
-        let (prefs, problems) = Prefs::from_settings(&init.settings);
+        let (mut prefs, problems) = Prefs::from_settings(&init.settings);
         for problem in &problems {
             host.info(format!("Cellaris {problem}"));
         }
+        let model_store = use_stored_model(&host, &mut prefs);
         let paths = Paths {
             plugin_root: PathBuf::from(&init.plugin_root),
             data_dir: PathBuf::from(&init.data_dir),
@@ -607,6 +724,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
 
         let mut state = State::new(prefs.clone(), paths.clone());
         state.setting_problems = problems;
+        state.model_store = model_store;
         let shared = Arc::new(Shared::new(state));
         let worker = Worker::new(host.clone(), Arc::clone(&shared), Arc::new(B::default()));
         let handle = std::thread::Builder::new()
@@ -747,6 +865,13 @@ impl<B: Backend> Plugin for Cellaris<B> {
             } => self.confirmed(&request_id, confirmed),
             HostEvent::JobCancelRequested { job_id } => self.cancel_readout(None, Some(&job_id)),
             HostEvent::DialogResult { request_id, paths } => self.chosen(&request_id, paths),
+            HostEvent::ModelFetched {
+                request_id,
+                path,
+                error,
+                cancelled,
+                ..
+            } => self.fetched(&request_id, path, error, cancelled),
             HostEvent::SurfaceClosed { surface_id } => {
                 let mut st = self.lock();
                 if st.sidebar.as_ref().is_some_and(|s| s.id() == surface_id) {
@@ -836,6 +961,11 @@ impl<B: Backend> Plugin for Cellaris<B> {
             "copy-readout" => self.copy_readout()?,
             "choose-model" => self.choose(Choice::Model)?,
             "choose-runtime" => self.choose(Choice::Runtime)?,
+            "toggle-download" => self.toggle_download(),
+            "download-model" => {
+                let text = |index: usize| args.get(index).and_then(Value::as_str).unwrap_or("");
+                self.download(text(0), text(1));
+            }
             "retry" => self.retry(),
             "close-panel" => self.close_panel(),
             _ => {}

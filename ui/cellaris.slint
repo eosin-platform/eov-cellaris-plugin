@@ -2,7 +2,7 @@
 // controls keep no state of their own, so what is shown is always what the
 // plugin holds. Callbacks arrive as Plugin::ui_callback.
 
-import { Slider, ScrollView } from "std-widgets.slint";
+import { LineEdit, Slider, ScrollView } from "std-widgets.slint";
 
 export struct MarkerRow {
     name: string,
@@ -182,6 +182,14 @@ export component CellarisPanel inherits Rectangle {
     in property <bool> has-region: false;
     in property <bool> readout-running: false;
     in property <bool> can-copy: false;
+    // Downloading the model through eov's model store.
+    in property <bool> can-download: true;
+    in property <bool> download-open: false;
+    in property <bool> download-busy: false;
+    in-out property <string> download-url: "";
+    in-out property <string> download-sha256: "";
+    in property <string> download-note: "";
+    in property <bool> download-note-error: false;
 
     callback toggle-overlay();
     callback set-opacity(float);
@@ -200,6 +208,8 @@ export component CellarisPanel inherits Rectangle {
     callback set-window(int, float, float);
     callback reset-window(int);
     callback edit-window(int);
+    callback toggle-download();
+    callback download-model(string, string);
 
     background: Colours.surface;
 
@@ -571,11 +581,47 @@ export component CellarisPanel inherits Rectangle {
                         root.choose-model();
                     }
                 }
+                if root.can-download: Action {
+                    text: "Download model\u{2026}";
+                    clicked => {
+                        root.toggle-download();
+                    }
+                }
                 Action {
                     text: "Choose runtime\u{2026}";
                     clicked => {
                         root.choose-runtime();
                     }
+                }
+            }
+            if root.download-open: VerticalLayout {
+                spacing: 6px;
+                Note {
+                    text: "Your site's copy of the model, and its SHA-256:";
+                }
+                url := LineEdit {
+                    text <=> root.download-url;
+                    placeholder-text: "https://\u{2026}/markers.onnx";
+                }
+                sha := LineEdit {
+                    text <=> root.download-sha256;
+                    placeholder-text: "SHA-256 (64 hex digits)";
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Action {
+                        text: "Download";
+                        enabled: !root.download-busy;
+                        horizontal-stretch: 0;
+                        clicked => {
+                            root.download-model(url.text, sha.text);
+                        }
+                    }
+                    Rectangle { }
+                }
+                Note {
+                    text: root.download-note;
+                    color: root.download-note-error ? Colours.error : Colours.muted;
                 }
             }
         }

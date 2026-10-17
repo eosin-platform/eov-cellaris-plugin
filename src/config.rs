@@ -50,6 +50,10 @@ pub struct Prefs {
     pub threads: usize,
     pub model_path: Option<String>,
     pub runtime_path: Option<String>,
+    /// Where the site keeps the model *Download model…* fetches, and its
+    /// SHA-256 (the download is checked against it).
+    pub model_url: Option<String>,
+    pub model_sha256: Option<String>,
     /// Run on slides without a pixel size as if they matched the model.
     pub assume_mpp: bool,
     /// Disk cache budget; 0 turns it off.
@@ -72,6 +76,8 @@ impl Default for Prefs {
             threads: 0,
             model_path: None,
             runtime_path: None,
+            model_url: None,
+            model_sha256: None,
             assume_mpp: false,
             disk_cache_mb: 2048,
             overlay_key: DEFAULT_OVERLAY_KEY.to_string(),
@@ -89,6 +95,8 @@ pub mod keys {
     pub const THREADS: &str = "threads";
     pub const MODEL: &str = "model_path";
     pub const RUNTIME: &str = "runtime_path";
+    pub const MODEL_URL: &str = "model_url";
+    pub const MODEL_SHA256: &str = "model_sha256";
     pub const ASSUME_MPP: &str = "assume_mpp";
     pub const DISK_CACHE: &str = "disk_cache_mb";
     pub const OVERLAY_KEY: &str = "overlay_key";
@@ -141,6 +149,16 @@ impl Prefs {
                     Some(path) if !path.is_empty() => prefs.runtime_path = Some(path.into()),
                     _ => bad(key, value),
                 },
+                keys::MODEL_URL => match value.as_str().map(str::trim) {
+                    Some(url) if !url.is_empty() && url.len() <= 4096 => {
+                        prefs.model_url = Some(url.into())
+                    }
+                    _ => bad(key, value),
+                },
+                keys::MODEL_SHA256 => match value.as_str().and_then(parse_sha256) {
+                    Some(sha256) => prefs.model_sha256 = Some(sha256),
+                    None => bad(key, value),
+                },
                 keys::ASSUME_MPP => match value.as_bool() {
                     Some(flag) => prefs.assume_mpp = flag,
                     _ => bad(key, value),
@@ -185,6 +203,12 @@ impl Prefs {
     pub fn is_visible(&self, marker: &str) -> bool {
         !self.hidden.iter().any(|hidden| hidden == marker)
     }
+}
+
+/// A SHA-256 as typed (64 hex digits, either case), in lower case.
+pub fn parse_sha256(text: &str) -> Option<String> {
+    let text = text.trim();
+    eov_plugin_api::protocol::is_sha256_hex(text).then(|| text.to_ascii_lowercase())
 }
 
 #[cfg(test)]
@@ -236,6 +260,32 @@ mod tests {
             prefs.windows.is_empty() && problems.len() == 1,
             "{problems:?}"
         );
+    }
+
+    #[test]
+    fn the_download_address_and_hash_are_checked() {
+        let sha = "AB".repeat(32);
+        let settings = Map::from_iter([
+            (
+                "model_url".to_string(),
+                json!(" https://models.example.org/markers.onnx "),
+            ),
+            ("model_sha256".to_string(), json!(sha)),
+        ]);
+        let (prefs, problems) = Prefs::from_settings(&settings);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            prefs.model_url.as_deref(),
+            Some("https://models.example.org/markers.onnx")
+        );
+        assert_eq!(prefs.model_sha256, Some("ab".repeat(32)));
+        let settings = Map::from_iter([
+            ("model_url".to_string(), json!("")),
+            ("model_sha256".to_string(), json!("abc")),
+        ]);
+        let (prefs, problems) = Prefs::from_settings(&settings);
+        assert_eq!((prefs.model_url, prefs.model_sha256), (None, None));
+        assert_eq!(problems.len(), 2, "{problems:?}");
     }
 
     #[test]

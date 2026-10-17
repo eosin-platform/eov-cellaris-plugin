@@ -326,6 +326,14 @@ pub struct State {
     pub tooltips: Support,
     /// The marker whose display window the panel is editing.
     pub window_editor: Option<usize>,
+    /// The panel's *Download model…* form is open.
+    pub download_open: bool,
+    /// The `model.fetch` request eov has not answered yet.
+    pub model_fetch: Option<String>,
+    /// Why the last download did not happen (eov told the user as well).
+    pub download_note: Option<String>,
+    /// Whether the host keeps models (`model.fetch`).
+    pub model_store: Support,
 }
 
 /// Whether the host has a method that came after API 1.0's first release.
@@ -372,6 +380,10 @@ impl State {
             displays_known: Support::Unknown,
             tooltips: Support::Unknown,
             window_editor: None,
+            download_open: false,
+            model_fetch: None,
+            download_note: None,
+            model_store: Support::Unknown,
         }
     }
 
