@@ -43,10 +43,12 @@ impl Headless {
             let slides: HashMap<FileId, Slide> = slides.iter().cloned().collect();
             let failures = AtomicUsize::new(fail_first.unwrap_or(0));
             state.region_reader = Some(Box::new(move |request: &RegionRequest| {
-                if failures
-                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-                    .is_ok()
-                {
+                // `fetch_update` is deprecated from Rust 1.99 in favour of
+                // `try_update`, which this crate's 1.88 MSRV cannot use.
+                #[allow(deprecated)]
+                let spent =
+                    failures.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+                if spent.is_ok() {
                     return Err("the slide file went away".into());
                 }
                 let slide = slides.get(&request.file_id).ok_or("no such slide")?;
