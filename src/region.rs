@@ -1,70 +1,197 @@
-//! Region readout: the prediction inside a drawn polygon, beside how much of it
-//! optical density alone reproduces.
+//! Region readout: the prediction inside a drawn region, beside how much of
+//! it optical density alone reproduces.
 //!
-//! The control is cellaris's tissue-density control, measured over 16px blocks
-//! (about a cell) because the viewer has no segmentation.
+//! The control is cellaris's tissue-density control, measured over blocks
+//! of [`BLOCK`] model pixels (5.2 µm, about a cell) because the viewer has
+//! no segmentation. Blocks come from the same feathered cells the overlay
+//! paints (CEL-5), and are defined in micrometres (CEL-3).
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use crate::blend::{BlockStat, CellData};
+use crate::geometry::{BLOCK, Grid, Idx};
+use crate::resample::TISSUE_OD;
+use eov_plugin_api::protocol::{Rect, Shape};
+use std::collections::BTreeSet;
 
-use abi_stable::std_types::{RString, RVec};
-use eov_plugin_api::ffi::{
-    HostApiVTable, UiPropertyFFI, ViewportOverlayPolygonFFI, ViewportOverlayVertexFFI,
-};
-use serde_json::json;
+/// Fewer tissue blocks than this give no r².
+pub const MIN_BLOCKS: usize = 30;
+/// Blocks must lie this fully on the slide to be measured.
+const MIN_COVERAGE: f32 = 0.99;
+/// Blocks with more dark (not bright-field) pixels than this are skipped.
+const MAX_DARK: f32 = 0.25;
 
-use crate::{model, overlay};
-
-const WINDOW: i64 = model::WINDOW as i64;
-const BLOCK: i64 = 16;
-/// Block optical density above which it counts as tissue: the gap between
-/// glass (~0.01) and tissue (from ~0.06) on CRC11. The 0.15 tile cutoff from
-/// `baseline.py` dropped 73% of tissue blocks, and with them the pale end of
-/// the density range, which pulled r² down.
-const TISSUE: f64 = 0.04;
-const MIN_BLOCKS: usize = 30;
-const MAX_WINDOWS: usize = 400;
-const OUTLINE: [u8; 3] = [0, 200, 255];
-const SIDEBAR_WIDTH: u32 = 300;
-pub const BUTTON_ID: &str = "cellaris_region";
-const UI_PATH: &str = "ui/readout.slint";
-const COMPONENT: &str = "CellarisReadout";
-
-pub struct Polygon {
-    vertices: Vec<(f64, f64)>,
+/// What a readout, or a cell's tooltip, makes of a block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockUse {
+    /// Glass, or not wholly on the slide: left out.
+    Skip,
+    /// Mostly near-black (not bright-field H&E): left out, and counted.
+    Dark,
+    /// Tissue: measured.
+    Tissue,
 }
 
-impl Polygon {
-    pub fn new(vertices: Vec<(f64, f64)>) -> Option<Self> {
-        (vertices.len() >= 3).then_some(Self { vertices })
+pub fn block_use(block: &BlockStat) -> BlockUse {
+    if block.coverage < MIN_COVERAGE || block.od < TISSUE_OD {
+        BlockUse::Skip
+    } else if block.dark > MAX_DARK {
+        BlockUse::Dark
+    } else {
+        BlockUse::Tissue
     }
+}
 
-    /// Even-odd rule, so a self-crossing outline still has an inside.
-    pub fn contains(&self, x: f64, y: f64) -> bool {
-        let mut inside = false;
-        let mut previous = self.vertices[self.vertices.len() - 1];
-        for &(xi, yi) in &self.vertices {
-            let (xj, yj) = previous;
-            if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
-                inside = !inside;
-            }
-            previous = (xi, yi);
+/// A region drawn or chosen on a slide, in level-0 pixels.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Region {
+    /// Rings of a polygon; the first is the outline, the rest are holes.
+    Polygon(Vec<Vec<[f64; 2]>>),
+    Rectangle(Rect),
+    Ellipse {
+        cx: f64,
+        cy: f64,
+        rx: f64,
+        ry: f64,
+    },
+}
+
+fn finite(points: &[[f64; 2]]) -> bool {
+    points.iter().all(|p| p[0].is_finite() && p[1].is_finite())
+}
+
+impl Region {
+    /// A region from a host shape; `None` for shapes without an inside.
+    pub fn from_shape(shape: &Shape) -> Option<Region> {
+        if !shape.is_valid() {
+            return None;
         }
-        inside
+        match shape {
+            Shape::Polygon { exterior, holes } if exterior.len() >= 3 && finite(exterior) => {
+                let mut rings = vec![exterior.clone()];
+                rings.extend(holes.iter().filter(|h| h.len() >= 3).cloned());
+                Some(Region::Polygon(rings))
+            }
+            Shape::Rectangle {
+                x,
+                y,
+                width,
+                height,
+            } if *width > 0.0 && *height > 0.0 => Some(Region::Rectangle(Rect {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+            })),
+            Shape::Ellipse { cx, cy, rx, ry } if *rx > 0.0 && *ry > 0.0 => Some(Region::Ellipse {
+                cx: *cx,
+                cy: *cy,
+                rx: *rx,
+                ry: *ry,
+            }),
+            _ => None,
+        }
     }
 
-    fn bounds(&self) -> (f64, f64, f64, f64) {
-        self.vertices.iter().fold(
-            (f64::MAX, f64::MAX, f64::MIN, f64::MIN),
-            |(left, top, right, bottom), &(x, y)| {
-                (left.min(x), top.min(y), right.max(x), bottom.max(y))
+    /// The shape drawn for the region.
+    pub fn to_shape(&self) -> Shape {
+        match self {
+            Region::Polygon(rings) => Shape::Polygon {
+                exterior: rings[0].clone(),
+                holes: rings[1..].to_vec(),
             },
-        )
+            Region::Rectangle(r) => Shape::Rectangle {
+                x: r.x,
+                y: r.y,
+                width: r.width,
+                height: r.height,
+            },
+            Region::Ellipse { cx, cy, rx, ry } => Shape::Ellipse {
+                cx: *cx,
+                cy: *cy,
+                rx: *rx,
+                ry: *ry,
+            },
+        }
+    }
+
+    /// Even-odd containment, so holes and self-crossing outlines work.
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        match self {
+            Region::Polygon(rings) => {
+                let mut inside = false;
+                for ring in rings {
+                    let mut previous = ring[ring.len() - 1];
+                    for &point in ring {
+                        let (xi, yi) = (point[0], point[1]);
+                        let (xj, yj) = (previous[0], previous[1]);
+                        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+                            inside = !inside;
+                        }
+                        previous = point;
+                    }
+                }
+                inside
+            }
+            Region::Rectangle(r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height,
+            Region::Ellipse { cx, cy, rx, ry } => {
+                let (u, v) = ((x - cx) / rx, (y - cy) / ry);
+                u * u + v * v <= 1.0
+            }
+        }
+    }
+
+    pub fn bounds(&self) -> Rect {
+        self.to_shape().bounds()
+    }
+
+    /// Area in level-0 pixels² (holes subtracted).
+    pub fn area(&self) -> f64 {
+        fn ring_area(ring: &[[f64; 2]]) -> f64 {
+            let mut twice = 0.0;
+            let mut previous = ring[ring.len() - 1];
+            for &point in ring {
+                twice += previous[0] * point[1] - point[0] * previous[1];
+                previous = point;
+            }
+            (twice / 2.0).abs()
+        }
+        match self {
+            Region::Polygon(rings) => {
+                let holes: f64 = rings[1..].iter().map(|ring| ring_area(ring)).sum();
+                (ring_area(&rings[0]) - holes).max(0.0)
+            }
+            Region::Rectangle(r) => r.width * r.height,
+            Region::Ellipse { rx, ry, .. } => std::f64::consts::PI * rx * ry,
+        }
+    }
+
+    /// The cells with at least one block centre inside the region, nearest
+    /// the region's centre first. Stops past `limit` cells.
+    pub fn cells(&self, grid: &Grid, limit: usize) -> Vec<Idx> {
+        let bounds = self.bounds();
+        let (cx, cy) = (
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        );
+        let per = grid.blocks_per_side();
+        let mut found = Vec::new();
+        for cell in grid.cells_by_distance(&bounds, cx, cy) {
+            let inside = (0..per * per).any(|index| {
+                let (x, y) = grid.block_center(cell, index % per, index / per);
+                self.contains(x, y)
+            });
+            if inside {
+                found.push(cell);
+                if found.len() > limit {
+                    break;
+                }
+            }
+        }
+        found
     }
 }
 
 /// Running least-squares of a marker on density.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Fit {
     n: f64,
     sx: f64,
@@ -89,11 +216,7 @@ impl Fit {
     }
 
     pub fn mean(&self) -> f64 {
-        if self.n == 0.0 {
-            0.0
-        } else {
-            self.sy / self.n
-        }
+        if self.n == 0.0 { 0.0 } else { self.sy / self.n }
     }
 
     /// Standard deviation of the prediction across blocks. Near zero, a low
@@ -108,8 +231,8 @@ impl Fit {
         }
     }
 
-    /// Share of the prediction's variance a straight line in density reproduces.
-    /// Squared, so a control pointing either way counts, as `control_strength`.
+    /// Share of the prediction's variance a straight line in density
+    /// reproduces. Squared, so a control pointing either way counts.
     pub fn r2(&self) -> Option<f64> {
         if self.blocks() < MIN_BLOCKS {
             return None;
@@ -121,458 +244,218 @@ impl Fit {
     }
 }
 
-/// Blocks of a window whose centre is inside the polygon and which lie wholly
-/// on the slide.
-fn blocks(
-    origin: (i64, i64),
-    polygon: &Polygon,
-    image: (f64, f64),
-) -> impl Iterator<Item = (usize, usize)> + '_ {
-    let per = (WINDOW / BLOCK) as usize;
-    (0..per)
-        .flat_map(move |by| (0..per).map(move |bx| (bx, by)))
-        .filter(move |&(bx, by)| {
-            let x = origin.0 + bx as i64 * BLOCK;
-            let y = origin.1 + by as i64 * BLOCK;
-            (x + BLOCK) as f64 <= image.0
-                && (y + BLOCK) as f64 <= image.1
-                && polygon.contains((x + BLOCK / 2) as f64, (y + BLOCK / 2) as f64)
-        })
+/// Where a readout stands.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReadoutState {
+    /// Waiting for the user to accept a long run.
+    Confirming,
+    Running,
+    Done,
+    Cancelled,
+    Failed(String),
 }
 
-/// Window origins on a 256px grid that hold at least one block of the region.
-/// Stops one past `MAX_WINDOWS`, so a huge outline is refused without a full walk.
-pub fn windows(polygon: &Polygon, image: (f64, f64)) -> Vec<(i64, i64)> {
-    let (left, top, right, bottom) = polygon.bounds();
-    let snap = |v: f64| (v.max(0.0) / WINDOW as f64).floor() as i64 * WINDOW;
-    let mut found = Vec::new();
-    let mut y = snap(top);
-    while (y as f64) < bottom.min(image.1) {
-        let mut x = snap(left);
-        while (x as f64) < right.min(image.0) {
-            if blocks((x, y), polygon, image).next().is_some() {
-                found.push((x, y));
-                if found.len() > MAX_WINDOWS {
-                    return found;
-                }
-            }
-            x += WINDOW;
-        }
-        y += WINDOW;
-    }
-    found
+/// The measurement of one region.
+#[derive(Clone, Debug)]
+pub struct Readout {
+    pub id: u64,
+    pub region: Region,
+    /// Cells the region needs, nearest its centre first.
+    pub cells: Vec<Idx>,
+    pub remaining: BTreeSet<Idx>,
+    pub fits: Vec<Fit>,
+    pub recon_sum: f64,
+    pub recon_blocks: usize,
+    /// Blocks above the model's reconstruction-error threshold.
+    pub unusual_blocks: usize,
+    /// Cells skipped as not bright-field.
+    pub dark_cells: usize,
+    /// Tissue blocks skipped for dark (not bright-field) pixels.
+    pub dark_blocks: usize,
+    pub state: ReadoutState,
+    /// Windows the region needed when it was drawn.
+    pub windows: usize,
 }
 
-fn optical_density() -> &'static [f64; 256] {
-    static TABLE: std::sync::OnceLock<[f64; 256]> = std::sync::OnceLock::new();
-    TABLE.get_or_init(|| std::array::from_fn(|c| -((c as f64 + 1.0) / 256.0).log10()))
-}
-
-/// Adds one window's tissue blocks to `fits`, one fit per marker.
-#[allow(clippy::too_many_arguments)]
-pub fn measure(
-    rgba: &[u8],
-    predicted: &[f32],
-    origin: (i64, i64),
-    polygon: &Polygon,
-    image: (f64, f64),
-    markers: &[overlay::Marker],
-    raw_intensity: bool,
-    fits: &mut [Fit],
-) {
-    let side = WINDOW as usize;
-    let plane = side * side;
-    let block = BLOCK as usize;
-    let pixels = (block * block) as f64;
-    let channels = markers.iter().map(|m| m.channel + 1).max().unwrap_or(0);
-    if rgba.len() < plane * 4 || predicted.len() < channels * plane {
-        return;
-    }
-    let od = optical_density();
-    let mut values = vec![0f64; markers.len()];
-
-    for (bx, by) in blocks(origin, polygon, image) {
-        let mut density = 0.0;
-        values.fill(0.0);
-        for py in by * block..(by + 1) * block {
-            for px in bx * block..(bx + 1) * block {
-                let i = py * side + px;
-                let rgb = &rgba[i * 4..i * 4 + 3];
-                density += (od[rgb[0] as usize] + od[rgb[1] as usize] + od[rgb[2] as usize]) / 3.0;
-                for (value, marker) in values.iter_mut().zip(markers) {
-                    let raw = predicted[marker.channel * plane + i];
-                    *value += f64::from(overlay::intensity(raw, raw_intensity));
-                }
-            }
-        }
-        density /= pixels;
-        if density < TISSUE {
-            continue;
-        }
-        for (fit, value) in fits.iter_mut().zip(&values) {
-            fit.add(density, value / pixels);
+impl Readout {
+    pub fn new(id: u64, region: Region, cells: Vec<Idx>, markers: usize, windows: usize) -> Self {
+        Self {
+            id,
+            remaining: cells.iter().copied().collect(),
+            cells,
+            region,
+            fits: vec![Fit::default(); markers],
+            recon_sum: 0.0,
+            recon_blocks: 0,
+            unusual_blocks: 0,
+            dark_cells: 0,
+            dark_blocks: 0,
+            state: ReadoutState::Running,
+            windows,
         }
     }
-}
 
-// ---------------------------------------------------------------------------
-// State and worker
-// ---------------------------------------------------------------------------
+    pub fn is_running(&self) -> bool {
+        self.state == ReadoutState::Running
+    }
 
-struct Readout {
-    file_id: i32,
-    vertices: Vec<(f64, f64)>,
-    fits: Vec<Fit>,
-    done: usize,
-    total: usize,
-    mpp: Option<f64>,
-    message: Option<String>,
-    running: bool,
-}
-
-static READOUT: Mutex<Option<Readout>> = Mutex::new(None);
-static GENERATION: AtomicU64 = AtomicU64::new(0);
-
-/// Applies `change` if no newer region has replaced this one, then redraws the panel.
-fn update(generation: u64, host: &HostApiVTable, change: impl FnOnce(&mut Readout)) -> bool {
-    {
-        let mut slot = READOUT.lock().unwrap();
-        match slot.as_mut() {
-            Some(readout) if GENERATION.load(Ordering::SeqCst) == generation => change(readout),
-            _ => return false,
+    /// Share of the region's cells measured.
+    pub fn progress(&self) -> f32 {
+        if self.cells.is_empty() {
+            1.0
+        } else {
+            1.0 - self.remaining.len() as f32 / self.cells.len() as f32
         }
     }
-    let _ = (host.refresh_sidebar)(host.context);
-    true
-}
 
-fn fail(generation: u64, host: &HostApiVTable, message: String) {
-    update(generation, host, |readout| {
-        readout.message = Some(message);
-        readout.running = false;
-    });
-}
-
-/// EOV v0.3.1 restores the last sidebar from an absolute path into the cache
-/// of whichever build was installed then, so after an update the open panel
-/// can be an older UI that refuses this build's rows. Anything that is not
-/// this build's own file is replaced; a matching request would toggle it shut.
-pub fn open_sidebar(host: &HostApiVTable) {
-    const SOURCE: &str = include_str!("../ui/readout.slint");
-    let snapshot = (host.get_snapshot)(host.context);
-    let current = snapshot
-        .active_sidebar
-        .as_ref()
-        .into_option()
-        .filter(|sidebar| sidebar.component.as_str() == COMPONENT)
-        .is_some_and(|sidebar| {
-            std::fs::read_to_string(sidebar.ui_path.as_str()).is_ok_and(|text| text == SOURCE)
-        });
-    if !current {
-        let _ = (host.show_sidebar)(
-            host.context,
-            RString::from(BUTTON_ID),
-            SIDEBAR_WIDTH,
-            RString::from(UI_PATH),
-            RString::from(COMPONENT),
-        );
-    }
-}
-
-/// Called from the host's placement callback: record, then work elsewhere.
-pub fn start(host: HostApiVTable, file_id: i32, image: (f64, f64), vertices: Vec<(f64, f64)>) {
-    let Some(polygon) = Polygon::new(vertices.clone()) else {
-        return;
-    };
-    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-    *READOUT.lock().unwrap() = Some(Readout {
-        file_id,
-        vertices,
-        fits: vec![Fit::default(); overlay::DEFAULT_MARKERS.len()],
-        done: 0,
-        total: 0,
-        mpp: None,
-        message: None,
-        running: true,
-    });
-    std::thread::spawn(move || run(host, generation, file_id, image, polygon));
-}
-
-fn run(host: HostApiVTable, generation: u64, file_id: i32, image: (f64, f64), polygon: Polygon) {
-    open_sidebar(&host);
-    let _ = (host.request_render)(host.context);
-
-    let snapshot = (host.get_snapshot)(host.context);
-    let mpp = snapshot
-        .open_files
-        .iter()
-        .find(|file| file.file_id == file_id)
-        .and_then(|file| file.mpp_x.as_ref().into_option().copied());
-
-    let windows = windows(&polygon, image);
-    if windows.is_empty() {
-        return fail(
-            generation,
-            &host,
-            "No part of that region is on the slide.".into(),
-        );
-    }
-    if windows.len() > MAX_WINDOWS {
-        return fail(
-            generation,
-            &host,
-            format!(
-                "That region needs more than {MAX_WINDOWS} windows, over eight minutes on a \
-                 CPU. Draw a smaller one."
-            ),
-        );
-    }
-
-    let model = match model::shared() {
-        Ok(model) => model,
-        Err(error) => {
-            return fail(
-                generation,
-                &host,
-                format!("The model did not load: {error}"),
-            )
-        }
-    };
-    let (selected, raw_intensity) = {
-        let loaded = model.lock().unwrap();
-        (
-            overlay::select(&loaded.channel_names, &overlay::DEFAULT_MARKERS),
-            loaded.raw_intensity,
-        )
-    };
-    let markers = match selected {
-        Ok(markers) => markers,
-        Err(error) => return fail(generation, &host, error),
-    };
-
-    let total = windows.len();
-    update(generation, &host, |readout| {
-        readout.total = total;
-        readout.mpp = mpp;
-    });
-
-    let mut fits = vec![Fit::default(); markers.len()];
-    for (done, &origin) in windows.iter().enumerate() {
-        if GENERATION.load(Ordering::SeqCst) != generation {
+    /// Adds a finished cell's blocks inside the region. Each cell counts
+    /// once; cells the region does not need are ignored.
+    pub fn consume(
+        &mut self,
+        cell: Idx,
+        data: &CellData,
+        grid: &Grid,
+        recon_threshold: Option<f32>,
+    ) {
+        if !self.remaining.remove(&cell) {
             return;
         }
-        let read = (host.read_region)(
-            host.context,
-            file_id,
-            0,
-            origin.0,
-            origin.1,
-            WINDOW as u32,
-            WINDOW as u32,
-        );
-        let rgba = match read.into_result() {
-            Ok(rgba) => rgba,
-            Err(error) => {
-                return fail(
-                    generation,
-                    &host,
-                    format!("The host refused a window read: {error}"),
-                )
+        match data {
+            CellData::Empty => {}
+            CellData::Dark => self.dark_cells += 1,
+            CellData::Tissue(tissue) => {
+                let per = grid.stride / BLOCK;
+                for (index, block) in tissue.blocks.iter().enumerate() {
+                    let usage = block_use(block);
+                    if usage == BlockUse::Skip {
+                        continue;
+                    }
+                    let (x, y) = grid.block_center(cell, index % per, index / per);
+                    if !self.region.contains(x, y) {
+                        continue;
+                    }
+                    if usage == BlockUse::Dark {
+                        self.dark_blocks += 1;
+                        continue;
+                    }
+                    for (fit, mean) in self.fits.iter_mut().zip(&block.means) {
+                        fit.add(f64::from(block.od), f64::from(*mean));
+                    }
+                    if let Some(recon) = block.recon {
+                        self.recon_sum += f64::from(recon);
+                        self.recon_blocks += 1;
+                        if recon_threshold.is_some_and(|t| recon > t) {
+                            self.unusual_blocks += 1;
+                        }
+                    }
+                }
             }
-        };
-        let predicted = match model.lock().unwrap().predict(rgba.as_slice()) {
-            Ok(values) => values,
-            Err(error) => return fail(generation, &host, format!("Inference failed: {error}")),
-        };
-        measure(
-            rgba.as_slice(),
-            &predicted,
-            origin,
-            &polygon,
-            image,
-            &markers,
-            raw_intensity,
-            &mut fits,
-        );
-        let so_far = fits.clone();
-        update(generation, &host, |readout| {
-            readout.fits = so_far;
-            readout.done = done + 1;
-        });
-    }
-    update(generation, &host, |readout| readout.running = false);
-}
-
-pub fn clear(host: Option<HostApiVTable>) {
-    GENERATION.fetch_add(1, Ordering::SeqCst);
-    *READOUT.lock().unwrap() = None;
-    if let Some(host) = host {
-        let _ = (host.request_render)(host.context);
-        let _ = (host.refresh_sidebar)(host.context);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// What the host asks for
-// ---------------------------------------------------------------------------
-
-pub fn polygons(file_id: i32) -> RVec<ViewportOverlayPolygonFFI> {
-    let slot = READOUT.lock().unwrap();
-    let Some(readout) = slot.as_ref().filter(|r| r.file_id == file_id) else {
-        return RVec::new();
-    };
-    let mut out = RVec::new();
-    out.push(ViewportOverlayPolygonFFI {
-        annotation_id: RString::from("cellaris-region"),
-        vertices: readout
-            .vertices
-            .iter()
-            .map(|&(x_level0, y_level0)| ViewportOverlayVertexFFI { x_level0, y_level0 })
-            .collect(),
-        fill_red: OUTLINE[0],
-        fill_green: OUTLINE[1],
-        fill_blue: OUTLINE[2],
-    });
-    out
-}
-
-pub fn sidebar_properties() -> RVec<UiPropertyFFI> {
-    let slot = READOUT.lock().unwrap();
-    let (status, detail, progress, rows) = match slot.as_ref() {
-        None => (
-            "Pick the region tool and draw a polygon round some tissue.".to_string(),
-            String::new(),
-            0.0,
-            Vec::new(),
-        ),
-        Some(readout) => describe(readout),
-    };
-    let property = |name: &str, value: serde_json::Value| UiPropertyFFI {
-        name: name.into(),
-        json_value: value.to_string().into(),
-    };
-    RVec::from(vec![
-        property("status", json!(status)),
-        property("detail", json!(detail)),
-        property("progress", json!(progress)),
-        property("rows", json!(rows)),
-        property("has-region", json!(slot.is_some())),
-    ])
-}
-
-fn describe(readout: &Readout) -> (String, String, f64, Vec<serde_json::Value>) {
-    if let Some(message) = &readout.message {
-        return (message.clone(), String::new(), 0.0, Vec::new());
-    }
-    let blocks = readout.fits.first().map_or(0, Fit::blocks);
-    let progress = if readout.total == 0 {
-        0.0
-    } else {
-        readout.done as f64 / readout.total as f64
-    };
-
-    let status = if readout.running {
-        format!("Measuring: {} of {} windows", readout.done, readout.total)
-    } else {
-        match readout.mpp {
-            Some(mpp) => {
-                let side = BLOCK as f64 * mpp / 1000.0;
-                format!(
-                    "{blocks} tissue blocks, {:.3} mm²",
-                    blocks as f64 * side * side
-                )
-            }
-            None => format!("{blocks} tissue blocks"),
         }
-    };
-    let detail = if readout.running {
-        "256px windows at level 0, about 1.2 s each on a CPU.".to_string()
-    } else if blocks < MIN_BLOCKS {
-        format!("Fewer than {MIN_BLOCKS} tissue blocks, too few for a density r².")
-    } else {
-        String::new()
-    };
+        if self.remaining.is_empty() && self.state == ReadoutState::Running {
+            self.state = ReadoutState::Done;
+        }
+    }
 
-    let rows = if blocks == 0 {
-        Vec::new()
-    } else {
-        overlay::DEFAULT_MARKERS
-            .iter()
-            .zip(&readout.fits)
-            .map(|((name, colour), fit)| {
-                let lane = |c: f32| (c * 255.0).round() as i32;
-                json!({
-                    "name": name,
-                    "red": lane(colour[0]),
-                    "green": lane(colour[1]),
-                    "blue": lane(colour[2]),
-                    "mean": format!("{:.2}", fit.mean()),
-                    "spread": format!("{:.2}", fit.spread()),
-                    "density": fit.r2().map_or("—".to_string(), |r2| format!("{r2:.2}")),
-                })
-            })
-            .collect()
-    };
-    (status, detail, progress, rows)
+    /// Tissue blocks measured so far.
+    pub fn blocks(&self) -> usize {
+        self.fits.first().map_or(0, Fit::blocks)
+    }
+
+    pub fn mean_recon(&self) -> Option<f64> {
+        (self.recon_blocks > 0).then(|| self.recon_sum / self.recon_blocks as f64)
+    }
+}
+
+/// `2026-10-15T12:34:56Z` for a time since the Unix epoch.
+pub fn utc_timestamp(since_epoch: std::time::Duration) -> String {
+    let secs = since_epoch.as_secs() as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    // Civil date from days (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem / 60 % 60,
+        rem % 60
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blend::{BlockStat, TissueCell};
+    use crate::geometry::Scale;
+    use eov_plugin_api::protocol::FileInfo;
 
-    const SLIDE: (f64, f64) = (100_000.0, 100_000.0);
+    fn grid(mpp: f64) -> Grid {
+        let info = FileInfo {
+            file_id: 1,
+            width: 100_000,
+            height: 100_000,
+            mpp_x: Some(mpp),
+            mpp_y: Some(mpp),
+            ..Default::default()
+        };
+        Grid::new(&info, Scale::of(&info, 0.325, false).unwrap(), 0.325, 256).unwrap()
+    }
 
-    fn square(left: f64, top: f64, side: f64) -> Polygon {
-        Polygon::new(vec![
-            (left, top),
-            (left + side, top),
-            (left + side, top + side),
-            (left, top + side),
-        ])
+    fn square(left: f64, top: f64, side: f64) -> Region {
+        Region::from_shape(&Shape::Polygon {
+            exterior: vec![
+                [left, top],
+                [left + side, top],
+                [left + side, top + side],
+                [left, top + side],
+            ],
+            holes: vec![],
+        })
         .unwrap()
     }
 
-    fn orion() -> Vec<String> {
-        [
-            "Hoechst",
-            "AF1",
-            "CD31",
-            "CD45",
-            "CD68",
-            "Argo550",
-            "CD4",
-            "FOXP3",
-            "CD8a",
-            "CD45RO",
-            "CD20",
-            "PD-L1",
-            "CD3e",
-            "CD163",
-            "E-cadherin",
-            "PD-1",
-            "Ki67",
-            "Pan-CK",
-            "SMA",
-        ]
-        .map(String::from)
-        .to_vec()
-    }
-
     #[test]
-    fn a_concave_outline_excludes_its_notch() {
-        let l_shape = Polygon::new(vec![
-            (0.0, 0.0),
-            (10.0, 0.0),
-            (10.0, 4.0),
-            (4.0, 4.0),
-            (4.0, 10.0),
-            (0.0, 10.0),
-        ])
+    fn a_concave_outline_excludes_its_notch_and_holes_are_outside() {
+        let l_shape = Region::from_shape(&Shape::Polygon {
+            exterior: vec![
+                [0.0, 0.0],
+                [10.0, 0.0],
+                [10.0, 4.0],
+                [4.0, 4.0],
+                [4.0, 10.0],
+                [0.0, 10.0],
+            ],
+            holes: vec![],
+        })
         .unwrap();
         assert!(l_shape.contains(2.0, 8.0));
         assert!(l_shape.contains(8.0, 2.0));
         assert!(!l_shape.contains(8.0, 8.0), "the notch counted as inside");
-        assert!(Polygon::new(vec![(0.0, 0.0), (1.0, 1.0)]).is_none());
+
+        let ring = Region::from_shape(&Shape::Polygon {
+            exterior: vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]],
+            holes: vec![vec![[3.0, 3.0], [7.0, 3.0], [7.0, 7.0], [3.0, 7.0]]],
+        })
+        .unwrap();
+        assert!(ring.contains(1.0, 1.0));
+        assert!(!ring.contains(5.0, 5.0), "the hole counted as inside");
+        assert!((ring.area() - 84.0).abs() < 1e-9);
+
+        assert!(Region::from_shape(&Shape::Point { x: 0.0, y: 0.0 }).is_none());
+        let ellipse = Region::from_shape(&Shape::Ellipse {
+            cx: 0.0,
+            cy: 0.0,
+            rx: 10.0,
+            ry: 5.0,
+        })
+        .unwrap();
+        assert!(ellipse.contains(9.0, 0.0) && !ellipse.contains(0.0, 6.0));
     }
 
     #[test]
@@ -581,10 +464,7 @@ mod tests {
         for i in 0..50 {
             line.add(i as f64, 3.0 - 2.0 * i as f64);
         }
-        assert!(
-            (line.r2().unwrap() - 1.0).abs() < 1e-9,
-            "a falling line is still density"
-        );
+        assert!((line.r2().unwrap() - 1.0).abs() < 1e-9);
 
         let mut few = Fit::default();
         for i in 0..MIN_BLOCKS - 1 {
@@ -598,96 +478,98 @@ mod tests {
         }
         assert!(flat.r2().is_none(), "a constant prediction has no r²");
         assert!((flat.mean() - 5.0).abs() < 1e-12);
-        assert!(flat.spread() < 1e-6, "a constant prediction has spread");
+        assert!(flat.spread() < 1e-6);
 
         let mut two = Fit::default();
         two.add(0.0, 4.0);
         two.add(0.0, 6.0);
-        assert!((two.spread() - 1.0).abs() < 1e-12, "4 and 6 spread by 1");
+        assert!((two.spread() - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn windows_follow_the_region_and_stay_on_the_slide() {
-        assert_eq!(windows(&square(10.0, 10.0, 100.0), SLIDE), vec![(0, 0)]);
-        assert_eq!(windows(&square(200.0, 200.0, 100.0), SLIDE).len(), 4);
-        assert!(windows(&square(-500.0, -500.0, 100.0), SLIDE).is_empty());
-
-        let edge = (300.0, 300.0);
-        let found = windows(&square(0.0, 0.0, 1000.0), edge);
-        assert_eq!(found, vec![(0, 0), (256, 0), (0, 256), (256, 256)]);
-        assert_eq!(
-            blocks((256, 256), &square(0.0, 0.0, 1000.0), edge).count(),
-            4,
-            "blocks hanging off the slide were kept"
-        );
-
-        let huge = windows(&square(0.0, 0.0, 99_000.0), SLIDE);
-        assert_eq!(
-            huge.len(),
-            MAX_WINDOWS + 1,
-            "a huge region was walked in full"
-        );
+    fn a_region_needs_the_cells_under_its_blocks_only() {
+        let g = grid(0.325);
+        // One cell is 128 px at 0.325 µm/px: a 100 px square inside cell
+        // (1, 1) needs that cell alone.
+        let cells = square(140.0, 140.0, 100.0).cells(&g, 100);
+        assert_eq!(cells, vec![Idx::new(1, 1)]);
+        let big = square(0.0, 0.0, 128.0 * 30.0).cells(&g, 100);
+        assert_eq!(big.len(), 101, "the walk did not stop at the limit");
     }
 
-    /// A window whose grey level changes by column, with a white first column,
-    /// and a prediction given the block's density and row.
-    fn synthetic(prediction: impl Fn(f64, usize) -> f32) -> Vec<Fit> {
-        let side = WINDOW as usize;
-        let block = BLOCK as usize;
-        let per = side / block;
-        let mut rgba = vec![255u8; side * side * 4];
-        let mut predicted = vec![0f32; 19 * side * side];
-        let markers = overlay::select(&orion(), &overlay::DEFAULT_MARKERS).unwrap();
-        let od = optical_density();
+    fn tissue(per: usize, od: f32, means: impl Fn(usize) -> f32) -> CellData {
+        CellData::Tissue(std::sync::Arc::new(TissueCell {
+            planes: vec![],
+            mask: vec![],
+            blocks: (0..per * per)
+                .map(|index| BlockStat {
+                    od,
+                    coverage: 1.0,
+                    dark: 0.0,
+                    means: vec![means(index)],
+                    recon: Some(0.1),
+                })
+                .collect(),
+        }))
+    }
 
-        for by in 0..per {
-            for bx in 0..per {
-                let grey: u8 = if bx == 0 { 255 } else { 40 + (bx * 7) as u8 };
-                for py in by * block..(by + 1) * block {
-                    for px in bx * block..(bx + 1) * block {
-                        let i = py * side + px;
-                        rgba[i * 4..i * 4 + 3].fill(grey);
-                        for marker in &markers {
-                            predicted[marker.channel * side * side + i] =
-                                prediction(od[grey as usize], by);
-                        }
-                    }
+    #[test]
+    fn blocks_outside_the_region_glass_and_off_slide_are_left_out() {
+        let g = grid(0.325);
+        // Cell (0, 0) spans 0..128; the region keeps its left half.
+        let region = square(0.0, 0.0, 64.0);
+        let cells = region.cells(&g, 10);
+        let mut readout = Readout::new(1, region, cells.clone(), 1, 4);
+        readout.consume(cells[0], &tissue(8, 0.3, |i| i as f32), &g, Some(0.05));
+        // 4 × 4 of the cell's 8 × 8 blocks have their centre inside.
+        assert_eq!(readout.blocks(), 16);
+        assert_eq!(readout.state, ReadoutState::Done);
+        assert_eq!(readout.unusual_blocks, 16);
+        // A second delivery of the same cell is ignored.
+        readout.consume(cells[0], &tissue(8, 0.3, |_| 0.0), &g, None);
+        assert_eq!(readout.blocks(), 16);
+
+        let mut glass = Readout::new(2, square(0.0, 0.0, 64.0), cells.clone(), 1, 4);
+        glass.consume(cells[0], &tissue(8, 0.01, |_| 1.0), &g, None);
+        assert_eq!(glass.blocks(), 0, "glass blocks were measured");
+    }
+
+    #[test]
+    fn blocks_are_the_same_tissue_on_every_scanner() {
+        // A 0.5 mm square holds the same number of blocks at 0.25 and 0.5
+        // µm/px, because blocks are 5.2 µm, not 16 slide pixels.
+        let counts: Vec<usize> = [0.25, 0.5]
+            .iter()
+            .map(|mpp| {
+                let g = grid(*mpp);
+                let side = 500.0 / mpp;
+                let region = square(10_000.0, 10_000.0, side);
+                let cells = region.cells(&g, 10_000);
+                let mut readout = Readout::new(1, region, cells.clone(), 1, 0);
+                for cell in cells {
+                    readout.consume(cell, &tissue(8, 0.3, |_| 1.0), &g, None);
                 }
-            }
+                readout.blocks()
+            })
+            .collect();
+        let expected = (500.0f64 / (16.0 * 0.325)).powi(2);
+        for count in &counts {
+            let off = (*count as f64 - expected).abs() / expected;
+            assert!(off < 0.03, "{count} blocks, expected about {expected:.0}");
         }
-        let mut fits = vec![Fit::default(); markers.len()];
-        measure(
-            &rgba,
-            &predicted,
-            (0, 0),
-            &square(0.0, 0.0, 256.0),
-            SLIDE,
-            &markers,
-            true,
-            &mut fits,
-        );
-        fits
     }
 
     #[test]
-    fn a_prediction_that_is_density_scores_one_and_one_that_is_not_scores_low() {
-        let as_raw = |target: f64| (5.0 * target.sinh()) as f32;
-
-        let density_map = synthetic(|density, _| as_raw(4.0 + 2.0 * density));
-        let blocks = density_map[0].blocks();
+    fn timestamps_are_utc_dates() {
+        use std::time::Duration;
+        assert_eq!(utc_timestamp(Duration::ZERO), "1970-01-01T00:00:00Z");
         assert_eq!(
-            blocks,
-            16 * 15,
-            "white blocks were not left out as background"
+            utc_timestamp(Duration::from_secs(1_791_984_896)),
+            "2026-10-14T13:34:56Z"
         );
-        assert!(density_map[0].r2().unwrap() > 0.999);
-
-        // Every row meets every grey once, so this one shares nothing with density.
-        let unrelated = synthetic(|_, row| as_raw(4.0 + row as f64 / 16.0));
-        assert!(
-            unrelated[0].r2().unwrap() < 1e-6,
-            "an unrelated prediction scored {:.3}",
-            unrelated[0].r2().unwrap()
+        assert_eq!(
+            utc_timestamp(Duration::from_secs(951_782_400)),
+            "2000-02-29T00:00:00Z"
         );
     }
 }

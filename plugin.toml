@@ -1,12 +1,16 @@
 id = "cellaris"
 name = "Cellaris"
-version = "0.1.0"
+version = "1.0.0"
+description = "Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, with a region readout. Research use only: predictions are not measurements and are not for diagnosis."
+repository = "https://github.com/eosin-platform/eov-cellaris-plugin"
+api = ">=1.0, <2"
+
+[environment]
+version = ">=1.0.0, <2.0.0"
 
 [icon]
 kind = "svg"
-data = """<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 4v2M12 18v2M4 12h2M18 12h2\"/></svg>"""
+data = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2"/></svg>"""
 
-[[toolbar_buttons]]
-button_id = "toggle_cellaris"
-tooltip = "Cellaris marker overlay"
-action_id = "toggle_cellaris"
+[ui]
+slint = ">=1.17"

@@ -1,776 +1,994 @@
-//! Cellaris: predicted multiplex-IF markers overlaid on H&E.
+//! Cellaris: predicted multiplex-IF markers overlaid on H&E, for eov.
 //!
-//! The model runs on 256px windows at a 128px stride, always at the size it was
-//! trained on, and every 128px cell is the feather-weighted blend of the four
-//! windows over it -- the method measured at a seam score of 1.01 in Python.
-//! Windows are read at level 0 and predicted on a worker thread; the filter
-//! only blends and paints. The region readout is in `region`.
+//! **Research use only.** The overlay shows what a model *predicts* the
+//! Orion immunofluorescence channels would look like; it is not a
+//! measurement and must not be used for diagnosis. Every view of a
+//! prediction carries that statement.
+//!
+//! - [`geometry`] maps each slide onto a grid at the model's own pixel size.
+//! - [`resample`] reads windows onto it; [`blend`] feathers them into cells.
+//! - [`model`] and [`runtime`] load the ONNX model and ONNX Runtime.
+//! - [`engine`] runs it all on a worker thread; [`present`] shows it.
+//! - [`region`] measures a drawn region on the same blended cells.
+//! - [`batch`] predicts whole slides without a window, for `eov batch`.
 
-mod model;
-mod overlay;
-mod region;
+pub mod batch;
+pub mod blend;
+pub mod cache;
+pub mod config;
+pub mod engine;
+pub mod geometry;
+pub mod markers;
+pub mod model;
+pub mod present;
+pub mod region;
+pub mod resample;
+pub mod runtime;
 
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex, OnceLock};
+#[cfg(test)]
+mod tests;
+
+use config::{
+    OVERLAY_BUTTON, OVERLAY_ICON, PANEL_BUTTON, PANEL_COMPONENT, PANEL_ICON, PANEL_UI, PANEL_WIDTH,
+    Prefs, REGION_ICON, REGION_TOOL, keys,
+};
+use engine::{
+    FileState, ModelState, Paths, Shared, State, Support, Worker, pred_layer, region_layer,
+    values_layer,
+};
+use eov_plugin_api::prelude::*;
+use markers::DisplayMode;
+use model::{Backend, OrtBackend};
+use region::{ReadoutState, Region};
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use abi_stable::std_types::{ROption, RString, RVec};
-use eov_plugin_api::ffi::{
-    ActionResponseFFI, GpuFilterContextFFI, HostApiVTable, HostToolModeFFI, HudToolbarButtonFFI,
-    PluginVTable, ToolbarButtonFFI, UiPropertyFFI, ViewportContextMenuItemFFI, ViewportFilterFFI,
-    ViewportOverlayComponentRequestFFI, ViewportOverlayPointFFI, ViewportOverlayPolygonFFI,
-    ViewportOverlayVertexFFI, ViewportSnapshotFFI,
-};
-
-const FILTER_ID: &str = "cellaris_markers";
-const WINDOW: i64 = model::WINDOW as i64;
-const STRIDE: i64 = WINDOW / 2;
-const MAX_CELLS: usize = 600;
-const MAX_WINDOWS: usize = 800;
-const MAX_CELL_CACHE: usize = 2000;
-const ALPHA: u16 = 170;
-const REDRAW_INTERVAL: Duration = Duration::from_millis(150);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Key {
-    file_id: i32,
-    x: i64,
-    y: i64,
+/// What an open file dialog is choosing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Choice {
+    Model,
+    Runtime,
 }
 
-type Planes = Arc<Vec<u8>>;
-
-struct Shared {
-    /// Scaled marker planes per window, `markers x WINDOW x WINDOW`.
-    windows: Mutex<HashMap<Key, Planes>>,
-    /// Blended RGB per cell, `STRIDE x STRIDE x 3`.
-    cells: Mutex<HashMap<Key, Planes>>,
-    markers: Mutex<Option<Vec<overlay::Marker>>>,
-    requested: Mutex<HashSet<Key>>,
-    /// Windows the current view needs; the worker skips anything else.
-    visible: Mutex<HashSet<Key>>,
-    host: Mutex<Option<HostApiVTable>>,
-    failure: Mutex<Option<String>>,
+/// The plugin, generic over how models are loaded so tests can run without
+/// ONNX Runtime.
+pub struct Cellaris<B: Backend = OrtBackend> {
+    host: Host,
+    shared: Arc<Shared>,
+    worker: Mutex<Option<JoinHandle<()>>>,
+    dialogs: Mutex<Vec<(String, Choice)>>,
+    /// Without a window (`eov batch`): only batch slides are handled.
+    headless: bool,
+    batch: batch::BatchRunner,
+    /// For batch runs: the directories, and the settings eov started with.
+    paths: Paths,
+    prefs: Prefs,
+    _backend: PhantomData<fn() -> B>,
 }
 
-static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
-static ENABLED: AtomicBool = AtomicBool::new(false);
-static SENDER: OnceLock<Mutex<Option<Sender<Key>>>> = OnceLock::new();
-static PENDING: AtomicUsize = AtomicUsize::new(0);
+eov_plugin_api::export_plugin!(Cellaris<OrtBackend>);
 
-fn shared() -> &'static Arc<Shared> {
-    SHARED.get_or_init(|| {
-        Arc::new(Shared {
-            windows: Mutex::new(HashMap::new()),
-            cells: Mutex::new(HashMap::new()),
-            markers: Mutex::new(None),
-            requested: Mutex::new(HashSet::new()),
-            visible: Mutex::new(HashSet::new()),
-            host: Mutex::new(None),
-            failure: Mutex::new(None),
-        })
-    })
+fn host_err(error: HostError) -> String {
+    error.message
 }
 
-/// Raised-cosine taper over the overlap, as `inference.feather_window`. Two
-/// windows a stride apart sum to one everywhere they overlap.
-fn feather() -> &'static [f32; model::WINDOW as usize] {
-    static RAMP: OnceLock<[f32; model::WINDOW as usize]> = OnceLock::new();
-    RAMP.get_or_init(|| {
-        let overlap = STRIDE as usize;
-        let last = WINDOW as usize - 1;
-        let mut ramp = [1f32; model::WINDOW as usize];
-        for i in 0..overlap {
-            let t = std::f32::consts::PI * (i as f32 + 0.5) / overlap as f32;
-            let taper = (0.5 * (1.0 - t.cos())).max(1e-3);
-            ramp[i] = taper;
-            ramp[last - i] = taper;
-        }
-        ramp
-    })
-}
-
-fn draw_frame(pixels: &mut [u8], width: usize, height: usize) {
-    const EDGE: usize = 4;
-    const AMBER: [u8; 3] = [255, 176, 0];
-    if width <= 2 * EDGE || height <= 2 * EDGE || pixels.len() < width * height * 4 {
-        return;
+impl<B: Backend> Cellaris<B> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.shared.lock()
     }
-    let mut paint = |x: usize, y: usize| {
-        let i = (y * width + x) * 4;
-        pixels[i..i + 3].copy_from_slice(&AMBER);
-    };
-    for y in (0..EDGE).chain(height - EDGE..height) {
-        for x in 0..width {
-            paint(x, y);
+
+    fn persist<T: serde::Serialize + ?Sized>(&self, key: &str, value: &T) {
+        if let Err(error) = self.host.set_setting(key, value) {
+            self.host.warn(format!(
+                "Cellaris could not save the setting {key}: {error}"
+            ));
         }
     }
-    for y in EDGE..height - EDGE {
-        for x in (0..EDGE).chain(width - EDGE..width) {
-            paint(x, y);
+
+    fn refresh(&self, st: &mut State) {
+        present::refresh(&self.host, st);
+    }
+
+    // -- the overlay ------------------------------------------------------------
+
+    fn set_overlay(&self, on: bool) {
+        let mut st = self.lock();
+        st.overlay = on;
+        if on && !matches!(st.model, ModelState::Ready(_) | ModelState::Loading) {
+            // Also a retry after a failed load (CEL-6).
+            st.load_wanted = true;
         }
-    }
-}
-
-fn announce(enabled: bool) {
-    let state = shared();
-    if !enabled {
-        state.visible.lock().unwrap().clear();
-    }
-    eprintln!("[cellaris] overlay {}", if enabled { "on" } else { "off" });
-    let host = { *state.host.lock().unwrap() };
-    if let Some(host) = host {
-        let _ = (host.set_toolbar_button_active)(
-            host.context,
-            RString::from("toggle_cellaris"),
-            enabled,
-        );
-    }
-}
-
-fn report(state: &Shared, error: String) {
-    let mut slot = state.failure.lock().unwrap();
-    if slot.as_deref() != Some(error.as_str()) {
-        eprintln!("[cellaris] {error}");
-    }
-    *slot = Some(error);
-}
-
-// ---------------------------------------------------------------------------
-// Worker
-// ---------------------------------------------------------------------------
-
-fn ensure_worker() {
-    let slot = SENDER.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().unwrap();
-    if guard.is_some() {
-        return;
-    }
-
-    let (sender, receiver) = mpsc::channel::<Key>();
-    *guard = Some(sender);
-    let state = Arc::clone(shared());
-
-    std::thread::spawn(move || {
-        let model = match model::shared() {
-            Ok(model) => model,
-            Err(error) => {
-                report(&state, format!("model did not load: {error}"));
-                return;
-            }
-        };
-        let (channel_names, raw_intensity, path) = {
-            let loaded = model.lock().unwrap();
-            (
-                loaded.channel_names.clone(),
-                loaded.raw_intensity,
-                loaded.path.clone(),
-            )
-        };
-        let markers = match overlay::select(&channel_names, &overlay::DEFAULT_MARKERS) {
-            Ok(markers) => markers,
-            Err(error) => {
-                report(&state, error);
-                return;
-            }
-        };
-        eprintln!(
-            "[cellaris] loaded {} channels from {}, painting {}",
-            channel_names.len(),
-            path.display(),
-            overlay::DEFAULT_MARKERS.map(|(name, _)| name).join(", ")
-        );
-        *state.markers.lock().unwrap() = Some(markers.clone());
-
-        let plane = (WINDOW * WINDOW) as usize;
-        let mut last_redraw = Instant::now();
-        let mut computed = 0usize;
-        let mut spent = Duration::ZERO;
-
-        let finish = |host: Option<HostApiVTable>, last_redraw: &mut Instant| {
-            let left = PENDING.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
-            if let Some(host) = host {
-                if left == 0 || last_redraw.elapsed() >= REDRAW_INTERVAL {
-                    let _ = (host.request_render)(host.context);
-                    *last_redraw = Instant::now();
-                }
-            }
-        };
-
-        while let Ok(key) = receiver.recv() {
-            let host = { *state.host.lock().unwrap() };
-            let Some(host) = host else {
-                report(&state, "no host handle yet; window skipped".to_string());
-                finish(None, &mut last_redraw);
-                continue;
-            };
-            if !state.visible.lock().unwrap().contains(&key) {
-                state.requested.lock().unwrap().remove(&key);
-                finish(Some(host), &mut last_redraw);
-                continue;
-            }
-            let started = Instant::now();
-
-            let bytes = (host.read_region)(
-                host.context,
-                key.file_id,
-                0,
-                key.x,
-                key.y,
-                WINDOW as u32,
-                WINDOW as u32,
-            );
-            let Ok(rgba) = bytes.into_result() else {
-                report(&state, "the host refused a window read".to_string());
-                finish(Some(host), &mut last_redraw);
-                continue;
-            };
-            let predicted = match model.lock().unwrap().predict(rgba.as_slice()) {
-                Ok(values) => values,
-                Err(error) => {
-                    report(&state, format!("inference failed: {error}"));
-                    finish(Some(host), &mut last_redraw);
-                    continue;
-                }
-            };
-
-            let mut scaled = vec![0u8; markers.len() * plane];
-            for (index, marker) in markers.iter().enumerate() {
-                let source = &predicted[marker.channel * plane..(marker.channel + 1) * plane];
-                let target = &mut scaled[index * plane..(index + 1) * plane];
-                for (out, value) in target.iter_mut().zip(source) {
-                    *out = overlay::scale(*value, marker, raw_intensity);
-                }
-            }
-            {
-                let mut windows = state.windows.lock().unwrap();
-                windows.insert(key, Arc::new(scaled));
-                if windows.len() > MAX_WINDOWS {
-                    let visible = state.visible.lock().unwrap();
-                    let mut requested = state.requested.lock().unwrap();
-                    windows.retain(|candidate, _| {
-                        let keep = visible.contains(candidate);
-                        if !keep {
-                            requested.remove(candidate);
-                        }
-                        keep
-                    });
-                }
-            }
-
-            computed += 1;
-            spent += started.elapsed();
-            if computed.is_multiple_of(50) {
-                eprintln!(
-                    "[cellaris] {computed} windows, {:.0} ms each, {} queued",
-                    spent.as_secs_f64() * 1000.0 / 50.0,
-                    PENDING.load(Ordering::Relaxed).saturating_sub(1)
-                );
-                spent = Duration::ZERO;
-            }
-            finish(Some(host), &mut last_redraw);
-        }
-    });
-}
-
-fn request(key: Key) {
-    let state = shared();
-    if state.windows.lock().unwrap().contains_key(&key) {
-        return;
-    }
-    if !state.requested.lock().unwrap().insert(key) {
-        return;
-    }
-    if let Some(slot) = SENDER.get() {
-        if let Some(sender) = slot.lock().unwrap().as_ref() {
-            if sender.send(key).is_ok() {
-                PENDING.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Blending
-// ---------------------------------------------------------------------------
-
-fn covering(cell: Key) -> impl Iterator<Item = Key> {
-    [(-STRIDE, -STRIDE), (0, -STRIDE), (-STRIDE, 0), (0, 0)]
-        .into_iter()
-        .map(move |(dx, dy)| Key {
-            file_id: cell.file_id,
-            x: cell.x + dx,
-            y: cell.y + dy,
-        })
-        .filter(|key| key.x >= 0 && key.y >= 0)
-}
-
-/// The cell's RGB, or the windows still missing for it.
-fn blend_cell(state: &Shared, cell: Key, markers: &[overlay::Marker]) -> Result<Vec<u8>, Vec<Key>> {
-    let (found, missing): (Vec<_>, Vec<_>) = {
-        let windows = state.windows.lock().unwrap();
-        covering(cell)
-            .map(|key| (key, windows.get(&key).cloned()))
-            .partition(|(_, planes)| planes.is_some())
-    };
-    if !missing.is_empty() {
-        return Err(missing.into_iter().map(|(key, _)| key).collect());
-    }
-
-    let ramp = feather();
-    let side = STRIDE as usize;
-    let span = WINDOW as usize;
-    let plane = span * span;
-    let mut rgb = vec![0u8; side * side * 3];
-    let mut values = vec![0f32; markers.len()];
-
-    for ly in 0..side {
-        for lx in 0..side {
-            values.fill(0.0);
-            let mut total = 0f32;
-            for (key, planes) in &found {
-                let planes = planes.as_ref().unwrap();
-                let wx = (cell.x + lx as i64 - key.x) as usize;
-                let wy = (cell.y + ly as i64 - key.y) as usize;
-                let weight = ramp[wx] * ramp[wy];
-                total += weight;
-                for (index, value) in values.iter_mut().enumerate() {
-                    *value += weight * f32::from(planes[index * plane + wy * span + wx]);
-                }
-            }
-            for value in values.iter_mut() {
-                *value /= total;
-            }
-            let pixel = overlay::composite(&values, markers);
-            let at = (ly * side + lx) * 3;
-            rgb[at..at + 3].copy_from_slice(&pixel);
-        }
-    }
-    Ok(rgb)
-}
-
-// ---------------------------------------------------------------------------
-// Filter
-// ---------------------------------------------------------------------------
-
-extern "C" fn apply_filter_cpu_ffi(
-    filter_id: RString,
-    rgba_data: *mut u8,
-    len: u32,
-    width: u32,
-    height: u32,
-    viewport: *const ViewportSnapshotFFI,
-) -> bool {
-    if filter_id.as_str() != FILTER_ID
-        || rgba_data.is_null()
-        || viewport.is_null()
-        || len == 0
-        || width == 0
-        || height == 0
-        || !ENABLED.load(Ordering::Relaxed)
-    {
-        return false;
-    }
-
-    // SAFETY: the host guarantees `len` writable bytes of RGBA8 at
-    // `rgba_data`, and a live snapshot at `viewport`, for this call only.
-    let pixels = unsafe { std::slice::from_raw_parts_mut(rgba_data, len as usize) };
-    let view = unsafe { &*viewport };
-
-    let left = view.bounds_left;
-    let top = view.bounds_top;
-    let span_x = view.bounds_right - left;
-    let span_y = view.bounds_bottom - top;
-    if span_x <= 0.0 || span_y <= 0.0 {
-        return false;
-    }
-
-    let first_x = ((left / STRIDE as f64).floor() as i64 * STRIDE).max(0);
-    let first_y = ((top / STRIDE as f64).floor() as i64 * STRIDE).max(0);
-    let last_x = (view.bounds_right / STRIDE as f64).ceil() as i64 * STRIDE;
-    let last_y = (view.bounds_bottom / STRIDE as f64).ceil() as i64 * STRIDE;
-    let across = ((last_x - first_x) / STRIDE).max(0) as usize;
-    let down = ((last_y - first_y) / STRIDE).max(0) as usize;
-
-    let state = shared();
-    if across.saturating_mul(down) > MAX_CELLS {
-        state.visible.lock().unwrap().clear();
-        draw_frame(pixels, width as usize, height as usize);
-        return true;
-    }
-    ensure_worker();
-
-    let mut in_view = Vec::with_capacity(across * down);
-    let mut y = first_y;
-    while y < last_y {
-        let mut x = first_x;
-        while x < last_x {
-            in_view.push(Key {
-                file_id: view.file_id,
-                x,
-                y,
-            });
-            x += STRIDE;
-        }
-        y += STRIDE;
-    }
-
-    // Publish before requesting, or the worker can drop a fresh request.
-    {
-        let mut visible = state.visible.lock().unwrap();
-        visible.clear();
-        visible.extend(in_view.iter().flat_map(|cell| covering(*cell)));
-    }
-
-    let markers = { state.markers.lock().unwrap().clone() };
-    let mut painted = false;
-
-    for cell in &in_view {
-        let cached = { state.cells.lock().unwrap().get(cell).cloned() };
-        let rgb = match cached {
-            Some(rgb) => rgb,
-            None => {
-                let Some(markers) = markers.as_deref() else {
-                    covering(*cell).for_each(request);
-                    continue;
-                };
-                match blend_cell(state, *cell, markers) {
-                    Ok(rgb) => {
-                        let rgb = Arc::new(rgb);
-                        let mut cells = state.cells.lock().unwrap();
-                        cells.insert(*cell, Arc::clone(&rgb));
-                        if cells.len() > MAX_CELL_CACHE {
-                            let keep: HashSet<Key> = in_view.iter().copied().collect();
-                            cells.retain(|candidate, _| keep.contains(candidate));
-                        }
-                        rgb
-                    }
-                    Err(missing) => {
-                        missing.into_iter().for_each(request);
-                        continue;
-                    }
-                }
-            }
-        };
-
-        let to_screen_x = |slide: f64| (slide - left) / span_x * f64::from(width);
-        let to_screen_y = |slide: f64| (slide - top) / span_y * f64::from(height);
-        let x0 = to_screen_x(cell.x as f64).floor().max(0.0) as i64;
-        let x1 = (to_screen_x((cell.x + STRIDE) as f64).ceil() as i64).min(i64::from(width));
-        let y0 = to_screen_y(cell.y as f64).floor().max(0.0) as i64;
-        let y1 = (to_screen_y((cell.y + STRIDE) as f64).ceil() as i64).min(i64::from(height));
-
-        for screen_y in y0..y1 {
-            let slide_y = top + (screen_y as f64 + 0.5) / f64::from(height) * span_y;
-            let local_y = (slide_y - cell.y as f64).floor() as i64;
-            if !(0..STRIDE).contains(&local_y) {
-                continue;
-            }
-            for screen_x in x0..x1 {
-                let slide_x = left + (screen_x as f64 + 0.5) / f64::from(width) * span_x;
-                let local_x = (slide_x - cell.x as f64).floor() as i64;
-                if !(0..STRIDE).contains(&local_x) {
-                    continue;
-                }
-                let source = ((local_y * STRIDE + local_x) * 3) as usize;
-                let target = ((screen_y * i64::from(width) + screen_x) * 4) as usize;
-                if target + 4 <= pixels.len() && source + 3 <= rgb.len() {
-                    overlay::blend_pixel(
-                        &mut pixels[target..target + 4],
-                        &rgb[source..source + 3],
-                        ALPHA,
-                    );
-                    painted = true;
+        let tooltips = st.tooltips != Support::No;
+        for (id, file) in &st.files {
+            if file.layers {
+                let _ = self.host.layer(pred_layer(*id)).set_visible(on);
+                if tooltips {
+                    let _ = self.host.layer(values_layer(*id)).set_visible(on);
                 }
             }
         }
+        let _ = self.host.set_toolbar_button_active(OVERLAY_BUTTON, on);
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
     }
 
-    painted
-}
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-
-extern "C" fn set_host_api_ffi(host_api: HostApiVTable) {
-    *shared().host.lock().unwrap() = Some(host_api);
-}
-
-extern "C" fn get_toolbar_buttons_ffi() -> RVec<ToolbarButtonFFI> {
-    let mut buttons = RVec::new();
-    buttons.push(ToolbarButtonFFI {
-        button_id: RString::from("toggle_cellaris"),
-        tooltip: RString::from("Cellaris marker overlay"),
-        icon_svg: RString::from(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" \
-             stroke=\"currentColor\" stroke-width=\"1.8\"><circle cx=\"12\" cy=\"12\" r=\"8\"/>\
-             <circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>",
-        ),
-        action_id: RString::from("toggle_cellaris"),
-        tool_mode: ROption::RNone,
-        hotkey: ROption::RNone,
-    });
-    buttons.push(ToolbarButtonFFI {
-        button_id: RString::from(region::BUTTON_ID),
-        tooltip: RString::from("Cellaris region readout"),
-        icon_svg: RString::from(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" \
-             stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linejoin=\"round\">\
-             <path d=\"M4 7l7-3 9 5-3 10-11 1z\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/></svg>",
-        ),
-        action_id: RString::from(region::BUTTON_ID),
-        tool_mode: ROption::RSome(HostToolModeFFI::PolygonAnnotation),
-        hotkey: ROption::RNone,
-    });
-    buttons
-}
-
-fn host() -> Option<HostApiVTable> {
-    *shared().host.lock().unwrap()
-}
-
-extern "C" fn on_action_ffi(action_id: RString) -> ActionResponseFFI {
-    match action_id.as_str() {
-        "toggle_cellaris" => {
-            let now = !ENABLED.load(Ordering::Relaxed);
-            ENABLED.store(now, Ordering::Relaxed);
-            if now {
-                ensure_worker();
-            }
-            announce(now);
-        }
-        region::BUTTON_ID => {
-            if let Some(host) = host() {
-                let _ = (host.set_active_tool)(host.context, HostToolModeFFI::PolygonAnnotation);
-                region::open_sidebar(&host);
-            }
-        }
-        _ => {}
-    }
-    ActionResponseFFI { open_window: false }
-}
-
-extern "C" fn get_viewport_filters_ffi() -> RVec<ViewportFilterFFI> {
-    let mut filters = RVec::new();
-    filters.push(ViewportFilterFFI {
-        filter_id: RString::from(FILTER_ID),
-        name: RString::from("Cellaris markers"),
-        supports_cpu: true,
-        supports_gpu: false,
-        enabled: ENABLED.load(Ordering::Relaxed),
-    });
-    filters
-}
-
-/// Called from inside the host's filter sync, which holds the locks a toolbar
-/// update needs: record the state and never call back into the host.
-extern "C" fn set_filter_enabled_ffi(filter_id: RString, enabled: bool) {
-    if filter_id.as_str() == FILTER_ID {
-        ENABLED.store(enabled, Ordering::Relaxed);
-        if enabled {
-            ensure_worker();
-        } else {
-            shared().visible.lock().unwrap().clear();
-        }
-    }
-}
-
-// -- region readout ----------------------------------------------------------
-
-extern "C" fn on_polygon_annotation_placed_ffi(
-    viewport: ViewportSnapshotFFI,
-    vertices: RVec<ViewportOverlayVertexFFI>,
-) {
-    if let Some(host) = host() {
-        region::start(
-            host,
-            viewport.file_id,
-            (viewport.image_width, viewport.image_height),
-            vertices.iter().map(|v| (v.x_level0, v.y_level0)).collect(),
-        );
-    }
-}
-
-extern "C" fn get_viewport_overlay_polygons_ffi(
-    viewport: ViewportSnapshotFFI,
-) -> RVec<ViewportOverlayPolygonFFI> {
-    region::polygons(viewport.file_id)
-}
-
-extern "C" fn get_sidebar_properties_ffi() -> RVec<UiPropertyFFI> {
-    region::sidebar_properties()
-}
-
-extern "C" fn on_ui_callback_ffi(callback: RString, _: RString) {
-    match callback.as_str() {
-        "clear-region" => region::clear(host()),
-        // Hiding the sidebar from inside its own callback would free the
-        // component mid-call, so it happens after this returns.
-        "close-readout" => {
-            if let Some(host) = host() {
-                std::thread::spawn(move || {
-                    let _ = (host.hide_sidebar)(host.context);
+    fn set_opacity(&self, opacity: f32) {
+        let opacity = opacity.clamp(0.1, 1.0);
+        let mut st = self.lock();
+        st.prefs.opacity = opacity;
+        for (id, file) in &st.files {
+            if file.layers {
+                let _ = self.host.layer(pred_layer(*id)).update(LayerUpdate {
+                    opacity: Some(opacity),
+                    ..Default::default()
                 });
             }
         }
-        _ => {}
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::OPACITY, &opacity);
     }
-}
 
-// -- everything else the host may ask for ------------------------------------
-
-extern "C" fn get_hud_toolbar_buttons_ffi() -> RVec<HudToolbarButtonFFI> {
-    RVec::new()
-}
-extern "C" fn on_hud_action_ffi(_: RString, _: ViewportSnapshotFFI) -> ActionResponseFFI {
-    ActionResponseFFI { open_window: false }
-}
-extern "C" fn get_viewport_context_menu_items_ffi(
-    _: ViewportSnapshotFFI,
-) -> RVec<ViewportContextMenuItemFFI> {
-    RVec::new()
-}
-extern "C" fn on_viewport_context_menu_action_ffi(
-    _: RString,
-    _: ViewportSnapshotFFI,
-) -> ActionResponseFFI {
-    ActionResponseFFI { open_window: false }
-}
-extern "C" fn get_viewport_overlay_points_ffi(
-    _: ViewportSnapshotFFI,
-) -> RVec<ViewportOverlayPointFFI> {
-    RVec::new()
-}
-extern "C" fn get_viewport_overlay_component_ffi() -> ROption<ViewportOverlayComponentRequestFFI> {
-    ROption::RNone
-}
-extern "C" fn get_viewport_overlay_properties_ffi(_: ViewportSnapshotFFI) -> RVec<UiPropertyFFI> {
-    RVec::new()
-}
-extern "C" fn on_point_annotation_placed_ffi(_: ViewportSnapshotFFI, _: f64, _: f64) {}
-extern "C" fn on_undo_ffi() -> ActionResponseFFI {
-    ActionResponseFFI { open_window: false }
-}
-extern "C" fn on_redo_ffi() -> ActionResponseFFI {
-    ActionResponseFFI { open_window: false }
-}
-extern "C" fn on_point_annotation_moved_ffi(_: ViewportSnapshotFFI, _: RString, _: f64, _: f64) {}
-extern "C" fn on_polygon_annotation_moved_ffi(
-    _: ViewportSnapshotFFI,
-    _: RString,
-    _: RVec<ViewportOverlayVertexFFI>,
-) {
-}
-extern "C" fn on_viewport_annotation_selected_ffi(_: ViewportSnapshotFFI, _: RString) {}
-extern "C" fn apply_filter_gpu_ffi(_: RString, _: *const GpuFilterContextFFI) -> bool {
-    false
-}
-
-#[cfg_attr(feature = "export-vtable-symbol", unsafe(no_mangle))]
-pub extern "C" fn eov_get_plugin_vtable() -> PluginVTable {
-    PluginVTable {
-        set_host_api: set_host_api_ffi,
-        get_toolbar_buttons: get_toolbar_buttons_ffi,
-        get_hud_toolbar_buttons: get_hud_toolbar_buttons_ffi,
-        on_action: on_action_ffi,
-        on_hud_action: on_hud_action_ffi,
-        on_ui_callback: on_ui_callback_ffi,
-        get_sidebar_properties: get_sidebar_properties_ffi,
-        get_viewport_context_menu_items: get_viewport_context_menu_items_ffi,
-        on_viewport_context_menu_action: on_viewport_context_menu_action_ffi,
-        get_viewport_overlay_points: get_viewport_overlay_points_ffi,
-        get_viewport_overlay_polygons: get_viewport_overlay_polygons_ffi,
-        get_viewport_overlay_component: get_viewport_overlay_component_ffi,
-        get_viewport_overlay_properties: get_viewport_overlay_properties_ffi,
-        on_point_annotation_placed: on_point_annotation_placed_ffi,
-        on_polygon_annotation_placed: on_polygon_annotation_placed_ffi,
-        on_undo: on_undo_ffi,
-        on_redo: on_redo_ffi,
-        on_point_annotation_moved: on_point_annotation_moved_ffi,
-        on_polygon_annotation_moved: on_polygon_annotation_moved_ffi,
-        on_viewport_annotation_selected: on_viewport_annotation_selected_ffi,
-        get_viewport_filters: get_viewport_filters_ffi,
-        apply_filter_cpu: apply_filter_cpu_ffi,
-        apply_filter_gpu: apply_filter_gpu_ffi,
-        set_filter_enabled: set_filter_enabled_ffi,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn neighbouring_windows_sum_to_one() {
-        let ramp = feather();
-        for i in 0..STRIDE as usize {
-            let total = ramp[i] + ramp[i + STRIDE as usize];
-            assert!(
-                (total - 1.0).abs() <= 1e-3,
-                "weights sum to {total} at {i}, beyond the floor"
-            );
+    /// Redraws every cell after a display change (on the worker).
+    fn redraw_all(&self, st: &mut State) {
+        for file in st.files.values_mut() {
+            let uploaded: Vec<_> = file.uploaded.iter().copied().collect();
+            file.stale.extend(uploaded);
         }
     }
 
-    #[test]
-    fn a_cell_is_covered_by_the_four_windows_over_it() {
-        let cell = Key {
-            file_id: 0,
-            x: 256,
-            y: 384,
+    fn set_marker_visible(&self, index: usize, visible: bool) {
+        let mut st = self.lock();
+        let Some(name) = st.prefs.markers.get(index).cloned() else {
+            return;
         };
-        let origins: HashSet<(i64, i64)> = covering(cell).map(|k| (k.x, k.y)).collect();
-        let want: HashSet<(i64, i64)> = [(128, 256), (256, 256), (128, 384), (256, 384)].into();
-        assert_eq!(origins, want);
-        for (x, y) in origins {
-            assert!(x <= cell.x && cell.x + STRIDE <= x + WINDOW);
-            assert!(y <= cell.y && cell.y + STRIDE <= y + WINDOW);
+        st.prefs.hidden.retain(|hidden| *hidden != name);
+        if !visible {
+            st.prefs.hidden.push(name);
         }
-        assert_eq!(
-            covering(Key {
-                file_id: 0,
-                x: 0,
-                y: 0
+        let hidden = st.prefs.hidden.clone();
+        self.redraw_all(&mut st);
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::HIDDEN, &hidden);
+        self.shared.wake();
+    }
+
+    /// Sets (`Some`) or resets (`None`) a marker's display window. Only the
+    /// drawing changes: cells keep their values and are drawn again, and
+    /// readouts, tooltips and batch runs are not affected.
+    fn set_window(&self, index: usize, window: Option<(f32, f32)>) {
+        let mut st = self.lock();
+        let Some(name) = st.prefs.markers.get(index).cloned() else {
+            return;
+        };
+        let Some(default) = markers::default_window(&name) else {
+            return;
+        };
+        let current = st
+            .markers
+            .as_ref()
+            .ok()
+            .and_then(|m| m.iter().find(|m| m.name == name))
+            .map_or(default, |m| (m.low, m.high));
+        let (low, high) = match window {
+            Some(wanted) => markers::fit_window(&name, wanted, current),
+            None => default,
+        };
+        if (low, high) == current && window.is_some() {
+            return;
+        }
+        if (low - default.0).abs() < 1e-4 && (high - default.1).abs() < 1e-4 {
+            st.prefs.windows.remove(&name);
+        } else {
+            st.prefs.windows.insert(name.clone(), [low, high]);
+        }
+        if let Ok(selected) = &mut st.markers {
+            for marker in selected.iter_mut().filter(|m| m.name == name) {
+                marker.low = low;
+                marker.high = high;
+            }
+        }
+        let windows = st.prefs.windows.clone();
+        self.redraw_all(&mut st);
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::WINDOWS, &windows);
+        self.shared.wake();
+    }
+
+    /// Opens a marker's window editor in the panel, or closes it.
+    fn edit_window(&self, index: usize) {
+        let mut st = self.lock();
+        st.window_editor = (st.window_editor != Some(index)).then_some(index);
+        self.refresh(&mut st);
+    }
+
+    fn set_mode(&self, mode: DisplayMode) {
+        let mut st = self.lock();
+        st.prefs.mode = mode;
+        self.redraw_all(&mut st);
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::MODE, &mode);
+        self.shared.wake();
+    }
+
+    fn set_assume_mpp(&self, assume: bool) {
+        let mut st = self.lock();
+        st.prefs.assume_mpp = assume;
+        // Only slides without a usable pixel size are affected: those the
+        // grid found none for, and those mapped with an assumed one.
+        let ids: Vec<FileId> = st
+            .files
+            .iter()
+            .filter(|(_, f)| {
+                matches!(f.problem(), Some(geometry::ScaleProblem::Unknown))
+                    || f.grid()
+                        .is_some_and(|g| g.scale.source == geometry::ScaleSource::Assumed)
             })
-            .count(),
-            1
-        );
+            .map(|(id, _)| *id)
+            .collect();
+        let tooltips = st.tooltips != Support::No;
+        for id in ids {
+            if let Some(file) = st.files.get_mut(&id) {
+                let cells = file.reset();
+                engine::remove_cells(&self.host, id, cells, tooltips);
+            }
+        }
+        self.refresh(&mut st);
+        drop(st);
+        self.persist(keys::ASSUME_MPP, &assume);
+        self.shared.wake();
     }
 
-    #[test]
-    fn a_blend_of_identical_windows_is_that_window() {
-        let state = Shared {
-            windows: Mutex::new(HashMap::new()),
-            cells: Mutex::new(HashMap::new()),
-            markers: Mutex::new(None),
-            requested: Mutex::new(HashSet::new()),
-            visible: Mutex::new(HashSet::new()),
-            host: Mutex::new(None),
-            failure: Mutex::new(None),
-        };
-        let names: Vec<String> = ["Hoechst", "Pan-CK", "SMA"].map(String::from).to_vec();
-        let markers = overlay::select(&names, &overlay::DEFAULT_MARKERS).unwrap();
-        let plane = (WINDOW * WINDOW) as usize;
-        let flat = Arc::new(vec![128u8; markers.len() * plane]);
+    // -- the panel --------------------------------------------------------------
 
-        let cell = Key {
-            file_id: 0,
-            x: 128,
-            y: 128,
-        };
-        assert_eq!(blend_cell(&state, cell, &markers).unwrap_err().len(), 4);
-
-        for key in covering(cell) {
-            state.windows.lock().unwrap().insert(key, Arc::clone(&flat));
+    fn open_panel(&self) {
+        let mut st = self.lock();
+        if st.sidebar.is_some() {
+            return;
         }
-        let rgb = blend_cell(&state, cell, &markers).unwrap();
-        let expected = overlay::composite(&[128.0; 3], &markers);
-        assert!(
-            rgb.chunks(3).all(|px| px == expected),
-            "blending a constant changed it"
+        let mut spec = SurfaceSpec::new(SurfaceKind::Sidebar, PANEL_UI, PANEL_COMPONENT)
+            .with_title("Cellaris")
+            .with_size(PANEL_WIDTH, None);
+        spec.properties = present::sidebar_properties(&st);
+        spec.capture_keyboard = false;
+        match self.host.open_surface(spec) {
+            Ok(surface) => {
+                st.sidebar = Some(surface);
+                st.last_sidebar = None;
+            }
+            Err(error) => self
+                .host
+                .notify_error("The Cellaris panel could not open", error.message),
+        }
+        self.refresh(&mut st);
+    }
+
+    fn close_panel(&self) {
+        let mut st = self.lock();
+        if let Some(surface) = st.sidebar.take() {
+            let _ = surface.close();
+        }
+        st.last_sidebar = None;
+        self.refresh(&mut st);
+    }
+
+    // -- regions ----------------------------------------------------------------
+
+    /// Measures `region` on a slide (`None`: stops measuring). A region
+    /// taken from the slide's region of interest follows it.
+    fn set_region(&self, file_id: FileId, region: Option<Region>, from_roi: bool) {
+        let mut st = self.lock();
+        let needs_model = !matches!(st.model, ModelState::Ready(_) | ModelState::Loading);
+        let Some(file) = st.files.get_mut(&file_id) else {
+            return;
+        };
+        if let Some(old) = file.readout.take()
+            && let Some(job) = old.job
+        {
+            job.finish(None);
+        }
+        file.readout_wanted = region.is_some();
+        file.region_from_roi = from_roi && region.is_some();
+        file.region = region;
+        if file.readout_wanted && needs_model {
+            st.load_wanted = true;
+        }
+        st.active_file = Some(file_id);
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    /// The slide the user is looking at.
+    fn active_file(&self) -> Option<FileId> {
+        let active = self.lock().active_file;
+        active.or_else(|| {
+            let snapshot = self.host.snapshot().ok()?;
+            Some(snapshot.focused_view()?.file_id)
+        })
+    }
+
+    fn measure_roi(&self) -> Result<(), String> {
+        let Some(file_id) = self.active_file() else {
+            self.host.notify(NotifyLevel::Info, "Open a slide first.");
+            return Ok(());
+        };
+        match self.host.roi(file_id).map_err(host_err)? {
+            Some(rect) if rect.width > 0.0 && rect.height > 0.0 => {
+                self.set_region(file_id, Some(Region::Rectangle(rect)), true);
+            }
+            _ => self.host.notify(
+                NotifyLevel::Info,
+                "This slide has no region of interest; draw one with the ROI tool, or outline a \
+                 region with the Cellaris region tool.",
+            ),
+        }
+        Ok(())
+    }
+
+    /// A region measured from the region of interest follows it: drawn
+    /// again, moved, undone or removed.
+    fn roi_changed(&self, file_id: FileId, roi: Option<Rect>) {
+        let region = roi
+            .filter(|rect| rect.width > 0.0 && rect.height > 0.0)
+            .map(Region::Rectangle);
+        let follows = self
+            .lock()
+            .files
+            .get(&file_id)
+            .is_some_and(|file| file.region_from_roi && file.region != region);
+        if follows {
+            self.set_region(file_id, region, true);
+        }
+    }
+
+    fn cancel_readout(&self, file_id: Option<FileId>, job_id: Option<&str>) {
+        let mut st = self.lock();
+        for (id, file) in st.files.iter_mut() {
+            let Some(job) = file.readout.as_mut() else {
+                continue;
+            };
+            let matches = match job_id {
+                Some(job_id) => job.job.as_ref().is_some_and(|j| j.id() == job_id),
+                None => Some(*id) == file_id,
+            };
+            if matches
+                && matches!(
+                    job.readout.state,
+                    ReadoutState::Running | ReadoutState::Confirming
+                )
+            {
+                job.readout.state = ReadoutState::Cancelled;
+                if let Some(host_job) = job.job.take() {
+                    host_job.finish(None);
+                }
+            }
+        }
+        self.refresh(&mut st);
+    }
+
+    fn confirmed(&self, request_id: &str, confirmed: bool) {
+        let mut st = self.lock();
+        for file in st.files.values_mut() {
+            let Some(job) = file.readout.as_mut() else {
+                continue;
+            };
+            if job.confirm.as_deref() != Some(request_id) {
+                continue;
+            }
+            job.confirm = None;
+            if job.readout.state != ReadoutState::Confirming {
+                continue;
+            }
+            if confirmed {
+                job.readout.state = ReadoutState::Running;
+                job.started = Instant::now();
+                job.job = self.host.start_job("Cellaris region readout", true).ok();
+            } else {
+                job.readout.state = ReadoutState::Cancelled;
+            }
+        }
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    fn copy_readout(&self) -> Result<(), String> {
+        let text = {
+            let st = self.lock();
+            st.active_file.and_then(|id| present::copy_text(&st, id))
+        };
+        match text {
+            Some(text) => {
+                self.host.copy_text(text).map_err(host_err)?;
+                self.host.notify(
+                    NotifyLevel::Success,
+                    "Readout copied as tab-separated text.",
+                );
+            }
+            None => self
+                .host
+                .notify(NotifyLevel::Info, "There is no finished readout to copy."),
+        }
+        Ok(())
+    }
+
+    // -- the model ----------------------------------------------------------------
+
+    fn retry(&self) {
+        let mut st = self.lock();
+        for file in st.files.values_mut() {
+            file.failures.clear();
+            if file.region.is_some()
+                && file
+                    .readout
+                    .as_ref()
+                    .is_some_and(|job| matches!(job.readout.state, ReadoutState::Failed(_)))
+            {
+                file.readout_wanted = true;
+            }
+        }
+        if matches!(st.model, ModelState::Failed(_)) {
+            st.notified.clear();
+            st.load_wanted = true;
+            st.reload = true;
+        }
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    fn choose(&self, choice: Choice) -> Result<(), String> {
+        let filters = match choice {
+            Choice::Model => vec![FileFilter {
+                name: "ONNX model".into(),
+                extensions: vec!["onnx".into()],
+            }],
+            // Versioned Linux names (libonnxruntime.so.1.22.0) have no
+            // usable extension, so nothing is filtered there.
+            Choice::Runtime if cfg!(target_os = "windows") => vec![FileFilter {
+                name: "ONNX Runtime library".into(),
+                extensions: vec!["dll".into()],
+            }],
+            Choice::Runtime if cfg!(target_os = "macos") => vec![FileFilter {
+                name: "ONNX Runtime library".into(),
+                extensions: vec!["dylib".into()],
+            }],
+            Choice::Runtime => Vec::new(),
+        };
+        let title = match choice {
+            Choice::Model => "Choose a Cellaris marker model",
+            Choice::Runtime => "Choose the ONNX Runtime library",
+        };
+        let request = self
+            .host
+            .open_file_dialog(FileDialogArgs {
+                title: Some(title.into()),
+                filters,
+                ..Default::default()
+            })
+            .map_err(host_err)?;
+        self.dialogs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((request, choice));
+        Ok(())
+    }
+
+    fn chosen(&self, request_id: &str, paths: Vec<String>) {
+        let choice = {
+            let mut dialogs = self.dialogs.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(index) = dialogs.iter().position(|(id, _)| id == request_id) else {
+                return;
+            };
+            dialogs.remove(index).1
+        };
+        let Some(path) = paths.into_iter().next() else {
+            return;
+        };
+        let mut st = self.lock();
+        match choice {
+            Choice::Model => {
+                st.prefs.model_path = Some(path.clone());
+                st.reload = true;
+                st.load_wanted = true;
+                st.notified.clear();
+                drop(st);
+                self.persist(keys::MODEL, &path);
+            }
+            Choice::Runtime => {
+                st.prefs.runtime_path = Some(path.clone());
+                if matches!(st.model, ModelState::Ready(_)) {
+                    // ONNX Runtime loads once per process.
+                    st.runtime_restart = true;
+                } else {
+                    st.load_wanted = true;
+                    st.reload = true;
+                    st.notified.clear();
+                }
+                drop(st);
+                self.persist(keys::RUNTIME, &path);
+            }
+        }
+        let mut st = self.lock();
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    // -- downloading the model ------------------------------------------------------
+
+    fn toggle_download(&self) {
+        let mut st = self.lock();
+        st.download_open = !st.download_open;
+        st.download_note = None;
+        self.refresh(&mut st);
+    }
+
+    /// *Download*: asks eov for the model at `url` with `sha256`, which are
+    /// kept for next time. eov answers at once when its model store has
+    /// the model; otherwise it asks the user, downloads it and checks it.
+    fn download(&self, url: &str, sha256: &str) {
+        let mut st = self.lock();
+        if st.model_fetch.is_some() {
+            return;
+        }
+        let Some(sha256) = config::parse_sha256(sha256) else {
+            st.download_note = Some(
+                "Enter the model's SHA-256 (64 hex digits): the download is checked against it."
+                    .into(),
+            );
+            self.refresh(&mut st);
+            return;
+        };
+        let url = Some(url.trim().to_string()).filter(|url| !url.is_empty());
+        st.prefs.model_url = url.clone();
+        st.prefs.model_sha256 = Some(sha256.clone());
+        drop(st);
+        match &url {
+            Some(url) => self.persist(keys::MODEL_URL, url),
+            None => {
+                let _ = self.host.remove_setting(keys::MODEL_URL);
+            }
+        }
+        self.persist(keys::MODEL_SHA256, &sha256);
+        let asked = self.host.fetch_model(ModelFetchArgs {
+            url,
+            sha256,
+            name: Some("Cellaris marker model".into()),
+            ..Default::default()
+        });
+        let mut st = self.lock();
+        match asked {
+            Ok(request) => {
+                st.model_fetch = Some(request);
+                st.model_store = Support::Yes;
+                st.download_note = None;
+            }
+            Err(error) if error.is_unsupported() => {
+                st.model_store = Support::No;
+                st.download_note = Some(
+                    "This eov cannot download models: choose the model file with Choose model\u{2026}"
+                        .into(),
+                );
+            }
+            Err(error) => st.download_note = Some(error.message),
+        }
+        self.refresh(&mut st);
+    }
+
+    /// eov's answer: the downloaded model is the model from now on, loaded
+    /// and checked like one chosen in the panel.
+    fn fetched(
+        &self,
+        request_id: &str,
+        path: Option<String>,
+        error: Option<String>,
+        cancelled: bool,
+    ) {
+        let mut st = self.lock();
+        if st.model_fetch.as_deref() != Some(request_id) {
+            return;
+        }
+        st.model_fetch = None;
+        let Some(path) = path else {
+            // eov has told the user why; the panel keeps it in view.
+            st.download_note = error.filter(|_| !cancelled);
+            self.refresh(&mut st);
+            return;
+        };
+        st.prefs.model_path = Some(path.clone());
+        st.reload = true;
+        st.load_wanted = true;
+        st.notified.clear();
+        st.download_open = false;
+        st.download_note = None;
+        drop(st);
+        self.persist(keys::MODEL, &path);
+        let mut st = self.lock();
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    fn add_file(&self, info: FileInfo) {
+        let mut st = self.lock();
+        let id = info.file_id;
+        match st.files.get_mut(&id) {
+            Some(file) => file.info = info,
+            None => {
+                st.files.insert(id, FileState::new(info));
+            }
+        }
+        if st.active_file.is_none() {
+            st.active_file = Some(id);
+        }
+        let _ = engine::ensure_layers(&self.host, &mut st);
+        present::refresh_file(&self.host, &mut st, id);
+        drop(st);
+        self.shared.wake();
+    }
+}
+
+/// The model the site set for *Download model…* (`model_sha256`) is the
+/// model when eov's model store has it and none was chosen, also in batch
+/// runs. Says whether the host keeps models.
+fn use_stored_model(host: &Host, prefs: &mut Prefs) -> Support {
+    let Some(sha256) = prefs.model_sha256.clone() else {
+        return Support::Unknown;
+    };
+    match host.resolve_model(&sha256) {
+        Ok(found) => {
+            if prefs.model_path.is_none()
+                && let Some(model) = found
+            {
+                prefs.model_path = Some(model.path);
+            }
+            Support::Yes
+        }
+        Err(error) if error.is_unsupported() => Support::No,
+        Err(_) => Support::Unknown,
+    }
+}
+
+impl<B: Backend> Plugin for Cellaris<B> {
+    fn create(host: Host, init: PluginInit) -> Result<Self, String> {
+        let (mut prefs, problems) = Prefs::from_settings(&init.settings);
+        for problem in &problems {
+            host.info(format!("Cellaris {problem}"));
+        }
+        let model_store = use_stored_model(&host, &mut prefs);
+        let paths = Paths {
+            plugin_root: PathBuf::from(&init.plugin_root),
+            data_dir: PathBuf::from(&init.data_dir),
+            cache_dir: PathBuf::from(&init.cache_dir),
+        };
+        // Offered in the window too, for `eov batch list`; hosts from
+        // before batch runs answer Unsupported.
+        if let Err(error) = host.register_batch_command(batch::command())
+            && !error.is_unsupported()
+        {
+            host.warn(format!(
+                "Cellaris could not offer its batch command: {error}"
+            ));
+        }
+        if init.headless {
+            // No window: no buttons, tool, panel or overlay worker.
+            let state = State::new(prefs.clone(), paths.clone());
+            return Ok(Self {
+                host,
+                shared: Arc::new(Shared::new(state)),
+                worker: Mutex::new(None),
+                dialogs: Mutex::new(Vec::new()),
+                headless: true,
+                batch: batch::BatchRunner::default(),
+                paths,
+                prefs,
+                _backend: PhantomData,
+            });
+        }
+        // The host adds the key to the tooltip, or refuses it if taken.
+        host.add_toolbar_button(ToolbarButtonSpec {
+            button_id: OVERLAY_BUTTON.into(),
+            tooltip: "Cellaris: predicted markers over H&E (research use only)".into(),
+            icon_svg: OVERLAY_ICON.into(),
+            hotkey: (!prefs.overlay_key.is_empty()).then(|| Hotkey::key(&prefs.overlay_key)),
+            order: 0,
+            ..Default::default()
+        })
+        .map_err(host_err)?;
+        host.add_toolbar_button(ToolbarButtonSpec {
+            button_id: PANEL_BUTTON.into(),
+            tooltip: "Cellaris panel: legend, region readout and model".into(),
+            icon_svg: PANEL_ICON.into(),
+            order: 1,
+            ..Default::default()
+        })
+        .map_err(host_err)?;
+        let mut tool = ToolSpec::new(
+            REGION_TOOL,
+            "Cellaris region readout",
+            REGION_ICON,
+            ToolKind::Polygon,
         );
+        tool.preview_style = Some(present::region_style());
+        tool.edit_layers = Vec::new();
+        host.register_tool(tool).map_err(host_err)?;
+
+        let mut state = State::new(prefs.clone(), paths.clone());
+        state.setting_problems = problems;
+        state.model_store = model_store;
+        let shared = Arc::new(Shared::new(state));
+        let worker = Worker::new(host.clone(), Arc::clone(&shared), Arc::new(B::default()));
+        let handle = std::thread::Builder::new()
+            .name("cellaris-worker".into())
+            .spawn(move || worker.run())
+            .map_err(|e| format!("could not start the Cellaris worker: {e}"))?;
+        Ok(Self {
+            host,
+            shared,
+            worker: Mutex::new(Some(handle)),
+            dialogs: Mutex::new(Vec::new()),
+            headless: false,
+            batch: batch::BatchRunner::default(),
+            paths,
+            prefs,
+            _backend: PhantomData,
+        })
+    }
+
+    fn on_event(&self, event: HostEvent) -> Result<(), String> {
+        match event {
+            HostEvent::BatchRun {
+                run_id,
+                command_id,
+                file,
+                output_dir,
+                params,
+            } => self.batch.submit::<B>(
+                &self.host,
+                &self.paths,
+                &self.prefs,
+                batch::Job {
+                    run_id,
+                    command_id,
+                    file,
+                    output_dir: PathBuf::from(output_dir),
+                    params,
+                },
+            ),
+            HostEvent::Shutdown => {
+                self.shared.shut_down();
+                self.batch.stop();
+            }
+            // Without a window, slides come only as batch runs.
+            _ if self.headless => {}
+            HostEvent::Ready { restore_sidebar } => {
+                if let Ok(snapshot) = self.host.snapshot() {
+                    for file in snapshot.files {
+                        self.add_file(file);
+                    }
+                }
+                if restore_sidebar {
+                    self.open_panel();
+                }
+            }
+            HostEvent::FileOpened { file } => self.add_file(file),
+            HostEvent::FileClosed { file_id } => {
+                let mut st = self.lock();
+                if let Some(file) = st.files.remove(&file_id)
+                    && let Some(job) = file.readout
+                    && let Some(host_job) = job.job
+                {
+                    host_job.finish(Some("the slide was closed".into()));
+                }
+                if st.active_file == Some(file_id) {
+                    st.active_file = None;
+                }
+                self.refresh(&mut st);
+            }
+            HostEvent::ActiveChanged { pane, file_id } => {
+                let mut st = self.lock();
+                st.active_file = file_id;
+                st.focused_pane = pane;
+                self.refresh(&mut st);
+            }
+            HostEvent::ViewChanged { view } => {
+                let mut st = self.lock();
+                st.views.insert(view.pane, view);
+                present::refresh_file(&self.host, &mut st, view.file_id);
+                drop(st);
+                self.shared.wake();
+            }
+            HostEvent::ToolbarButtonClicked { button_id } => match button_id.as_str() {
+                OVERLAY_BUTTON => {
+                    let on = !self.lock().overlay;
+                    self.set_overlay(on);
+                }
+                PANEL_BUTTON => {
+                    if self.lock().sidebar.is_some() {
+                        self.close_panel();
+                    } else {
+                        self.open_panel();
+                    }
+                }
+                _ => {}
+            },
+            HostEvent::ToolActivated { tool_id } if tool_id == REGION_TOOL => self.open_panel(),
+            HostEvent::ShapeDrawn {
+                tool_id,
+                file_id,
+                shape,
+                ..
+            } if tool_id == REGION_TOOL => match Region::from_shape(&shape) {
+                Some(region) => self.set_region(file_id, Some(region), false),
+                None => self.host.notify(
+                    NotifyLevel::Info,
+                    "Outline a region with at least three points.",
+                ),
+            },
+            HostEvent::ObjectEdited { object, shape } => {
+                let file_id = self
+                    .lock()
+                    .files
+                    .keys()
+                    .copied()
+                    .find(|id| region_layer(*id) == object.layer_id);
+                if let Some(file_id) = file_id {
+                    // Reshaped by hand, it no longer follows the ROI.
+                    self.set_region(file_id, Region::from_shape(&shape), false);
+                }
+            }
+            HostEvent::ObjectsDeleteRequested { objects } => {
+                let files: Vec<FileId> = {
+                    let st = self.lock();
+                    st.files
+                        .keys()
+                        .copied()
+                        .filter(|id| objects.iter().any(|o| o.layer_id == region_layer(*id)))
+                        .collect()
+                };
+                for file_id in files {
+                    self.set_region(file_id, None, false);
+                }
+            }
+            HostEvent::ConfirmResult {
+                request_id,
+                confirmed,
+            } => self.confirmed(&request_id, confirmed),
+            HostEvent::JobCancelRequested { job_id } => self.cancel_readout(None, Some(&job_id)),
+            HostEvent::DialogResult { request_id, paths } => self.chosen(&request_id, paths),
+            HostEvent::ModelFetched {
+                request_id,
+                path,
+                error,
+                cancelled,
+                ..
+            } => self.fetched(&request_id, path, error, cancelled),
+            HostEvent::SurfaceClosed { surface_id } => {
+                let mut st = self.lock();
+                if st.sidebar.as_ref().is_some_and(|s| s.id() == surface_id) {
+                    st.sidebar = None;
+                    st.last_sidebar = None;
+                }
+                self.refresh(&mut st);
+            }
+            HostEvent::RoiChanged { file_id, roi } => self.roi_changed(file_id, roi),
+            HostEvent::DisplayChanged { pane, display } => {
+                let mut st = self.lock();
+                st.displays.insert(pane, display);
+                self.refresh(&mut st);
+            }
+            HostEvent::RegistrationRefused { what, id, reason } => {
+                // eov has warned and logged it; the panel keeps it in view.
+                let mut st = self.lock();
+                let problem = match (what.as_str(), id.as_str()) {
+                    ("hotkey", OVERLAY_BUTTON) => format!(
+                        "{reason} Another key can be set as {} in Cellaris's settings.json \
+                         (\"\" for none).",
+                        keys::OVERLAY_KEY
+                    ),
+                    ("hotkey", _) => reason,
+                    _ => format!("eov refused the {what} of {id}: {reason}"),
+                };
+                if !st.setting_problems.contains(&problem) {
+                    st.setting_problems.push(problem);
+                }
+                self.refresh(&mut st);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn ui_callback(&self, _surface_id: &str, name: &str, args: &[Value]) -> Result<Value, String> {
+        if self.headless {
+            return Ok(Value::Null);
+        }
+        let flag = || args.first().and_then(Value::as_bool).unwrap_or(false);
+        match name {
+            "toggle-overlay" => {
+                let on = !self.lock().overlay;
+                self.set_overlay(on);
+            }
+            "set-opacity" => {
+                if let Some(opacity) = args.first().and_then(Value::as_f64) {
+                    self.set_opacity(opacity as f32);
+                }
+            }
+            "set-marker-visible" => {
+                let index = args.first().and_then(Value::as_u64).unwrap_or(u64::MAX);
+                let visible = args.get(1).and_then(Value::as_bool).unwrap_or(true);
+                self.set_marker_visible(index as usize, visible);
+            }
+            "set-fluorescence" => self.set_mode(if flag() {
+                DisplayMode::Fluorescence
+            } else {
+                DisplayMode::Overlay
+            }),
+            "set-assume-mpp" => self.set_assume_mpp(flag()),
+            "set-window" | "reset-window" | "edit-window" => {
+                let index = args.first().and_then(Value::as_u64).unwrap_or(u64::MAX) as usize;
+                let value = |k: usize| args.get(k).and_then(Value::as_f64).map(|v| v as f32);
+                match name {
+                    "set-window" => {
+                        if let (Some(low), Some(high)) = (value(1), value(2)) {
+                            self.set_window(index, Some((low, high)));
+                        }
+                    }
+                    "reset-window" => self.set_window(index, None),
+                    _ => self.edit_window(index),
+                }
+            }
+            "measure-roi" => self.measure_roi()?,
+            "draw-region" => self.host.activate_tool(REGION_TOOL).map_err(host_err)?,
+            "clear-region" => {
+                if let Some(file_id) = self.active_file() {
+                    self.set_region(file_id, None, false);
+                }
+            }
+            "cancel-readout" => {
+                let active = self.active_file();
+                self.cancel_readout(active, None);
+            }
+            "copy-readout" => self.copy_readout()?,
+            "choose-model" => self.choose(Choice::Model)?,
+            "choose-runtime" => self.choose(Choice::Runtime)?,
+            "toggle-download" => self.toggle_download(),
+            "download-model" => {
+                let text = |index: usize| args.get(index).and_then(Value::as_str).unwrap_or("");
+                self.download(text(0), text(1));
+            }
+            "retry" => self.retry(),
+            "close-panel" => self.close_panel(),
+            _ => {}
+        }
+        Ok(Value::Null)
+    }
+
+    fn shutdown(&self) {
+        self.shared.shut_down();
+        // A slide being predicted ends as failed ("stopped").
+        self.batch.shut_down(Duration::from_secs(3));
+        let handle = self.worker.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(handle) = handle {
+            // A prediction is interrupted, but a slow slide read is not; do
+            // not hold the host up for it (plugin libraries are never
+            // unloaded, so a lingering thread is harmless).
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !handle.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if handle.is_finished() {
+                let _ = handle.join();
+            }
+        }
     }
 }
