@@ -374,7 +374,7 @@ mod tests {
         // Grey level = source column, read at 2 source px per model px.
         let src = image(40, 40, |x, _| [x as u8 * 5, x as u8 * 5, x as u8 * 5, 255]);
         let out = resample(&src, &plan(40, 40, 2.0, 2.0, 2.0), 16).unwrap();
-        for a in 0..16 {
+        for (a, _) in out.rgb.iter().enumerate().take(16) {
             // Model pixel a averages source columns 2 + 2a and 3 + 2a.
             let expected = ((2 + 2 * a) as f32 + 0.5) * 5.0 / 255.0;
             assert!((out.rgb[a] - expected).abs() < 1e-5, "{a}: {}", out.rgb[a]);
