@@ -2,7 +2,7 @@
 name = "cellaris"
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.100"
 description = "Predicted Orion multiplex-IF markers overlaid on H&E in eov (research use only, not for diagnosis)"
 repository = "https://github.com/eosin-platform/eov-cellaris-plugin"
 license = "MIT OR Apache-2.0 OR GPL-3.0"
