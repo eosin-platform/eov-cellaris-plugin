@@ -216,8 +216,8 @@ export component CellarisPanel inherits Rectangle {
     scroll := ScrollView {
         width: parent.width;
         height: parent.height;
-        viewport-width: self.visible-width;
-        viewport-height: content.preferred-height;
+        content-width: self.visible-width;
+        content-height: content.preferred-height;
 
         content := VerticalLayout {
             width: scroll.visible-width;

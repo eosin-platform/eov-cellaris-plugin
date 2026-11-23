@@ -39,7 +39,12 @@ fn main() -> ExitCode {
     compiler.set_include_paths(vec![root.clone()]);
     let result = spin_on(compiler.build_from_path(&path));
     let mut failed = false;
+    // Notes (such as that no edition is set: eov sets none) are skipped, as
+    // Slint's build does.
     for diagnostic in result.diagnostics() {
+        if diagnostic.level() == slint_interpreter::DiagnosticLevel::Info {
+            continue;
+        }
         eprintln!("{diagnostic}");
         if diagnostic.level() == slint_interpreter::DiagnosticLevel::Error {
             failed = true;
