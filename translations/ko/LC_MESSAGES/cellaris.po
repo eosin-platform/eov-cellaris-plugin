@@ -1,0 +1,1654 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cellaris\n"
+"Report-Msgid-Bugs-To: https://github.com/eosin-platform/eov-cellaris-plugin/"
+"issues\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Review-Status: machine-translated; not yet reviewed by a native speaker\n"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid "Cellaris"
+msgstr "Cellaris"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid ""
+"Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, "
+"with a readout of the predicted values over a region. Research use only: "
+"predictions are not measurements and are not for diagnosis."
+msgstr ""
+"H&E 위에 Orion 다중 면역형광 마커(Hoechst, Pan-CK, SMA)의 예측값을 겹쳐 표시"
+"하고, 영역 내 예측값에 대한 분석 결과를 제공합니다. 연구용으로만 사용: 예측값"
+"은 측정값이 아니며 진단에 사용할 수 없습니다."
+
+#. Translators: shown wherever predicted colours are. Keep all of its
+#. meaning: the colours are a model's prediction, not a measurement; for
+#. research only; never for diagnosis.
+#: src/config.rs:34
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "예측값 — 연구용으로만 사용, 진단에 사용할 수 없음"
+
+#. Translators: {key} is the name of a setting in Cellaris's
+#. settings.json and {value} its value there; neither is
+#. translated.
+#: src/config.rs:130
+msgid "ignored the setting {key} = {value}"
+msgstr "설정 {key} = {value}을(를) 무시했습니다"
+
+#. Translators: {low} and {high} are the ends of a
+#. marker's display window as settings.json gives
+#. them, {name} the marker (not translated).
+#: src/config.rs:210
+msgid "ignored the display window {low}–{high} of {name}"
+msgstr "{name}의 표시 범위 {low}–{high}을(를) 무시했습니다"
+
+#: src/engine.rs:732
+msgid "Cellaris hit an internal error and reset its model"
+msgstr "Cellaris에 내부 오류가 발생하여 모델을 초기화했습니다"
+
+#: src/engine.rs:737
+msgid "Cellaris hit an internal error"
+msgstr "Cellaris에 내부 오류가 발생했습니다"
+
+#: src/engine.rs:928
+msgid "Loading the model crashed"
+msgstr "모델을 불러오는 중 충돌이 발생했습니다"
+
+#: src/engine.rs:960
+msgid "Cellaris cannot show the chosen markers"
+msgstr "Cellaris에서 선택한 마커를 표시할 수 없습니다"
+
+#. Translators: {} says why the model did not load.
+#: src/engine.rs:991
+msgid "The model did not load: {}"
+msgstr "모델을 불러오지 못했습니다: {}"
+
+#. Translators: why a region readout stopped; a cell is one
+#. square of the grid the slide is predicted in, not a
+#. biological cell. {error} says what went wrong.
+#: src/engine.rs:1195
+msgid "{n} cell failed: {error}"
+msgid_plural "{n} cells failed: {error}"
+msgstr[0] "셀 {n}개 계산 실패: {error}"
+
+#. Translators: {n} cells of a region's {total} could not be
+#. computed: the form follows {n}, and {total} is a bare
+#. number. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell. {error} says what went
+#. wrong.
+#: src/engine.rs:1205
+msgid "{n} cell of {total} could not be computed: {error}"
+msgid_plural "{n} cells of {total} could not be computed: {error}"
+msgstr[0] "셀 {total}개 중 {n}개를 계산할 수 없습니다: {error}"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:1282
+msgid "replaced by a new region"
+msgstr "새 영역으로 대체됨"
+
+#: src/engine.rs:1294
+msgid "No part of that region is on the slide."
+msgstr "해당 영역에는 슬라이드 위에 놓인 부분이 없습니다."
+
+#. Translators: a window is one of the square images the
+#. model predicts from.
+#: src/engine.rs:1299
+msgid "That region needs more than {n} window. Draw a smaller one."
+msgid_plural "That region needs more than {n} windows. Draw a smaller one."
+msgstr[0] ""
+"해당 영역에는 윈도우가 {n}개 넘게 필요합니다. 더 작은 영역을 그리세요."
+
+#. Translators: the title of the question asked before a long
+#. region readout; a readout summarises the model's predicted
+#. values over the region, it is not a measurement.
+#: src/engine.rs:1332
+msgid "Compute a readout of a large region?"
+msgstr "큰 영역의 분석 결과를 계산하시겠습니까?"
+
+#. Translators: {n} windows (square images the model
+#. predicts from); {time} is a duration that already
+#. says "about", such as "about 3 min".
+#: src/engine.rs:1337
+msgid ""
+"This region needs about {n} more window of predictions; computing it takes "
+"{time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgid_plural ""
+"This region needs about {n} more windows of predictions; computing them "
+"takes {time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgstr[0] ""
+"이 영역에는 예측 윈도우가 약 {n}개 더 필요하며, 이 컴퓨터에서 계산하는 데 "
+"{time} 걸립니다. 그동안 오버레이는 계속 작동하며, 분석은 취소할 수 있습니다."
+
+#. Translators: the button that starts the long readout (it
+#. computes the missing predictions and summarises them).
+#: src/engine.rs:1344
+msgid "Compute"
+msgstr "계산"
+
+#. Translators: the button that does not start it.
+#: src/engine.rs:1346
+msgid "Cancel"
+msgstr "취소"
+
+#. Translators: why part of a slide was not computed: eov is
+#. shutting down.
+#: src/engine.rs:1444
+msgid "stopping"
+msgstr "종료 중"
+
+#. Translators: the model failed unexpectedly; {} is the
+#. internal error.
+#: src/engine.rs:1461
+msgid "inference crashed: {}"
+msgstr "추론 중 충돌이 발생했습니다: {}"
+
+#. Translators: {} says why the model could not predict.
+#: src/engine.rs:1482
+msgid "inference failed: {}"
+msgstr "추론에 실패했습니다: {}"
+
+#: src/engine.rs:1615
+msgid "Cellaris could not compute part of the slide; retrying"
+msgstr "Cellaris가 슬라이드 일부를 계산하지 못해 다시 시도하는 중입니다"
+
+#. Translators: the names of the layers Cellaris draws on a slide.
+#: src/engine.rs:2047
+msgid "Cellaris — predicted markers (research use only)"
+msgstr "Cellaris — 예측 마커(연구용으로만 사용)"
+
+#: src/engine.rs:2048
+msgid "Cellaris — progress"
+msgstr "Cellaris — 진행 상황"
+
+#. Translators: the layer with the outline of a region readout's region;
+#. the readout summarises predicted values, so do not call the region
+#. measured.
+#: src/engine.rs:2052
+msgid "Cellaris — readout region"
+msgstr "Cellaris — 분석 영역"
+
+#: src/engine.rs:2053
+msgid "Cellaris — predicted values (research use only)"
+msgstr "Cellaris — 예측값(연구용으로만 사용)"
+
+#. Translators: the name of the tool that outlines a region for a readout,
+#. and the title of the readout while it runs. A readout summarises the
+#. model's predicted values over the region: do not call it a measurement.
+#: src/engine.rs:2086
+msgid "Cellaris region readout"
+msgstr "Cellaris 영역 분석"
+
+#. Translators: why nothing could be predicted, for the overlay or for a
+#. region readout.
+#: src/engine.rs:2093
+msgid "the model is not loaded"
+msgstr "모델을 불러오지 않았습니다"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:2099
+msgid "the slide was closed"
+msgstr "슬라이드가 닫혔습니다"
+
+#. Translators: why part of a slide was not predicted; {} is eov's reason.
+#: src/engine.rs:2105
+msgid "the slide could not be read: {}"
+msgstr "슬라이드를 읽을 수 없습니다: {}"
+
+#. Translators: the quoted words name the Cellaris panel's
+#. check box "Assume the model's pixel size for slides that
+#. report none": use the same words as there.
+#: src/geometry.rs:83
+msgid ""
+"This slide does not report its pixel size, so it cannot be matched to the "
+"model's. Turn on “Assume the model's pixel size” in the Cellaris panel to "
+"run anyway."
+msgstr ""
+"이 슬라이드에는 픽셀 크기 정보가 없어 모델의 픽셀 크기와 맞출 수 없습니다. 그"
+"래도 실행하려면 Cellaris 패널에서 “모델의 픽셀 크기로 가정”을 켜세요."
+
+#. Translators: µm/px is micrometres per pixel; {factor}× is how
+#. many times coarser.
+#: src/geometry.rs:91
+msgid ""
+"This slide is scanned at {slide} µm/px, more than {factor}× coarser than the "
+"{model} µm/px the model was trained at; predictions would be meaningless."
+msgstr ""
+"이 슬라이드는 {slide} µm/px로 스캔되어, 모델이 학습한 {model} µm/px보다 해상"
+"도가 {factor}× 넘게 낮습니다. 예측해도 의미가 없습니다."
+
+#. Translators: {} is a pixel size, as the model gives it.
+#: src/geometry.rs:195
+msgid "the model's pixel size {} is not usable"
+msgstr "모델의 픽셀 크기 {}은(는) 사용할 수 없습니다"
+
+#. Translators: {window} is a size in pixels (px).
+#: src/geometry.rs:202
+msgid "the model's window of {window} px is not a multiple of {multiple}"
+msgstr "모델의 윈도우 크기({window} px)가 {multiple}의 배수가 아닙니다"
+
+#: src/geometry.rs:215
+msgid "the slide is empty"
+msgstr "슬라이드가 비어 있습니다"
+
+#. Translators: a pyramid level is one of the resolutions a slide
+#. is stored at; µm/px is micrometres per pixel.
+#: src/geometry.rs:246
+msgid ""
+"no pyramid level is close to the model's {mpp} µm/px; a window would need "
+"{width}×{height} pixels"
+msgstr ""
+"모델의 {mpp} µm/px에 가까운 피라미드 레벨이 없습니다. 윈도우 하나에 {width}"
+"×{height} 픽셀이 필요합니다"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. predicted markers; H&E is haematoxylin and eosin. Keep "research use
+#. only".
+#: src/lib.rs:94
+msgid "Cellaris: predicted markers over H&E (research use only)"
+msgstr "Cellaris: H&E 위 예측 마커(연구용으로만 사용)"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. Cellaris panel.
+#: src/lib.rs:115
+msgid "Cellaris panel: legend, region readout and model"
+msgstr "Cellaris 패널: 범례, 영역 분석, 모델"
+
+#. Translators: a warning; {} is eov's reason, in English.
+#: src/lib.rs:164
+msgid "Cellaris could not save its settings: {}"
+msgstr "Cellaris 설정을 저장할 수 없습니다: {}"
+
+#: src/lib.rs:348
+msgid "The Cellaris panel could not open"
+msgstr "Cellaris 패널을 열 수 없습니다"
+
+#: src/lib.rs:401
+msgid "Open a slide first."
+msgstr "먼저 슬라이드를 여세요."
+
+#. Translators: the ROI tool is eov's region-of-interest tool;
+#. "Cellaris region readout" is the name of Cellaris's tool (use
+#. the same words as there).
+#: src/lib.rs:414
+msgid ""
+"This slide has no region of interest; draw one with the ROI tool, or outline "
+"a region with the Cellaris region readout tool."
+msgstr ""
+"이 슬라이드에는 관심 영역이 없습니다. ROI 도구로 관심 영역을 그리거나 "
+"Cellaris 영역 분석 도구로 영역의 윤곽을 그리세요."
+
+#: src/lib.rs:498
+msgid "Readout copied as tab-separated text."
+msgstr "분석 결과를 탭으로 구분된 텍스트로 복사했습니다."
+
+#: src/lib.rs:503
+msgid "There is no finished readout to copy."
+msgstr "복사할 완료된 분석 결과가 없습니다."
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:536
+msgid "ONNX Runtime library"
+msgstr "ONNX Runtime 라이브러리"
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:540
+msgid "ONNX model"
+msgstr "ONNX 모델"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:557
+msgid "Choose a Cellaris marker model"
+msgstr "Cellaris 마커 모델 선택"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:559
+msgid "Choose the ONNX Runtime library"
+msgstr "ONNX Runtime 라이브러리 선택"
+
+#. Translators: SHA-256 is a checksum (not translated); hex digits
+#. are 0–9 and a–f.
+#: src/lib.rs:638
+msgid ""
+"Enter the model's SHA-256 (64 hex digits): the download is checked against "
+"it."
+msgstr ""
+"모델의 SHA-256(16진수 64자리)을 입력하세요. 다운로드한 파일을 이 값으로 확인"
+"합니다."
+
+#. Translators: "Choose model…" is the panel's button: use the
+#. same words as there.
+#: src/lib.rs:672
+msgid ""
+"This eov cannot download models: choose the model file with Choose model…"
+msgstr ""
+"이 eov에서는 모델을 다운로드할 수 없습니다. 모델 선택…으로 모델 파일을 선택하"
+"세요."
+
+#: src/lib.rs:957
+msgid "Outline a region with at least three points."
+msgstr "점 3개 이상으로 영역의 윤곽을 그리세요."
+
+#. Translators: {reason} is eov's explanation, a whole
+#. sentence; {key} is the name of a setting in
+#. settings.json, and "" an empty value there (neither
+#. is translated).
+#: src/lib.rs:1031
+msgid ""
+"{reason} Another key can be set as {key} in Cellaris's settings.json (\"\" "
+"for none)."
+msgstr ""
+"{reason} Cellaris의 settings.json에서 {key}에 다른 키를 지정할 수 있습니다(지"
+"정하지 않으려면 \"\")."
+
+#. Translators: eov did not accept something Cellaris
+#. registered: {id} is its identifier and {what} the kind of
+#. registration as eov names it in English, such as
+#. "hotkey" (neither is translated); {reason} is eov's
+#. explanation, a whole sentence.
+#: src/lib.rs:1042
+msgid "eov refused to register {id} ({what}): {reason}"
+msgstr "eov가 {id}({what})의 등록을 거부했습니다: {reason}"
+
+#: src/markers.rs:182
+msgid "no markers are selected"
+msgstr "선택한 마커가 없습니다"
+
+#: src/markers.rs:185
+msgid "at most {n} marker can be shown at once"
+msgid_plural "at most {n} markers can be shown at once"
+msgstr[0] "마커는 한 번에 최대 {n}개까지 표시할 수 있습니다"
+
+#. Translators: {} is a marker's name, such as Pan-CK.
+#: src/markers.rs:194
+msgid "{} is selected twice"
+msgstr "{}이(가) 두 번 선택되었습니다"
+
+#. Translators: {} is a marker's name, such as Pan-CK; a
+#. channel is one of the markers the model predicts.
+#: src/markers.rs:203
+msgid "the model has no channel named {}"
+msgstr "모델에 {}(이)라는 채널이 없습니다"
+
+#. Translators: {} is a marker's name, such as Pan-CK; its display
+#. window is the range of values its colour is drawn over.
+#: src/markers.rs:212
+msgid "no display window is known for {}"
+msgstr "{}의 표시 범위를 알 수 없습니다"
+
+#. Translators: the colours of the predicted markers, named in the
+#. legend over the slide ("Hoechst: yellow").
+#: src/markers.rs:367
+msgctxt "Colour"
+msgid "yellow"
+msgstr "노란색"
+
+#: src/markers.rs:368
+msgctxt "Colour"
+msgid "magenta"
+msgstr "마젠타"
+
+#: src/markers.rs:369
+msgctxt "Colour"
+msgid "bluish green"
+msgstr "청록색"
+
+#: src/markers.rs:370
+msgctxt "Colour"
+msgid "sky blue"
+msgstr "하늘색"
+
+#: src/markers.rs:371
+msgctxt "Colour"
+msgid "orange"
+msgstr "주황색"
+
+#: src/markers.rs:372
+msgctxt "Colour"
+msgid "vermilion"
+msgstr "주홍색"
+
+#. Translators: CELLARIS_MODEL is an environment variable (not
+#. translated); {} is a path.
+#: src/model.rs:207
+msgid "CELLARIS_MODEL points at {}, which does not exist"
+msgstr "CELLARIS_MODEL이 가리키는 {}이(가) 존재하지 않습니다"
+
+#. Translators: {} is the path of the model file the user chose.
+#: src/model.rs:219
+msgid "the model chosen in the Cellaris panel, {}, does not exist"
+msgstr "Cellaris 패널에서 선택한 모델 {}이(가) 존재하지 않습니다"
+
+#. Translators: {file} is the model's file name (markers.onnx), {dir}
+#. the folder it is looked for in.
+#: src/model.rs:234
+msgid "No {file}: put one in {dir}, or choose a model in the Cellaris panel."
+msgstr ""
+"{file}이(가) 없습니다. {dir}에 넣거나 Cellaris 패널에서 모델을 선택하세요."
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is why it could not be read.
+#: src/model.rs:272
+msgid "channel_names is not a list of names: {}"
+msgstr "channel_names가 이름 목록이 아닙니다: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is its value.
+#: src/model.rs:283
+msgid "channel_names has an empty name: {}"
+msgstr "channel_names에 빈 이름이 있습니다: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is a marker's name.
+#: src/model.rs:292
+msgid "channel_names names {} twice"
+msgstr "channel_names에 {}이(가) 두 번 있습니다"
+
+#. Translators: {key} is a key of the model's metadata, {value} its
+#. value; true and false are the values it may have (none is
+#. translated).
+#: src/model.rs:309
+msgid "{key} must be true or false, not {value}"
+msgstr "{key}은(는) {value}이(가) 아니라 true 또는 false여야 합니다"
+
+#. Translators: {key} is a key of the model's metadata (not translated),
+#. {value} its value.
+#: src/model.rs:328
+msgid "{key} is not a number: {value}"
+msgstr "{key}이(가) 숫자가 아닙니다: {value}"
+
+#. Translators: {key} is a key of the model's metadata (not
+#. translated), {value} its value, {min} and {max} what it may be.
+#: src/model.rs:343
+msgid "{key} = {value} is outside {min}–{max}"
+msgstr "{key} = {value}이(가) {min}–{max} 범위를 벗어났습니다"
+
+#. Translators: channel_names is a key of the model's metadata and
+#. export_marker_onnx a program (neither is translated).
+#: src/model.rs:362
+msgid ""
+"the model carries no channel_names, so its channels cannot be told apart; re-"
+"export it with cellaris's export_marker_onnx"
+msgstr ""
+"모델에 channel_names가 없어 채널을 구별할 수 없습니다. cellaris의 "
+"export_marker_onnx로 다시 내보내세요"
+
+#. Translators: a note in the model card; raw_intensity is a key
+#. of the model's metadata (not translated). "raw intensities"
+#. are the model's predictions on a linear (untransformed) scale,
+#. not measured signal.
+#: src/model.rs:374
+msgid "raw_intensity is not recorded; outputs are taken to be raw intensities"
+msgstr "raw_intensity가 기록되어 있지 않아 출력을 원시 강도로 간주합니다"
+
+#. Translators: a note in the model card; {} is a pixel size in
+#. micrometres per pixel (µm/px); Orion is a dataset.
+#: src/model.rs:386
+msgid ""
+"the training pixel size is not recorded; {} µm/px (Orion level 0) is assumed"
+msgstr ""
+"학습 픽셀 크기가 기록되어 있지 않아 {} µm/px(Orion 레벨 0)로 가정합니다"
+
+#. Translators: the shape of the model's input; [batch, 3, height,
+#. width] is a notation, keep it as it is.
+#: src/model.rs:434
+msgid "the input has {n} dimension, not [batch, 3, height, width]"
+msgid_plural "the input has {n} dimensions, not [batch, 3, height, width]"
+msgstr[0] "입력이 [batch, 3, height, width]가 아니라 {n}차원입니다"
+
+#. Translators: RGB is the colour model of the images (not translated).
+#: src/model.rs:442
+msgid "the input takes {n} channel, not RGB"
+msgid_plural "the input takes {n} channels, not RGB"
+msgstr[0] "입력 채널이 RGB가 아니라 {n}개입니다"
+
+#. Translators: {h}×{w} is the size of the model's input in pixels.
+#: src/model.rs:455
+msgid "the input is {h}×{w}; only square inputs are used"
+msgstr "입력이 {h}×{w}입니다. 정사각형 입력만 사용합니다"
+
+#. Translators: {} is a size in pixels (px).
+#: src/model.rs:490
+msgid "the model's input of {} px is not a multiple of 32 between 64 and 1024"
+msgstr "모델의 입력 크기({} px)가 64와 1024 사이의 32의 배수가 아닙니다"
+
+#. Translators: no model file was found (a summary; the details follow).
+#: src/model.rs:533
+msgid "No marker model"
+msgstr "마커 모델 없음"
+
+#. Translators: the file chosen as the model is not one Cellaris can use.
+#: src/model.rs:538
+msgid "Not a marker model"
+msgstr "마커 모델이 아님"
+
+#: src/model.rs:542
+msgid "The model's metadata is not usable"
+msgstr "모델의 메타데이터를 사용할 수 없습니다"
+
+#. Translators: --param model is a command-line option (not
+#. translated); {} is a path.
+#: src/model.rs:587
+msgid "--param model points at {}, which does not exist"
+msgstr "--param model이 가리키는 {}이(가) 존재하지 않습니다"
+
+#. Translators: {path} is the model file, {detail} what is wrong
+#. with it.
+#: src/model.rs:608
+msgid "{path}: {detail}"
+msgstr "{path}: {detail}"
+
+#: src/model.rs:613
+msgid "The model could not be read"
+msgstr "모델을 읽을 수 없습니다"
+
+#: src/model.rs:624
+msgid "The model could not be opened"
+msgstr "모델을 열 수 없습니다"
+
+#: src/model.rs:634
+msgid "it has no inputs"
+msgstr "입력이 없습니다"
+
+#. Translators: float32 is a number type (not translated).
+#: src/model.rs:639
+msgid "its input is not float32"
+msgstr "입력이 float32가 아닙니다"
+
+#. Translators: a tensor is an array of numbers a model takes.
+#: src/model.rs:646
+msgid "its input is not a tensor"
+msgstr "입력이 텐서가 아닙니다"
+
+#. Translators: a note in the model card; {name} is the name of
+#. one of the model's inputs (not translated).
+#: src/model.rs:657
+msgid "the model has {n} input; only {name} is fed"
+msgid_plural "the model has {n} inputs; only {name} is fed"
+msgstr[0] "모델의 입력은 {n}개이며 {name}에만 데이터를 넣습니다"
+
+#. Translators: `markers` is the name of an output of the model
+#. file (not translated).
+#: src/model.rs:673
+msgid "it has no output named `markers`; not a cellaris export"
+msgstr "`markers`라는 출력이 없습니다. cellaris에서 내보낸 모델이 아닙니다"
+
+#. Translators: markers is the name of an output of the model file
+#. and float32 a number type (neither is translated).
+#: src/model.rs:682
+msgid "markers is not float32"
+msgstr "markers가 float32가 아닙니다"
+
+#: src/model.rs:694
+msgid "The model's metadata could not be read"
+msgstr "모델의 메타데이터를 읽을 수 없습니다"
+
+#. Translators: {n} channels are named in the model's metadata;
+#. {outputs} is the number of channels the model really outputs,
+#. a bare number (the plural form follows {n} only).
+#: src/model.rs:723
+msgid "it names {n} channel but outputs {outputs}"
+msgid_plural "it names {n} channels but outputs {outputs}"
+msgstr[0] "채널 이름은 {n}개인데 출력 채널은 {outputs}개입니다"
+
+#. Translators: the model file cannot be used (a summary; the
+#. details follow).
+#: src/model.rs:732
+msgid "Not usable"
+msgstr "사용할 수 없음"
+
+#. Translators: a note in the model card: the model does not say how
+#. familiar an image looks to it.
+#: src/model.rs:738
+msgid "the model reports no reconstruction error"
+msgstr "모델이 재구성 오차를 보고하지 않습니다"
+
+#: src/model.rs:743
+msgid "ONNX Runtime failed"
+msgstr "ONNX Runtime 오류"
+
+#. Translators: how long something will still take; "s" is seconds.
+#: src/present.rs:45
+msgid "about {n} s"
+msgid_plural "about {n} s"
+msgstr[0] "약 {n}초"
+
+#. Translators: how long something will still take; "min" is minutes.
+#: src/present.rs:49
+msgid "about {n} min"
+msgid_plural "about {n} min"
+msgstr[0] "약 {n}분"
+
+#. Translators: how long something will still take, in hours ("h").
+#: src/present.rs:53
+msgid "about {} h"
+msgstr "약 {}시간"
+
+#. Translators: in a cell's tooltip; a tissue block is a 5 µm square
+#. of tissue, not a paraffin block.
+#: src/present.rs:117
+msgid "Mean predicted arcsinh intensity over {n} tissue block"
+msgid_plural "Mean predicted arcsinh intensity over {n} tissue blocks"
+msgstr[0] "조직 블록 {n}개에 대한 평균 예측 arcsinh 강도"
+
+#. Translators: in a cell's tooltip: {n} of the tissue blocks look
+#. unlike the slides the model learnt from.
+#: src/present.rs:124
+msgid "{n} unlike the training data"
+msgid_plural "{n} unlike the training data"
+msgstr[0] "{n}개는 학습 데이터와 다름"
+
+#. Translators: joins two parts of a cell's tooltip: "Mean predicted
+#. arcsinh intensity over 2 tissue blocks" and "1 unlike the training
+#. data".
+#: src/present.rs:129
+msgid "{mean}, {unusual}"
+msgstr "{mean}, {unusual}"
+
+#. Translators: in a cell's tooltip: tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks) too dark to be bright-field H&E.
+#: src/present.rs:134
+msgid "{n} near-black block left out"
+msgid_plural "{n} near-black blocks left out"
+msgstr[0] "거의 검은 블록 {n}개 제외"
+
+#. Translators: joins two parts of a cell's tooltip: the mean of the
+#. predicted values ("Mean predicted arcsinh intensity over 2 tissue
+#. blocks", …) and "1 near-black block left out".
+#: src/present.rs:138
+msgid "{mean}; {dark}"
+msgstr "{mean}; {dark}"
+
+#. Translators: the first line of a cell's tooltip. Keep all of its
+#. meaning: the values are a model's prediction, for research only.
+#: src/present.rs:144
+msgid "Predicted — research use only"
+msgstr "예측값 — 연구용으로만 사용"
+
+#. Translators: a note on a slide; µm/px is micrometres per
+#. pixel.
+#: src/present.rs:276
+msgid "pixel size unknown — assumed {} µm/px"
+msgstr "픽셀 크기 알 수 없음 — {} µm/px로 가정"
+
+#. Translators: a note on a slide: its pixel size is known for
+#. its width or its height only.
+#: src/present.rs:283
+msgid "pixel size reported for one axis only"
+msgstr "픽셀 크기 정보가 한 축에만 있음"
+
+#. Translators: a note on a slide: it was enlarged {factor} times
+#. from its pixel size, {mpp} micrometres per pixel.
+#: src/present.rs:293
+msgid "upsampled ×{factor} from {mpp} µm/px — less reliable"
+msgstr "{mpp} µm/px에서 ×{factor} 업샘플링됨 — 신뢰도 낮음"
+
+#. Translators: a note on a slide whose pixels are not square.
+#: src/present.rs:300
+msgid "non-square pixels, resampled per axis"
+msgstr "정사각형이 아닌 픽셀, 축별로 리샘플링됨"
+
+#. Translators: a note on a slide; {} is the stain its metadata
+#. names (not translated); H&E is haematoxylin and eosin.
+#: src/present.rs:313
+msgid "the slide says {}; the model was trained on H&E"
+msgstr ""
+"슬라이드에는 염색이 {}(으)로 기록되어 있으나 모델은 H&E로 학습되었습니다"
+
+#. Translators: a note on a slide; a window is one of the square
+#. images the model predicts from.
+#: src/present.rs:323
+msgid "{n} window skipped as not bright-field"
+msgid_plural "{n} windows skipped as not bright-field"
+msgstr[0] "명시야가 아닌 윈도우 {n}개 건너뜀"
+
+#. Translators: a note on a slide: {n} of its {total} windows with
+#. tissue look unlike the slides the model learnt from. The form
+#. follows {n}, the windows that do; {total} is a bare number.
+#: src/present.rs:333
+msgid "{n} window of {total} looks unlike the training data"
+msgid_plural "{n} windows of {total} look unlike the training data"
+msgstr[0] "윈도우 {total}개 중 {n}개가 학습 데이터와 다르게 보임"
+
+#. Translators: a note on a slide: the model does not say at which
+#. pixel size it was trained.
+#: src/present.rs:341
+msgid "the model does not record its pixel size"
+msgstr "모델에 픽셀 크기가 기록되어 있지 않음"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:358
+msgid "Not computed: {} (see the Cellaris panel)"
+msgstr "계산되지 않음: {}(Cellaris 패널 참조)"
+
+#: src/present.rs:363 src/present.rs:1303
+msgid "Loading the model…"
+msgstr "모델을 불러오는 중…"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:368 src/present.rs:421
+msgid "Not computed: {}"
+msgstr "계산되지 않음: {}"
+
+#. Translators: a legend entry over the slide, such as
+#. "Pan-CK: magenta (arcsinh 4.50–6.50)": a marker, its colour,
+#. and the display window the user set for it.
+#: src/present.rs:387
+msgid "{marker}: {colour} ({window})"
+msgstr "{marker}: {colour}({window})"
+
+#. Translators: a legend entry over the slide, such as
+#. "Hoechst: yellow": a marker and its colour.
+#: src/present.rs:395
+msgid "{marker}: {colour}"
+msgstr "{marker}: {colour}"
+
+#: src/present.rs:400
+msgid "Every marker is hidden (see the Cellaris panel)"
+msgstr "모든 마커가 숨겨져 있습니다(Cellaris 패널 참조)"
+
+#. Translators: {markers} is the legend over the slide; {n} markers are
+#. hidden.
+#: src/present.rs:408
+msgid "{markers} ({n} hidden)"
+msgid_plural "{markers} ({n} hidden)"
+msgstr[0] "{markers}(숨김 {n}개)"
+
+#. Translators: over the slide; a cell is a small square of the
+#. slide that is predicted at once.
+#: src/present.rs:433
+msgid "Computing {done} of {n} cell"
+msgid_plural "Computing {done} of {n} cells"
+msgstr[0] "셀 {n}개 중 {done}개 계산 중"
+
+#. Translators: {n} cells could not be computed; Retry is a
+#. button in the Cellaris panel.
+#: src/present.rs:442
+msgid "{n} failed (Retry in the Cellaris panel)"
+msgid_plural "{n} failed (Retry in the Cellaris panel)"
+msgstr[0] "{n}개 실패(Cellaris 패널에서 다시 시도)"
+
+#. Translators: {n} cells could not be computed and are tried again.
+#: src/present.rs:447
+msgid "{n} failed, retrying"
+msgid_plural "{n} failed, retrying"
+msgstr[0] "{n}개 실패, 다시 시도 중"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:451
+msgid "{} left"
+msgstr "{} 남음"
+
+#. Translators: over the slide, when it is shown in several views:
+#. one of them shows too much of it to predict ({n} cells; at most
+#. {limit}). A cell is one square of the grid the slide is predicted
+#. in, not a biological cell.
+#: src/present.rs:475
+msgid ""
+"Zoom in to predict: one view of this slide needs {n} cell (limit {limit})"
+msgid_plural ""
+"Zoom in to predict: one view of this slide needs {n} cells (limit {limit})"
+msgstr[0] ""
+"예측하려면 확대하세요. 이 슬라이드의 보기 중 하나에 셀 {n}개가 필요합니다(한"
+"도 {limit}개)"
+
+#. Translators: over the slide: the view shows too much of it to
+#. predict ({n} cells; at most {limit}). A cell is one square of the
+#. grid the slide is predicted in, not a biological cell.
+#: src/present.rs:485
+msgid "Zoom in to predict: this view needs {n} cell (limit {limit})"
+msgid_plural "Zoom in to predict: this view needs {n} cells (limit {limit})"
+msgstr[0] ""
+"예측하려면 확대하세요. 이 보기에는 셀 {n}개가 필요합니다(한도 {limit}개)"
+
+#. Translators: why a slide is not predicted (over the slide).
+#: src/present.rs:496
+msgid "pixel size unknown"
+msgstr "픽셀 크기 알 수 없음"
+
+#. Translators: why a slide is not predicted (over the slide); µm/px
+#. is micrometres per pixel.
+#: src/present.rs:502
+msgid "slide too coarse ({} µm/px)"
+msgstr "슬라이드 해상도가 너무 낮음({} µm/px)"
+
+#. Translators: a legend entry drawn on the slide: a
+#. marker, and the display window the user set for it.
+#: src/present.rs:720
+msgid "{marker} (predicted, {window})"
+msgstr "{marker}(예측, {window})"
+
+#. Translators: a legend entry drawn on the slide: a marker.
+#: src/present.rs:727
+msgid "{} (predicted)"
+msgstr "{}(예측)"
+
+#. Translators: the label drawn on a region while its readout is
+#. computed; {} is how much of it is done, in percent.
+#: src/present.rs:764
+msgid "Cellaris region · {} % computed"
+msgstr "Cellaris 영역 · {}% 계산됨"
+
+#. Translators: the label drawn on the region of a readout (a readout
+#. summarises predicted values; it is not a measurement).
+#: src/present.rs:770
+msgid "Cellaris region"
+msgstr "Cellaris 영역"
+
+#. Translators: the progress of a region readout: {done} of the
+#. region's {n} cells (squares of the grid the slide is
+#. predicted in, not biological cells).
+#: src/present.rs:834
+msgid "{done} of {n} cell"
+msgid_plural "{done} of {n} cells"
+msgstr[0] "셀 {n}개 중 {done}개"
+
+#: src/present.rs:867
+msgid "Cellaris: loading the model…"
+msgstr "Cellaris: 모델을 불러오는 중…"
+
+#. Translators: the status bar while the overlay is on; {} says
+#. what went wrong.
+#: src/present.rs:871
+msgid "Cellaris: {}"
+msgstr "Cellaris: {}"
+
+#. Translators: in the status bar while predictions are shown. Keep all
+#. of its meaning: the colours are predicted, for research only.
+#: src/present.rs:893
+msgid "Cellaris (predicted, research use only)"
+msgstr "Cellaris(예측값, 연구용으로만 사용)"
+
+#. Translators: in the status bar: {done} of {n} cells computed, and
+#. how long each window (square image the model predicts from)
+#. takes, in seconds. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell.
+#: src/present.rs:900
+msgid "{done}/{n} cell, {seconds} s per window"
+msgid_plural "{done}/{n} cells, {seconds} s per window"
+msgstr[0] "셀 {done}/{n}개, 윈도우당 {seconds}초"
+
+#. Translators: in the status bar: {n} cells could not be computed.
+#: src/present.rs:908
+msgid "{n} failed"
+msgid_plural "{n} failed"
+msgstr[0] "{n}개 실패"
+
+#. Translators: in the status bar while a region readout is computed.
+#: src/present.rs:912
+msgid "computing a region readout"
+msgstr "영역 분석 결과 계산 중"
+
+#. Translators: {} says why the region's readout cannot be computed
+#. (such as "no markers are selected").
+#: src/present.rs:954
+msgid "Cannot compute the readout: {}"
+msgstr "분석 결과를 계산할 수 없습니다: {}"
+
+#: src/present.rs:955
+msgid "Waiting for the model…"
+msgstr "모델을 기다리는 중…"
+
+#. Translators: "Cellaris region readout" is the name of the tool
+#. (use the same words as there); the region of interest is eov's
+#. ROI (the panel's button Use ROI).
+#: src/present.rs:964
+msgid ""
+"Outline some tissue with the Cellaris region readout tool, or use the region "
+"of interest."
+msgstr ""
+"Cellaris 영역 분석 도구로 조직의 윤곽을 그리거나 관심 영역을 사용하세요."
+
+#. Translators: what a region readout covers: {n} tissue blocks
+#. (5 µm squares of tissue, not paraffin blocks), their area and
+#. the region's, in square millimetres.
+#: src/present.rs:982
+msgid "{n} tissue block, {tissue} mm² of tissue in {region} mm²"
+msgid_plural "{n} tissue blocks, {tissue} mm² of tissue in {region} mm²"
+msgstr[0] "조직 블록 {n}개, 영역 {region} mm² 중 조직 {tissue} mm²"
+
+#. Translators: what a region readout covers: {n} tissue blocks (5 µm
+#. squares of tissue, not paraffin blocks).
+#: src/present.rs:990
+msgid "{n} tissue block"
+msgid_plural "{n} tissue blocks"
+msgstr[0] "조직 블록 {n}개"
+
+#: src/present.rs:993
+msgid "Waiting for you to confirm a long readout."
+msgstr "오래 걸리는 분석을 진행할지 확인을 기다리는 중입니다."
+
+#. Translators: {done} of the region's {n} cells (squares of the
+#. grid the slide is predicted in, not biological cells) are
+#. computed; {summary} is what the readout covers so far, such
+#. as "12 tissue blocks, …".
+#: src/present.rs:999
+msgid "Computing: {done} of {n} cell · {summary}"
+msgid_plural "Computing: {done} of {n} cells · {summary}"
+msgstr[0] "계산 중: 셀 {n}개 중 {done}개 · {summary}"
+
+#. Translators: {} is what the readout covered until it was
+#. cancelled, such as "12 tissue blocks, …".
+#: src/present.rs:1007
+msgid "Cancelled · {}"
+msgstr "취소됨 · {}"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:1014
+msgid "{} left on this computer."
+msgstr "이 컴퓨터에서 {} 남았습니다."
+
+#. Translators: density r² is a column of the readout; a tissue
+#. block is a 5 µm square of tissue, not a paraffin block.
+#: src/present.rs:1019
+msgid "Fewer than {n} tissue block, too few for a density r²."
+msgid_plural "Fewer than {n} tissue blocks, too few for a density r²."
+msgstr[0] "조직 블록이 {n}개 미만이어서 밀도 r²을 구하기에 너무 적습니다."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks; {percent} is a percentage;
+#. blocks are 5 µm squares of tissue, not paraffin blocks.
+#: src/present.rs:1035
+msgid ""
+"Mean reconstruction error {recon}, {percent} % of blocks above the model's "
+"threshold."
+msgstr ""
+"평균 재구성 오차 {recon}, 블록의 {percent}%가 모델의 임계값을 넘습니다."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks.
+#: src/present.rs:1042
+msgid "Mean reconstruction error {}."
+msgstr "평균 재구성 오차 {}."
+
+#. Translators: {blocks} is a number of blocks ("3 blocks") and
+#. {cells} a number of cells ("1 cell"), both translated
+#. separately.
+#: src/present.rs:1051
+msgid "{blocks} and {cells} skipped as near-black (not bright-field H&E)."
+msgstr ""
+"{blocks}와 {cells}를 거의 검은색이어서(명시야 H&E가 아님) 건너뛰었습니다."
+
+#. Translators: a number of tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks), in "3 blocks and 1 cell skipped
+#. as near-black".
+#: src/present.rs:1055
+msgid "{n} block"
+msgid_plural "{n} blocks"
+msgstr[0] "블록 {n}개"
+
+#. Translators: a number of cells (squares of the grid the slide
+#. is predicted in, not biological cells), in "3 blocks and 1
+#. cell skipped as near-black".
+#: src/present.rs:1059
+msgid "{n} cell"
+msgid_plural "{n} cells"
+msgstr[0] "셀 {n}개"
+
+#. Translators: {} is a note on the slide.
+#: src/present.rs:1067
+msgid "Note: {}."
+msgstr "참고: {}."
+
+#. Translators: the labels of the model card in the Cellaris panel.
+#: src/present.rs:1092
+msgctxt "Model card"
+msgid "Model"
+msgstr "모델"
+
+#: src/present.rs:1093
+msgctxt "Model card"
+msgid "Runtime"
+msgstr "런타임"
+
+#: src/present.rs:1102
+msgctxt "Model card"
+msgid "Version"
+msgstr "버전"
+
+#: src/present.rs:1105
+msgctxt "Model card"
+msgid "File"
+msgstr "파일"
+
+#. Translators: the start of the model file's SHA-256, and its
+#. size in megabytes.
+#: src/present.rs:1113
+msgid "{hash} ({size} MB)"
+msgstr "{hash}({size} MB)"
+
+#. Translators: the pixel size the model was trained at.
+#: src/present.rs:1121
+msgctxt "Model card"
+msgid "Trained at"
+msgstr "학습 해상도"
+
+#. Translators: a pixel size the model does not record, so it
+#. is assumed; µm/px is micrometres per pixel.
+#: src/present.rs:1127
+msgid "{} µm/px (assumed)"
+msgstr "{} µm/px(가정)"
+
+#. Translators: what the model takes in.
+#: src/present.rs:1132
+msgctxt "Model card"
+msgid "Input"
+msgstr "입력"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, as many at once as wanted.
+#: src/present.rs:1137
+msgid "{side}×{side} px windows, any batch size"
+msgstr "{side}×{side} px 윈도우, 배치 크기 제한 없음"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, exactly {n} at once.
+#: src/present.rs:1143
+msgid "{side}×{side} px windows, batches of {n}"
+msgid_plural "{side}×{side} px windows, batches of {n}"
+msgstr[0] "{side}×{side} px 윈도우, 배치당 {n}개"
+
+#. Translators: the markers the model predicts.
+#: src/present.rs:1151
+msgctxt "Model card"
+msgid "Channels"
+msgstr "채널"
+
+#. Translators: what the model computes.
+#: src/present.rs:1160
+msgctxt "Model card"
+msgid "Outputs"
+msgstr "출력"
+
+#. Translators: the model card's Outputs row: the model's
+#. predicted intensities are on a linear ("raw",
+#. untransformed) scale and shown as arcsinh(x/5); "raw" does
+#. not mean measured signal.
+#: src/present.rs:1167
+msgid "raw intensities, shown as arcsinh(x/5), reconstruction error"
+msgstr "원시 강도(arcsinh(x/5)로 표시), 재구성 오차"
+
+#. Translators: the model card's Outputs row: the model's predicted
+#. intensities are on a linear ("raw", untransformed) scale and
+#. shown as arcsinh(x/5); "raw" does not mean measured signal.
+#: src/present.rs:1172
+msgid "raw intensities, shown as arcsinh(x/5)"
+msgstr "원시 강도(arcsinh(x/5)로 표시)"
+
+#: src/present.rs:1173
+msgid "arcsinh intensities, reconstruction error"
+msgstr "arcsinh 강도, 재구성 오차"
+
+#: src/present.rs:1174
+msgid "arcsinh intensities"
+msgstr "arcsinh 강도"
+
+#. Translators: the data the model was trained on.
+#: src/present.rs:1179
+msgctxt "Model card"
+msgid "Trained on"
+msgstr "학습 데이터"
+
+#: src/present.rs:1182
+msgctxt "Model card"
+msgid "Licence"
+msgstr "라이선스"
+
+#. Translators: the model's own description follows.
+#: src/present.rs:1186
+msgctxt "Model card"
+msgid "About"
+msgstr "설명"
+
+#. Translators: the program that wrote the model file.
+#: src/present.rs:1190
+msgctxt "Model card"
+msgid "Exported by"
+msgstr "내보낸 프로그램"
+
+#: src/present.rs:1194
+msgctxt "Model card"
+msgid "Note"
+msgstr "참고"
+
+#: src/present.rs:1213
+msgid "the new choice takes effect when eov restarts"
+msgstr "새로 선택한 항목은 eov를 다시 시작하면 적용됩니다"
+
+#. Translators: {version} is ONNX Runtime's version, {library} its
+#. file; {n} threads compute predictions.
+#: src/present.rs:1226
+msgid "ONNX Runtime {version} from {library}, {n} thread"
+msgid_plural "ONNX Runtime {version} from {library}, {n} threads"
+msgstr[0] "ONNX Runtime {version}({library}), 스레드 {n}개"
+
+#. Translators: {library} is ONNX Runtime's file; {n} threads compute
+#. predictions.
+#: src/present.rs:1234
+msgid "ONNX Runtime (version unknown) from {library}, {n} thread"
+msgid_plural "ONNX Runtime (version unknown) from {library}, {n} threads"
+msgstr[0] "ONNX Runtime(버전 알 수 없음, {library}), 스레드 {n}개"
+
+#. Translators: {runtime} names ONNX Runtime and its file; {n}
+#. threads compute predictions.
+#: src/present.rs:1241
+msgid "{runtime}, {n} thread"
+msgid_plural "{runtime}, {n} threads"
+msgstr[0] "{runtime}, 스레드 {n}개"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours,
+#. but the model sees the slide's own.
+#: src/present.rs:1276
+msgid "the display is adjusted; predictions use the slide's unadjusted colours"
+msgstr ""
+"화면 표시가 조정되어 있습니다. 예측에는 조정되지 않은 슬라이드 원래 색이 사용"
+"됩니다"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours
+#. ({} says how, in eov's words), but the model sees the slide's own.
+#: src/present.rs:1283
+msgid ""
+"the display is adjusted ({}); predictions use the slide's unadjusted colours"
+msgstr ""
+"화면 표시가 조정되어 있습니다({}). 예측에는 조정되지 않은 슬라이드 원래 색이 "
+"사용됩니다"
+
+#: src/present.rs:1298
+msgid ""
+"The model loads when the overlay is turned on or a region readout starts."
+msgstr "모델은 오버레이를 켜거나 영역 분석을 시작할 때 불러옵니다."
+
+#. Translators: cells are the small squares of the slide
+#. that are predicted at once.
+#: src/present.rs:1321
+msgid "{n} cell in view could not be computed"
+msgid_plural "{n} cells in view could not be computed"
+msgstr[0] "화면에 보이는 셀 {n}개를 계산할 수 없습니다"
+
+#. Translators: {} is how long each window (square image
+#. the model predicts from) takes, in seconds.
+#: src/present.rs:1333
+msgid "Computing · {} s per window"
+msgstr "계산 중 · 윈도우당 {}초"
+
+#. Translators: {} is the name of the model that is loaded.
+#: src/present.rs:1344
+msgid "Ready: {}"
+msgstr "준비: {}"
+
+#: src/present.rs:1367
+msgid "No slide"
+msgstr "슬라이드 없음"
+
+#. Translators: the slide's pixel size in micrometres per pixel
+#. (µm/px), the pyramid level it is read from, and how much
+#. smaller that level is (×4.00).
+#: src/present.rs:1374
+msgid "{x} × {y} µm/px, read from level {level} (×{downsample})"
+msgstr "{x} × {y} µm/px, 레벨 {level}에서 읽음(×{downsample})"
+
+#. Translators: the slide does not say its pixel size.
+#: src/present.rs:1385
+msgid "pixel size not reported"
+msgstr "픽셀 크기 정보 없음"
+
+#. Translators: under the progress bar in the Cellaris panel; a
+#. cell is one square of the grid the slide is predicted in, not a
+#. biological cell.
+#: src/present.rs:1418
+msgid "{done} of {n} cell in view"
+msgid_plural "{done} of {n} cells in view"
+msgstr[0] "화면에 보이는 셀 {n}개 중 {done}개"
+
+#. Translators: {} is a marker's display window ("arcsinh 4.50–6.50")
+#. that the user set.
+#: src/present.rs:1446
+msgid "{}, yours"
+msgstr "{}, 사용자 설정"
+
+#. Translators: eov first asks the user whether to download the model
+#. (nothing is downloaded without that answer), then downloads it.
+#: src/present.rs:1512
+msgid ""
+"eov is asking you whether to download the model, or downloading it (see the "
+"status bar)…"
+msgstr ""
+"eov가 모델을 다운로드할지 묻고 있거나 다운로드하는 중입니다(상태 표시줄 참"
+"조)…"
+
+#. Translators: under the model's address and SHA-256 in the
+#. Cellaris panel; the model store is where eov keeps models.
+#: src/present.rs:1521
+msgid ""
+"eov checks the download against this SHA-256 and keeps it in its model "
+"store; it is then Cellaris's model. Without an address, the copy your "
+"administrator gave eov is used."
+msgstr ""
+"eov는 다운로드한 파일을 이 SHA-256으로 확인한 뒤 모델 저장소에 보관하며, 이"
+"후 이 파일이 Cellaris의 모델이 됩니다. 주소를 지정하지 않으면 관리자가 eov에 "
+"제공한 사본을 사용합니다."
+
+#. Translators: where an ONNX Runtime library was found, shown in
+#. parentheses after it in the list of libraries tried.
+#: src/runtime.rs:128
+msgid "the runtime chosen in the Cellaris panel"
+msgstr "Cellaris 패널에서 선택한 런타임"
+
+#: src/runtime.rs:129
+msgid "the plugin package"
+msgstr "플러그인 패키지"
+
+#: src/runtime.rs:130
+msgid "the plugin's data directory"
+msgstr "플러그인의 데이터 디렉터리"
+
+#: src/runtime.rs:131
+msgid "the system library path"
+msgstr "시스템 라이브러리 경로"
+
+#. Translators: {} is the path the user chose for the ONNX
+#. Runtime library.
+#: src/runtime.rs:142
+msgid ""
+"the runtime chosen in the Cellaris panel points at {}, which does not exist"
+msgstr "Cellaris 패널에서 선택한 런타임이 가리키는 {}이(가) 존재하지 않습니다"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a path.
+#: src/runtime.rs:150
+msgid "{source} points at {path}, which does not exist"
+msgstr "{source}이(가) 가리키는 {path}이(가) 존재하지 않습니다"
+
+#. Translators: {path} is the folder the user chose for ONNX
+#. Runtime, {library} the file name of its library.
+#: src/runtime.rs:165
+msgid ""
+"the runtime chosen in the Cellaris panel points at {path}, which holds no "
+"{library}"
+msgstr ""
+"Cellaris 패널에서 선택한 런타임이 가리키는 {path}에 {library}이(가) 없습니다"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a folder,
+#. {library} the file name of ONNX Runtime's library.
+#: src/runtime.rs:175
+msgid "{source} points at {path}, which holds no {library}"
+msgstr "{source}이(가) 가리키는 {path}에 {library}이(가) 없습니다"
+
+#. Translators: where to get ONNX Runtime on Windows; file and release
+#. names are not translated.
+#: src/runtime.rs:334
+msgid "onnxruntime.dll from the onnxruntime-win-x64 release"
+msgstr "onnxruntime-win-x64 릴리스의 onnxruntime.dll"
+
+#. Translators: where to get ONNX Runtime on macOS; `brew install
+#. onnxruntime` is a command, and file and release names are not
+#. translated.
+#: src/runtime.rs:339
+msgid ""
+"`brew install onnxruntime`, or libonnxruntime.dylib from the onnxruntime-osx "
+"release"
+msgstr ""
+"`brew install onnxruntime` 또는 onnxruntime-osx 릴리스의 libonnxruntime.dylib"
+
+#. Translators: where to get ONNX Runtime on Linux; file and release
+#. names are not translated.
+#: src/runtime.rs:344
+msgid ""
+"libonnxruntime.so from the onnxruntime-linux release, or your distribution's "
+"package"
+msgstr "onnxruntime-linux 릴리스의 libonnxruntime.so 또는 배포판의 패키지"
+
+#. Translators: {version} is a version number, {platform} says where to
+#. get ONNX Runtime for this computer; CELLARIS_ORT_DYLIB is an
+#. environment variable (not translated).
+#: src/runtime.rs:351
+msgid ""
+"Install ONNX Runtime {version} or newer ({platform}), then choose it in the "
+"Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data "
+"directory."
+msgstr ""
+"ONNX Runtime {version} 이상({platform})을 설치한 다음 Cellaris 패널에서 선택"
+"하거나, CELLARIS_ORT_DYLIB을 설정하거나, 플러그인의 데이터 디렉터리에 넣으세"
+"요."
+
+#: src/runtime.rs:374
+msgid "ONNX Runtime was not found"
+msgstr "ONNX Runtime을 찾을 수 없습니다"
+
+#: src/runtime.rs:378
+msgid "ONNX Runtime could not be loaded"
+msgstr "ONNX Runtime을 불러올 수 없습니다"
+
+#. Translators: {path} is an ONNX Runtime library, {source} where it was
+#. found, {what} what went wrong with it.
+#: src/runtime.rs:390
+msgid "{path} ({source}): {what}"
+msgstr "{path}({source}): {what}"
+
+#. Translators: "it" is a library file; {} is why the system could
+#. not open it.
+#: src/runtime.rs:431
+msgid "it could not be opened: {}"
+msgstr "열 수 없습니다: {}"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name
+#. in ONNX Runtime (not translated).
+#: src/runtime.rs:438
+msgid "it is not ONNX Runtime (it has no OrtGetApiBase)"
+msgstr "ONNX Runtime이 아닙니다(OrtGetApiBase 없음)"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name in
+#. ONNX Runtime (not translated).
+#: src/runtime.rs:446
+msgid "it is not ONNX Runtime (OrtGetApiBase returned nothing)"
+msgstr "ONNX Runtime이 아닙니다(OrtGetApiBase가 아무것도 반환하지 않음)"
+
+#. Translators: "it" is a library file; {version} and {needed}
+#. are version numbers.
+#: src/runtime.rs:465
+msgid "it is ONNX Runtime {version}, older than {needed}"
+msgstr "{needed}보다 오래된 ONNX Runtime {version}입니다"
+
+#. Translators: {reason} is why ONNX Runtime was not found, {hint}
+#. how to install it.
+#: src/runtime.rs:522
+msgid ""
+"{reason}.\n"
+"{hint}"
+msgstr ""
+"{reason}.\n"
+"{hint}"
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:553
+msgid "opening it crashed"
+msgstr "여는 중 충돌이 발생했습니다"
+
+#. Translators: {} is why ONNX Runtime could not be
+#. loaded, in its own words.
+#: src/runtime.rs:586
+msgid "{}. Restart eov to try again."
+msgstr "{}. 다시 시도하려면 eov를 다시 시작하세요."
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:596
+msgid "loading it crashed. Restart eov to try again."
+msgstr ""
+"불러오는 중 충돌이 발생했습니다. 다시 시도하려면 eov를 다시 시작하세요."
+
+#. Translators: {} is a version number.
+#: src/runtime.rs:606
+msgid "The ONNX Runtime found is older than {}"
+msgstr "찾은 ONNX Runtime이 {}보다 오래된 버전입니다"
+
+#. Translators: {attempts} lists the libraries tried, one per line,
+#. {hint} says how to install ONNX Runtime.
+#: src/runtime.rs:613
+msgid ""
+"Tried:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+msgstr ""
+"시도한 위치:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+
+#. Translators: keep the full meaning: predicted, research only, no diagnosis.
+#: ui/cellaris.slint:308
+msgctxt "CellarisPanel"
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "예측값 — 연구용으로만 사용, 진단에 사용할 수 없음"
+
+#: ui/cellaris.slint:314
+msgctxt "CellarisPanel"
+msgid "No slide"
+msgstr "슬라이드 없음"
+
+#. Translators: closes the Cellaris panel.
+#: ui/cellaris.slint:408
+msgctxt "CellarisPanel"
+msgid "Close"
+msgstr "닫기"
+
+#. Translators: keep the full meaning; IF is immunofluorescence.
+#: ui/cellaris.slint:435
+msgctxt "CellarisPanel"
+msgid ""
+"The colours show what a model predicts the immunofluorescence would be. They "
+"are not measurements: check them against measured IF before relying on them."
+msgstr ""
+"색은 모델이 예측한 면역형광 결과를 나타냅니다. 측정값이 아니므로, 신뢰하기 전"
+"에 실제로 측정한 면역형광(IF)과 대조해 확인하세요."
+
+#. Translators: tries again what failed (the model, cells).
+#: ui/cellaris.slint:460
+msgctxt "CellarisPanel"
+msgid "Retry"
+msgstr "다시 시도"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:472
+msgctxt "CellarisPanel"
+msgid "SLIDE"
+msgstr "슬라이드"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:489
+msgctxt "CellarisPanel"
+msgid "PREDICTED MARKERS"
+msgstr "예측 마커"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Hide predictions"
+msgstr "예측 숨기기"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Show predictions"
+msgstr "예측 표시"
+
+#. Translators: {} is a marker, such as Pan-CK.
+#: ui/cellaris.slint:551
+msgctxt "CellarisPanel"
+msgid "Display window of {} (arcsinh)"
+msgstr "{} 표시 범위(arcsinh)"
+
+#. Translators: the low end of a marker's display window: at or below it
+#. nothing is drawn (black in fluorescence style).
+#: ui/cellaris.slint:560
+msgctxt "CellarisPanel"
+msgid "Low"
+msgstr "하한"
+
+#. Translators: the high end of a marker's display window: at or above it the
+#. marker is drawn in its full colour.
+#: ui/cellaris.slint:588
+msgctxt "CellarisPanel"
+msgid "High"
+msgstr "상한"
+
+#: ui/cellaris.slint:615
+msgctxt "CellarisPanel"
+msgid ""
+"Only how predictions are drawn changes; readouts and batch runs keep their "
+"values."
+msgstr ""
+"예측을 그리는 방식만 바뀌며, 분석 결과와 일괄 실행의 값은 그대로 유지됩니다."
+
+#. Translators: resets a marker's display window to Cellaris's own.
+#: ui/cellaris.slint:622
+msgctxt "CellarisPanel"
+msgid "Reset"
+msgstr "초기화"
+
+#. Translators: how opaque the predicted colours are drawn.
+#: ui/cellaris.slint:636
+msgctxt "CellarisPanel"
+msgid "Opacity"
+msgstr "불투명도"
+
+#. Translators: {} is the opacity, in percent.
+#: ui/cellaris.slint:652
+msgctxt "CellarisPanel"
+msgid "{} %"
+msgstr "{}%"
+
+#: ui/cellaris.slint:662
+msgctxt "CellarisPanel"
+msgid "Fluorescence style: colour on black over all tissue"
+msgstr "형광 스타일: 모든 조직을 검은 바탕 위의 색으로 표시"
+
+#. Translators: a check box; other messages quote its first words.
+#: ui/cellaris.slint:671
+msgctxt "CellarisPanel"
+msgid "Assume the model's pixel size for slides that report none"
+msgstr "모델의 픽셀 크기로 가정(픽셀 크기 정보가 없는 슬라이드)"
+
+#: ui/cellaris.slint:678
+msgctxt "CellarisPanel"
+msgid ""
+"Colours are chosen to stay distinct with red-green and blue-yellow colour "
+"blindness; hide markers to look at one at a time. Areas still being computed "
+"are veiled; failed ones are outlined in red."
+msgstr ""
+"색은 적록 색각 이상과 청황 색각 이상에서도 구별되도록 선택되었습니다. 한 번"
+"에 하나씩 보려면 나머지 마커를 숨기세요. 아직 계산 중인 영역은 반투명하게 가"
+"려지고, 실패한 영역은 빨간색 윤곽선으로 표시됩니다."
+
+#. Translators: a section heading, in capitals in English: statistics of the
+#. model's predicted values over a region (not a measurement).
+#: ui/cellaris.slint:684
+msgctxt "CellarisPanel"
+msgid "REGION READOUT"
+msgstr "영역 분석"
+
+#. Translators: a column of the readout: the marker.
+#: ui/cellaris.slint:707
+msgctxt "CellarisPanel"
+msgid "marker"
+msgstr "마커"
+
+#. Translators: a narrow column of the readout: the mean predicted value.
+#: ui/cellaris.slint:709
+msgctxt "CellarisPanel"
+msgid "mean"
+msgstr "평균"
+
+#. Translators: a narrow column of the readout: how much the value varies.
+#: ui/cellaris.slint:711
+msgctxt "CellarisPanel"
+msgid "spread"
+msgstr "산포"
+
+#. Translators: a narrow column: how much optical density alone explains.
+#: ui/cellaris.slint:713
+msgctxt "CellarisPanel"
+msgid "density r²"
+msgstr "밀도 r²"
+
+#. Translators: picks the tool that outlines a region for a readout of the
+#. predicted values.
+#: ui/cellaris.slint:734
+msgctxt "CellarisPanel"
+msgid "Draw region"
+msgstr "영역 그리기"
+
+#. Translators: makes the slide's region of interest (ROI) the readout's
+#. region, instead of a drawn one; the readout follows the ROI.
+#: ui/cellaris.slint:741
+msgctxt "CellarisPanel"
+msgid "Use ROI"
+msgstr "ROI 사용"
+
+#. Translators: stops the region readout.
+#: ui/cellaris.slint:751
+msgctxt "CellarisPanel"
+msgid "Cancel"
+msgstr "취소"
+
+#. Translators: copies the region readout as text.
+#: ui/cellaris.slint:758
+msgctxt "CellarisPanel"
+msgid "Copy"
+msgstr "복사"
+
+#. Translators: removes the readout's region and its readout.
+#: ui/cellaris.slint:766
+msgctxt "CellarisPanel"
+msgid "Clear"
+msgstr "지우기"
+
+#. Translators: explains the readout's columns; keep the meaning exact; the 5
+#. µm blocks are small squares of tissue, not paraffin blocks.
+#: ui/cellaris.slint:775
+msgctxt "CellarisPanel"
+msgid ""
+"Mean is the predicted intensity, arcsinh, over tissue in the region, and "
+"spread how much it varies between 5 µm blocks. Density r² is how much of "
+"that variation optical density alone reproduces. Near 1, the marker is a "
+"density map here. Low with a small spread means the prediction is flat, not "
+"that it learned anything. Low with a wide spread is needed for it to be the "
+"marker, but only measured IF shows it is. Numbers come from the same blended "
+"predictions the overlay shows."
+msgstr ""
+"평균은 영역 안 조직에서 예측된 강도(arcsinh)의 평균이고, 산포는 그 값이 5 µm "
+"블록 사이에서 얼마나 달라지는지를 나타냅니다. 밀도 r²은 그 변동 중 광학 밀도"
+"만으로 재현되는 정도입니다. 1에 가까우면 이 영역에서 해당 마커는 밀도 맵에 지"
+"나지 않습니다. r²이 낮고 산포가 작으면 예측이 평탄하다는 뜻일 뿐, 모델이 무언"
+"가를 학습했다는 뜻이 아닙니다. r²이 낮고 산포가 넓어야 예측이 실제 마커일 수 "
+"있지만, 실제로 그런지는 측정한 IF만이 보여 줍니다. 수치는 오버레이에 표시되"
+"는 것과 같은 혼합 예측에서 계산됩니다."
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:781
+msgctxt "CellarisPanel"
+msgid "MODEL"
+msgstr "모델"
+
+#. Translators: opens a file dialog to choose the model file.
+#: ui/cellaris.slint:805
+msgctxt "CellarisPanel"
+msgid "Choose model…"
+msgstr "모델 선택…"
+
+#. Translators: opens a form to download the model through eov.
+#: ui/cellaris.slint:807
+msgctxt "CellarisPanel"
+msgid "Download model…"
+msgstr "모델 다운로드…"
+
+#. Translators: opens a file dialog to choose ONNX Runtime's library.
+#: ui/cellaris.slint:809
+msgctxt "CellarisPanel"
+msgid "Choose runtime…"
+msgstr "런타임 선택…"
+
+#. Translators: above the fields for the model's address and SHA-256.
+#: ui/cellaris.slint:824
+msgctxt "CellarisPanel"
+msgid "Your site's copy of the model, and its SHA-256:"
+msgstr "소속 기관의 모델 사본 주소와 SHA-256:"
+
+#. Translators: hex digits are 0–9 and a–f.
+#: ui/cellaris.slint:834
+msgctxt "CellarisPanel"
+msgid "SHA-256 (64 hex digits)"
+msgstr "SHA-256(16진수 64자리)"
+
+#. Translators: downloads the model from the address given.
+#: ui/cellaris.slint:840
+msgctxt "CellarisPanel"
+msgid "Download"
+msgstr "다운로드"

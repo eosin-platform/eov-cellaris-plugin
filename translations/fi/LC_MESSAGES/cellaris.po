@@ -1,0 +1,1721 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cellaris\n"
+"Report-Msgid-Bugs-To: https://github.com/eosin-platform/eov-cellaris-plugin/"
+"issues\n"
+"Language-Team: Finnish\n"
+"Language: fi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Review-Status: machine-translated; not yet reviewed by a native speaker\n"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid "Cellaris"
+msgstr "Cellaris"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid ""
+"Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, "
+"with a readout of the predicted values over a region. Research use only: "
+"predictions are not measurements and are not for diagnosis."
+msgstr ""
+"H&E-kuvan päälle piirretyt ennustetut Orion-mIF-merkkiaineet (Hoechst, Pan-"
+"CK, SMA) sekä yhteenveto alueen ennustetuista arvoista. Vain "
+"tutkimuskäyttöön: ennusteet eivät ole mittaustuloksia, eikä niitä saa "
+"käyttää diagnostiikkaan."
+
+#. Translators: shown wherever predicted colours are. Keep all of its
+#. meaning: the colours are a model's prediction, not a measurement; for
+#. research only; never for diagnosis.
+#: src/config.rs:34
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "ENNUSTETTU — vain tutkimuskäyttöön, ei diagnostiikkaan"
+
+#. Translators: {key} is the name of a setting in Cellaris's
+#. settings.json and {value} its value there; neither is
+#. translated.
+#: src/config.rs:130
+msgid "ignored the setting {key} = {value}"
+msgstr "asetus {key} = {value} ohitettiin"
+
+#. Translators: {low} and {high} are the ends of a
+#. marker's display window as settings.json gives
+#. them, {name} the marker (not translated).
+#: src/config.rs:210
+msgid "ignored the display window {low}–{high} of {name}"
+msgstr "merkkiaineen {name} näyttöväli {low}–{high} ohitettiin"
+
+#: src/engine.rs:732
+msgid "Cellaris hit an internal error and reset its model"
+msgstr "Cellaris kohtasi sisäisen virheen ja alusti mallinsa uudelleen"
+
+#: src/engine.rs:737
+msgid "Cellaris hit an internal error"
+msgstr "Cellaris kohtasi sisäisen virheen"
+
+#: src/engine.rs:928
+msgid "Loading the model crashed"
+msgstr "Mallin lataus kaatui"
+
+#: src/engine.rs:960
+msgid "Cellaris cannot show the chosen markers"
+msgstr "Cellaris ei voi näyttää valittuja merkkiaineita"
+
+#. Translators: {} says why the model did not load.
+#: src/engine.rs:991
+msgid "The model did not load: {}"
+msgstr "Malli ei latautunut: {}"
+
+#. Translators: why a region readout stopped; a cell is one
+#. square of the grid the slide is predicted in, not a
+#. biological cell. {error} says what went wrong.
+#: src/engine.rs:1195
+msgid "{n} cell failed: {error}"
+msgid_plural "{n} cells failed: {error}"
+msgstr[0] "{n} ruutu epäonnistui: {error}"
+msgstr[1] "{n} ruutua epäonnistui: {error}"
+
+#. Translators: {n} cells of a region's {total} could not be
+#. computed: the form follows {n}, and {total} is a bare
+#. number. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell. {error} says what went
+#. wrong.
+#: src/engine.rs:1205
+msgid "{n} cell of {total} could not be computed: {error}"
+msgid_plural "{n} cells of {total} could not be computed: {error}"
+msgstr[0] "{total} ruudusta {n} jäi laskematta: {error}"
+msgstr[1] "{total} ruudusta {n} jäi laskematta: {error}"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:1282
+msgid "replaced by a new region"
+msgstr "korvattu uudella alueella"
+
+#: src/engine.rs:1294
+msgid "No part of that region is on the slide."
+msgstr "Mikään osa alueesta ei ole näytelasilla."
+
+#. Translators: a window is one of the square images the
+#. model predicts from.
+#: src/engine.rs:1299
+msgid "That region needs more than {n} window. Draw a smaller one."
+msgid_plural "That region needs more than {n} windows. Draw a smaller one."
+msgstr[0] "Alue vaatii yli {n} ikkunan. Piirrä pienempi alue."
+msgstr[1] "Alue vaatii yli {n} ikkunaa. Piirrä pienempi alue."
+
+#. Translators: the title of the question asked before a long
+#. region readout; a readout summarises the model's predicted
+#. values over the region, it is not a measurement.
+#: src/engine.rs:1332
+msgid "Compute a readout of a large region?"
+msgstr "Lasketaanko suuren alueen yhteenveto?"
+
+#. Translators: {n} windows (square images the model
+#. predicts from); {time} is a duration that already
+#. says "about", such as "about 3 min".
+#: src/engine.rs:1337
+msgid ""
+"This region needs about {n} more window of predictions; computing it takes "
+"{time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgid_plural ""
+"This region needs about {n} more windows of predictions; computing them "
+"takes {time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgstr[0] ""
+"Alue vaatii vielä noin {n} ennusteikkunan; sen laskeminen kestää tällä "
+"tietokoneella {time}. Peittokuva toimii sillä välin, ja yhteenvedon "
+"laskennan voi peruuttaa."
+msgstr[1] ""
+"Alue vaatii vielä noin {n} ennusteikkunaa; niiden laskeminen kestää tällä "
+"tietokoneella {time}. Peittokuva toimii sillä välin, ja yhteenvedon "
+"laskennan voi peruuttaa."
+
+#. Translators: the button that starts the long readout (it
+#. computes the missing predictions and summarises them).
+#: src/engine.rs:1344
+msgid "Compute"
+msgstr "Laske"
+
+#. Translators: the button that does not start it.
+#: src/engine.rs:1346
+msgid "Cancel"
+msgstr "Peruuta"
+
+#. Translators: why part of a slide was not computed: eov is
+#. shutting down.
+#: src/engine.rs:1444
+msgid "stopping"
+msgstr "pysäytetään"
+
+#. Translators: the model failed unexpectedly; {} is the
+#. internal error.
+#: src/engine.rs:1461
+msgid "inference crashed: {}"
+msgstr "päättely kaatui: {}"
+
+#. Translators: {} says why the model could not predict.
+#: src/engine.rs:1482
+msgid "inference failed: {}"
+msgstr "päättely epäonnistui: {}"
+
+#: src/engine.rs:1615
+msgid "Cellaris could not compute part of the slide; retrying"
+msgstr "Cellaris ei voinut laskea osaa näytelasista; yritetään uudelleen"
+
+#. Translators: the names of the layers Cellaris draws on a slide.
+#: src/engine.rs:2047
+msgid "Cellaris — predicted markers (research use only)"
+msgstr "Cellaris — ennustetut merkkiaineet (vain tutkimuskäyttöön)"
+
+#: src/engine.rs:2048
+msgid "Cellaris — progress"
+msgstr "Cellaris — edistyminen"
+
+#. Translators: the layer with the outline of a region readout's region;
+#. the readout summarises predicted values, so do not call the region
+#. measured.
+#: src/engine.rs:2052
+msgid "Cellaris — readout region"
+msgstr "Cellaris — yhteenvedon alue"
+
+#: src/engine.rs:2053
+msgid "Cellaris — predicted values (research use only)"
+msgstr "Cellaris — ennustetut arvot (vain tutkimuskäyttöön)"
+
+#. Translators: the name of the tool that outlines a region for a readout,
+#. and the title of the readout while it runs. A readout summarises the
+#. model's predicted values over the region: do not call it a measurement.
+#: src/engine.rs:2086
+msgid "Cellaris region readout"
+msgstr "Cellaris-alueyhteenveto"
+
+#. Translators: why nothing could be predicted, for the overlay or for a
+#. region readout.
+#: src/engine.rs:2093
+msgid "the model is not loaded"
+msgstr "mallia ei ole ladattu"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:2099
+msgid "the slide was closed"
+msgstr "näytelasi suljettiin"
+
+#. Translators: why part of a slide was not predicted; {} is eov's reason.
+#: src/engine.rs:2105
+msgid "the slide could not be read: {}"
+msgstr "näytelasia ei voitu lukea: {}"
+
+#. Translators: the quoted words name the Cellaris panel's
+#. check box "Assume the model's pixel size for slides that
+#. report none": use the same words as there.
+#: src/geometry.rs:83
+msgid ""
+"This slide does not report its pixel size, so it cannot be matched to the "
+"model's. Turn on “Assume the model's pixel size” in the Cellaris panel to "
+"run anyway."
+msgstr ""
+"Tämä näytelasi ei ilmoita pikselikokoaan, joten sitä ei voi sovittaa mallin "
+"pikselikokoon. Jos haluat suorittaa silti, ota Cellaris-paneelissa käyttöön "
+"”Oleta mallin pikselikoko”."
+
+#. Translators: µm/px is micrometres per pixel; {factor}× is how
+#. many times coarser.
+#: src/geometry.rs:91
+msgid ""
+"This slide is scanned at {slide} µm/px, more than {factor}× coarser than the "
+"{model} µm/px the model was trained at; predictions would be meaningless."
+msgstr ""
+"Tämä näytelasi on skannattu tarkkuudella {slide} µm/px, mikä on yli {factor}"
+"× karkeampi kuin mallin opetuksessa käytetty {model} µm/px; ennusteet "
+"olisivat merkityksettömiä."
+
+#. Translators: {} is a pixel size, as the model gives it.
+#: src/geometry.rs:195
+msgid "the model's pixel size {} is not usable"
+msgstr "mallin pikselikoko {} ei kelpaa"
+
+#. Translators: {window} is a size in pixels (px).
+#: src/geometry.rs:202
+msgid "the model's window of {window} px is not a multiple of {multiple}"
+msgstr "mallin ikkunan koko {window} px ei ole luvun {multiple} monikerta"
+
+#: src/geometry.rs:215
+msgid "the slide is empty"
+msgstr "näytelasi on tyhjä"
+
+#. Translators: a pyramid level is one of the resolutions a slide
+#. is stored at; µm/px is micrometres per pixel.
+#: src/geometry.rs:246
+msgid ""
+"no pyramid level is close to the model's {mpp} µm/px; a window would need "
+"{width}×{height} pixels"
+msgstr ""
+"mikään pyramiditaso ei ole lähellä mallin pikselikokoa {mpp} µm/px; ikkuna "
+"vaatisi {width}×{height} pikseliä"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. predicted markers; H&E is haematoxylin and eosin. Keep "research use
+#. only".
+#: src/lib.rs:94
+msgid "Cellaris: predicted markers over H&E (research use only)"
+msgstr ""
+"Cellaris: ennustetut merkkiaineet H&E-kuvan päällä (vain tutkimuskäyttöön)"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. Cellaris panel.
+#: src/lib.rs:115
+msgid "Cellaris panel: legend, region readout and model"
+msgstr "Cellaris-paneeli: selite, alueyhteenveto ja malli"
+
+#. Translators: a warning; {} is eov's reason, in English.
+#: src/lib.rs:164
+msgid "Cellaris could not save its settings: {}"
+msgstr "Cellaris ei voinut tallentaa asetuksiaan: {}"
+
+#: src/lib.rs:348
+msgid "The Cellaris panel could not open"
+msgstr "Cellaris-paneelia ei voitu avata"
+
+#: src/lib.rs:401
+msgid "Open a slide first."
+msgstr "Avaa ensin näytelasi."
+
+#. Translators: the ROI tool is eov's region-of-interest tool;
+#. "Cellaris region readout" is the name of Cellaris's tool (use
+#. the same words as there).
+#: src/lib.rs:414
+msgid ""
+"This slide has no region of interest; draw one with the ROI tool, or outline "
+"a region with the Cellaris region readout tool."
+msgstr ""
+"Tällä näytelasilla ei ole tarkastelualuetta; piirrä se "
+"tarkastelualuetyökalulla tai rajaa alue Cellaris-alueyhteenvetotyökalulla."
+
+#: src/lib.rs:498
+msgid "Readout copied as tab-separated text."
+msgstr "Yhteenveto kopioitu sarkaimin eroteltuna tekstinä."
+
+#: src/lib.rs:503
+msgid "There is no finished readout to copy."
+msgstr "Kopioitavaa valmista yhteenvetoa ei ole."
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:536
+msgid "ONNX Runtime library"
+msgstr "ONNX Runtime -kirjasto"
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:540
+msgid "ONNX model"
+msgstr "ONNX-malli"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:557
+msgid "Choose a Cellaris marker model"
+msgstr "Valitse Cellaris-merkkiainemalli"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:559
+msgid "Choose the ONNX Runtime library"
+msgstr "Valitse ONNX Runtime -kirjasto"
+
+#. Translators: SHA-256 is a checksum (not translated); hex digits
+#. are 0–9 and a–f.
+#: src/lib.rs:638
+msgid ""
+"Enter the model's SHA-256 (64 hex digits): the download is checked against "
+"it."
+msgstr ""
+"Anna mallin SHA-256-tiiviste (64 heksadesimaalinumeroa): lataus tarkistetaan "
+"sitä vasten."
+
+#. Translators: "Choose model…" is the panel's button: use the
+#. same words as there.
+#: src/lib.rs:672
+msgid ""
+"This eov cannot download models: choose the model file with Choose model…"
+msgstr ""
+"Tämä eov ei voi ladata malleja verkosta: valitse mallitiedosto painikkeella "
+"Valitse malli…"
+
+#: src/lib.rs:957
+msgid "Outline a region with at least three points."
+msgstr "Rajaa alue vähintään kolmella pisteellä."
+
+#. Translators: {reason} is eov's explanation, a whole
+#. sentence; {key} is the name of a setting in
+#. settings.json, and "" an empty value there (neither
+#. is translated).
+#: src/lib.rs:1031
+msgid ""
+"{reason} Another key can be set as {key} in Cellaris's settings.json (\"\" "
+"for none)."
+msgstr ""
+"{reason} Toisen näppäimen voi asettaa Cellaris-laajennuksen settings.json-"
+"tiedostossa avaimella {key} (\"\" = ei mitään)."
+
+#. Translators: eov did not accept something Cellaris
+#. registered: {id} is its identifier and {what} the kind of
+#. registration as eov names it in English, such as
+#. "hotkey" (neither is translated); {reason} is eov's
+#. explanation, a whole sentence.
+#: src/lib.rs:1042
+msgid "eov refused to register {id} ({what}): {reason}"
+msgstr "eov hylkäsi kohteen {id} rekisteröinnin ({what}): {reason}"
+
+#: src/markers.rs:182
+msgid "no markers are selected"
+msgstr "merkkiaineita ei ole valittu"
+
+#: src/markers.rs:185
+msgid "at most {n} marker can be shown at once"
+msgid_plural "at most {n} markers can be shown at once"
+msgstr[0] "kerralla voi näyttää enintään {n} merkkiaineen"
+msgstr[1] "kerralla voi näyttää enintään {n} merkkiainetta"
+
+#. Translators: {} is a marker's name, such as Pan-CK.
+#: src/markers.rs:194
+msgid "{} is selected twice"
+msgstr "{} on valittu kahdesti"
+
+#. Translators: {} is a marker's name, such as Pan-CK; a
+#. channel is one of the markers the model predicts.
+#: src/markers.rs:203
+msgid "the model has no channel named {}"
+msgstr "mallissa ei ole kanavaa nimeltä {}"
+
+#. Translators: {} is a marker's name, such as Pan-CK; its display
+#. window is the range of values its colour is drawn over.
+#: src/markers.rs:212
+msgid "no display window is known for {}"
+msgstr "merkkiaineelle {} ei tunneta näyttöväliä"
+
+#. Translators: the colours of the predicted markers, named in the
+#. legend over the slide ("Hoechst: yellow").
+#: src/markers.rs:367
+msgctxt "Colour"
+msgid "yellow"
+msgstr "keltainen"
+
+#: src/markers.rs:368
+msgctxt "Colour"
+msgid "magenta"
+msgstr "magenta"
+
+#: src/markers.rs:369
+msgctxt "Colour"
+msgid "bluish green"
+msgstr "sinivihreä"
+
+#: src/markers.rs:370
+msgctxt "Colour"
+msgid "sky blue"
+msgstr "taivaansininen"
+
+#: src/markers.rs:371
+msgctxt "Colour"
+msgid "orange"
+msgstr "oranssi"
+
+#: src/markers.rs:372
+msgctxt "Colour"
+msgid "vermilion"
+msgstr "punaoranssi"
+
+#. Translators: CELLARIS_MODEL is an environment variable (not
+#. translated); {} is a path.
+#: src/model.rs:207
+msgid "CELLARIS_MODEL points at {}, which does not exist"
+msgstr "CELLARIS_MODEL osoittaa sijaintiin {}, jota ei ole olemassa"
+
+#. Translators: {} is the path of the model file the user chose.
+#: src/model.rs:219
+msgid "the model chosen in the Cellaris panel, {}, does not exist"
+msgstr "Cellaris-paneelissa valittua mallia {} ei ole olemassa"
+
+#. Translators: {file} is the model's file name (markers.onnx), {dir}
+#. the folder it is looked for in.
+#: src/model.rs:234
+msgid "No {file}: put one in {dir}, or choose a model in the Cellaris panel."
+msgstr ""
+"Tiedostoa {file} ei ole: sijoita se kansioon {dir} tai valitse malli "
+"Cellaris-paneelissa."
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is why it could not be read.
+#: src/model.rs:272
+msgid "channel_names is not a list of names: {}"
+msgstr "channel_names ei ole nimiluettelo: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is its value.
+#: src/model.rs:283
+msgid "channel_names has an empty name: {}"
+msgstr "channel_names sisältää tyhjän nimen: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is a marker's name.
+#: src/model.rs:292
+msgid "channel_names names {} twice"
+msgstr "channel_names sisältää nimen {} kahdesti"
+
+#. Translators: {key} is a key of the model's metadata, {value} its
+#. value; true and false are the values it may have (none is
+#. translated).
+#: src/model.rs:309
+msgid "{key} must be true or false, not {value}"
+msgstr "avaimen {key} arvon on oltava true tai false, ei {value}"
+
+#. Translators: {key} is a key of the model's metadata (not translated),
+#. {value} its value.
+#: src/model.rs:328
+msgid "{key} is not a number: {value}"
+msgstr "avaimen {key} arvo ei ole luku: {value}"
+
+#. Translators: {key} is a key of the model's metadata (not
+#. translated), {value} its value, {min} and {max} what it may be.
+#: src/model.rs:343
+msgid "{key} = {value} is outside {min}–{max}"
+msgstr "{key} = {value} on välin {min}–{max} ulkopuolella"
+
+#. Translators: channel_names is a key of the model's metadata and
+#. export_marker_onnx a program (neither is translated).
+#: src/model.rs:362
+msgid ""
+"the model carries no channel_names, so its channels cannot be told apart; re-"
+"export it with cellaris's export_marker_onnx"
+msgstr ""
+"mallissa ei ole channel_names-tietoa, joten sen kanavia ei voi erottaa "
+"toisistaan; vie malli uudelleen cellaris-projektin export_marker_onnx-"
+"ohjelmalla"
+
+#. Translators: a note in the model card; raw_intensity is a key
+#. of the model's metadata (not translated). "raw intensities"
+#. are the model's predictions on a linear (untransformed) scale,
+#. not measured signal.
+#: src/model.rs:374
+msgid "raw_intensity is not recorded; outputs are taken to be raw intensities"
+msgstr ""
+"raw_intensity-tietoa ei ole tallennettu; tulosteet tulkitaan raaka-"
+"intensiteeteiksi"
+
+#. Translators: a note in the model card; {} is a pixel size in
+#. micrometres per pixel (µm/px); Orion is a dataset.
+#: src/model.rs:386
+msgid ""
+"the training pixel size is not recorded; {} µm/px (Orion level 0) is assumed"
+msgstr ""
+"opetuksen pikselikokoa ei ole tallennettu; oletetaan {} µm/px (Orionin taso "
+"0)"
+
+#. Translators: the shape of the model's input; [batch, 3, height,
+#. width] is a notation, keep it as it is.
+#: src/model.rs:434
+msgid "the input has {n} dimension, not [batch, 3, height, width]"
+msgid_plural "the input has {n} dimensions, not [batch, 3, height, width]"
+msgstr[0] "syötteessä on {n} ulottuvuus, ei [batch, 3, height, width]"
+msgstr[1] "syötteessä on {n} ulottuvuutta, ei [batch, 3, height, width]"
+
+#. Translators: RGB is the colour model of the images (not translated).
+#: src/model.rs:442
+msgid "the input takes {n} channel, not RGB"
+msgid_plural "the input takes {n} channels, not RGB"
+msgstr[0] "syötteessä on {n} kanava, ei RGB"
+msgstr[1] "syötteessä on {n} kanavaa, ei RGB"
+
+#. Translators: {h}×{w} is the size of the model's input in pixels.
+#: src/model.rs:455
+msgid "the input is {h}×{w}; only square inputs are used"
+msgstr "syöte on {h}×{w}; vain neliönmuotoisia syötteitä käytetään"
+
+#. Translators: {} is a size in pixels (px).
+#: src/model.rs:490
+msgid "the model's input of {} px is not a multiple of 32 between 64 and 1024"
+msgstr "mallin syötteen koko {} px ei ole luvun 32 monikerta väliltä 64–1024"
+
+#. Translators: no model file was found (a summary; the details follow).
+#: src/model.rs:533
+msgid "No marker model"
+msgstr "Ei merkkiainemallia"
+
+#. Translators: the file chosen as the model is not one Cellaris can use.
+#: src/model.rs:538
+msgid "Not a marker model"
+msgstr "Ei merkkiainemalli"
+
+#: src/model.rs:542
+msgid "The model's metadata is not usable"
+msgstr "Mallin metatiedot eivät kelpaa"
+
+#. Translators: --param model is a command-line option (not
+#. translated); {} is a path.
+#: src/model.rs:587
+msgid "--param model points at {}, which does not exist"
+msgstr "--param model osoittaa sijaintiin {}, jota ei ole olemassa"
+
+#. Translators: {path} is the model file, {detail} what is wrong
+#. with it.
+#: src/model.rs:608
+msgid "{path}: {detail}"
+msgstr "{path}: {detail}"
+
+#: src/model.rs:613
+msgid "The model could not be read"
+msgstr "Mallia ei voitu lukea"
+
+#: src/model.rs:624
+msgid "The model could not be opened"
+msgstr "Mallia ei voitu avata"
+
+#: src/model.rs:634
+msgid "it has no inputs"
+msgstr "siinä ei ole syötteitä"
+
+#. Translators: float32 is a number type (not translated).
+#: src/model.rs:639
+msgid "its input is not float32"
+msgstr "sen syöte ei ole float32-tyyppiä"
+
+#. Translators: a tensor is an array of numbers a model takes.
+#: src/model.rs:646
+msgid "its input is not a tensor"
+msgstr "sen syöte ei ole tensori"
+
+#. Translators: a note in the model card; {name} is the name of
+#. one of the model's inputs (not translated).
+#: src/model.rs:657
+msgid "the model has {n} input; only {name} is fed"
+msgid_plural "the model has {n} inputs; only {name} is fed"
+msgstr[0] "mallissa on {n} syöte; vain syötettä {name} käytetään"
+msgstr[1] "mallissa on {n} syötettä; vain syötettä {name} käytetään"
+
+#. Translators: `markers` is the name of an output of the model
+#. file (not translated).
+#: src/model.rs:673
+msgid "it has no output named `markers`; not a cellaris export"
+msgstr "siinä ei ole tulostetta nimeltä `markers`; se ei ole cellaris-vienti"
+
+#. Translators: markers is the name of an output of the model file
+#. and float32 a number type (neither is translated).
+#: src/model.rs:682
+msgid "markers is not float32"
+msgstr "markers ei ole float32-tyyppiä"
+
+#: src/model.rs:694
+msgid "The model's metadata could not be read"
+msgstr "Mallin metatietoja ei voitu lukea"
+
+#. Translators: {n} channels are named in the model's metadata;
+#. {outputs} is the number of channels the model really outputs,
+#. a bare number (the plural form follows {n} only).
+#: src/model.rs:723
+msgid "it names {n} channel but outputs {outputs}"
+msgid_plural "it names {n} channels but outputs {outputs}"
+msgstr[0] "siinä nimetään {n} kanava, mutta tulosteita on {outputs}"
+msgstr[1] "siinä nimetään {n} kanavaa, mutta tulosteita on {outputs}"
+
+#. Translators: the model file cannot be used (a summary; the
+#. details follow).
+#: src/model.rs:732
+msgid "Not usable"
+msgstr "Ei käyttökelpoinen"
+
+#. Translators: a note in the model card: the model does not say how
+#. familiar an image looks to it.
+#: src/model.rs:738
+msgid "the model reports no reconstruction error"
+msgstr "malli ei ilmoita rekonstruktiovirhettä"
+
+#: src/model.rs:743
+msgid "ONNX Runtime failed"
+msgstr "ONNX Runtime epäonnistui"
+
+#. Translators: how long something will still take; "s" is seconds.
+#: src/present.rs:45
+msgid "about {n} s"
+msgid_plural "about {n} s"
+msgstr[0] "noin {n} s"
+msgstr[1] "noin {n} s"
+
+#. Translators: how long something will still take; "min" is minutes.
+#: src/present.rs:49
+msgid "about {n} min"
+msgid_plural "about {n} min"
+msgstr[0] "noin {n} min"
+msgstr[1] "noin {n} min"
+
+#. Translators: how long something will still take, in hours ("h").
+#: src/present.rs:53
+msgid "about {} h"
+msgstr "noin {} h"
+
+#. Translators: in a cell's tooltip; a tissue block is a 5 µm square
+#. of tissue, not a paraffin block.
+#: src/present.rs:117
+msgid "Mean predicted arcsinh intensity over {n} tissue block"
+msgid_plural "Mean predicted arcsinh intensity over {n} tissue blocks"
+msgstr[0] ""
+"Keskimääräinen ennustettu arcsinh-intensiteetti {n} kudosneliön alueella"
+msgstr[1] ""
+"Keskimääräinen ennustettu arcsinh-intensiteetti {n} kudosneliön alueella"
+
+#. Translators: in a cell's tooltip: {n} of the tissue blocks look
+#. unlike the slides the model learnt from.
+#: src/present.rs:124
+msgid "{n} unlike the training data"
+msgid_plural "{n} unlike the training data"
+msgstr[0] "{n} poikkeaa opetusaineistosta"
+msgstr[1] "{n} poikkeaa opetusaineistosta"
+
+#. Translators: joins two parts of a cell's tooltip: "Mean predicted
+#. arcsinh intensity over 2 tissue blocks" and "1 unlike the training
+#. data".
+#: src/present.rs:129
+msgid "{mean}, {unusual}"
+msgstr "{mean}, {unusual}"
+
+#. Translators: in a cell's tooltip: tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks) too dark to be bright-field H&E.
+#: src/present.rs:134
+msgid "{n} near-black block left out"
+msgid_plural "{n} near-black blocks left out"
+msgstr[0] "{n} lähes musta neliö jätetty pois"
+msgstr[1] "{n} lähes mustaa neliötä jätetty pois"
+
+#. Translators: joins two parts of a cell's tooltip: the mean of the
+#. predicted values ("Mean predicted arcsinh intensity over 2 tissue
+#. blocks", …) and "1 near-black block left out".
+#: src/present.rs:138
+msgid "{mean}; {dark}"
+msgstr "{mean}; {dark}"
+
+#. Translators: the first line of a cell's tooltip. Keep all of its
+#. meaning: the values are a model's prediction, for research only.
+#: src/present.rs:144
+msgid "Predicted — research use only"
+msgstr "Ennustettu — vain tutkimuskäyttöön"
+
+#. Translators: a note on a slide; µm/px is micrometres per
+#. pixel.
+#: src/present.rs:276
+msgid "pixel size unknown — assumed {} µm/px"
+msgstr "pikselikoko tuntematon — oletettu {} µm/px"
+
+#. Translators: a note on a slide: its pixel size is known for
+#. its width or its height only.
+#: src/present.rs:283
+msgid "pixel size reported for one axis only"
+msgstr "pikselikoko ilmoitettu vain yhdelle akselille"
+
+#. Translators: a note on a slide: it was enlarged {factor} times
+#. from its pixel size, {mpp} micrometres per pixel.
+#: src/present.rs:293
+msgid "upsampled ×{factor} from {mpp} µm/px — less reliable"
+msgstr ""
+"ylösnäytteistetty ×{factor} (lähtötarkkuus {mpp} µm/px) — vähemmän luotettava"
+
+#. Translators: a note on a slide whose pixels are not square.
+#: src/present.rs:300
+msgid "non-square pixels, resampled per axis"
+msgstr "pikselit eivät ole neliöitä, uudelleennäytteistetty akseleittain"
+
+#. Translators: a note on a slide; {} is the stain its metadata
+#. names (not translated); H&E is haematoxylin and eosin.
+#: src/present.rs:313
+msgid "the slide says {}; the model was trained on H&E"
+msgstr ""
+"näytelasin metatietojen mukaan värjäys on {}; malli on opetettu H&E-"
+"värjätyillä näytelaseilla"
+
+#. Translators: a note on a slide; a window is one of the square
+#. images the model predicts from.
+#: src/present.rs:323
+msgid "{n} window skipped as not bright-field"
+msgid_plural "{n} windows skipped as not bright-field"
+msgstr[0] "{n} ikkuna ohitettu, koska se ei ole kirkaskenttäkuva"
+msgstr[1] "{n} ikkunaa ohitettu, koska ne eivät ole kirkaskenttäkuvia"
+
+#. Translators: a note on a slide: {n} of its {total} windows with
+#. tissue look unlike the slides the model learnt from. The form
+#. follows {n}, the windows that do; {total} is a bare number.
+#: src/present.rs:333
+msgid "{n} window of {total} looks unlike the training data"
+msgid_plural "{n} windows of {total} look unlike the training data"
+msgstr[0] "{total} ikkunasta {n} poikkeaa opetusaineistosta"
+msgstr[1] "{total} ikkunasta {n} poikkeaa opetusaineistosta"
+
+#. Translators: a note on a slide: the model does not say at which
+#. pixel size it was trained.
+#: src/present.rs:341
+msgid "the model does not record its pixel size"
+msgstr "malli ei ilmoita pikselikokoaan"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:358
+msgid "Not computed: {} (see the Cellaris panel)"
+msgstr "Ei laskettu: {} (katso Cellaris-paneeli)"
+
+#: src/present.rs:363 src/present.rs:1303
+msgid "Loading the model…"
+msgstr "Ladataan mallia…"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:368 src/present.rs:421
+msgid "Not computed: {}"
+msgstr "Ei laskettu: {}"
+
+#. Translators: a legend entry over the slide, such as
+#. "Pan-CK: magenta (arcsinh 4.50–6.50)": a marker, its colour,
+#. and the display window the user set for it.
+#: src/present.rs:387
+msgid "{marker}: {colour} ({window})"
+msgstr "{marker}: {colour} ({window})"
+
+#. Translators: a legend entry over the slide, such as
+#. "Hoechst: yellow": a marker and its colour.
+#: src/present.rs:395
+msgid "{marker}: {colour}"
+msgstr "{marker}: {colour}"
+
+#: src/present.rs:400
+msgid "Every marker is hidden (see the Cellaris panel)"
+msgstr "Kaikki merkkiaineet on piilotettu (katso Cellaris-paneeli)"
+
+#. Translators: {markers} is the legend over the slide; {n} markers are
+#. hidden.
+#: src/present.rs:408
+msgid "{markers} ({n} hidden)"
+msgid_plural "{markers} ({n} hidden)"
+msgstr[0] "{markers} ({n} piilotettu)"
+msgstr[1] "{markers} ({n} piilotettu)"
+
+#. Translators: over the slide; a cell is a small square of the
+#. slide that is predicted at once.
+#: src/present.rs:433
+msgid "Computing {done} of {n} cell"
+msgid_plural "Computing {done} of {n} cells"
+msgstr[0] "Lasketaan ruutuja: {done}/{n}"
+msgstr[1] "Lasketaan ruutuja: {done}/{n}"
+
+#. Translators: {n} cells could not be computed; Retry is a
+#. button in the Cellaris panel.
+#: src/present.rs:442
+msgid "{n} failed (Retry in the Cellaris panel)"
+msgid_plural "{n} failed (Retry in the Cellaris panel)"
+msgstr[0] "{n} epäonnistui (valitse Cellaris-paneelissa Yritä uudelleen)"
+msgstr[1] "{n} epäonnistui (valitse Cellaris-paneelissa Yritä uudelleen)"
+
+#. Translators: {n} cells could not be computed and are tried again.
+#: src/present.rs:447
+msgid "{n} failed, retrying"
+msgid_plural "{n} failed, retrying"
+msgstr[0] "{n} epäonnistui, yritetään uudelleen"
+msgstr[1] "{n} epäonnistui, yritetään uudelleen"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:451
+msgid "{} left"
+msgstr "{} jäljellä"
+
+#. Translators: over the slide, when it is shown in several views:
+#. one of them shows too much of it to predict ({n} cells; at most
+#. {limit}). A cell is one square of the grid the slide is predicted
+#. in, not a biological cell.
+#: src/present.rs:475
+msgid ""
+"Zoom in to predict: one view of this slide needs {n} cell (limit {limit})"
+msgid_plural ""
+"Zoom in to predict: one view of this slide needs {n} cells (limit {limit})"
+msgstr[0] ""
+"Lähennä ennustamista varten: yksi tämän näytelasin näkymä vaatii {n} ruudun "
+"(raja {limit})"
+msgstr[1] ""
+"Lähennä ennustamista varten: yksi tämän näytelasin näkymä vaatii {n} ruutua "
+"(raja {limit})"
+
+#. Translators: over the slide: the view shows too much of it to
+#. predict ({n} cells; at most {limit}). A cell is one square of the
+#. grid the slide is predicted in, not a biological cell.
+#: src/present.rs:485
+msgid "Zoom in to predict: this view needs {n} cell (limit {limit})"
+msgid_plural "Zoom in to predict: this view needs {n} cells (limit {limit})"
+msgstr[0] ""
+"Lähennä ennustamista varten: tämä näkymä vaatii {n} ruudun (raja {limit})"
+msgstr[1] ""
+"Lähennä ennustamista varten: tämä näkymä vaatii {n} ruutua (raja {limit})"
+
+#. Translators: why a slide is not predicted (over the slide).
+#: src/present.rs:496
+msgid "pixel size unknown"
+msgstr "pikselikoko tuntematon"
+
+#. Translators: why a slide is not predicted (over the slide); µm/px
+#. is micrometres per pixel.
+#: src/present.rs:502
+msgid "slide too coarse ({} µm/px)"
+msgstr "näytelasin resoluutio liian karkea ({} µm/px)"
+
+#. Translators: a legend entry drawn on the slide: a
+#. marker, and the display window the user set for it.
+#: src/present.rs:720
+msgid "{marker} (predicted, {window})"
+msgstr "{marker} (ennustettu, {window})"
+
+#. Translators: a legend entry drawn on the slide: a marker.
+#: src/present.rs:727
+msgid "{} (predicted)"
+msgstr "{} (ennustettu)"
+
+#. Translators: the label drawn on a region while its readout is
+#. computed; {} is how much of it is done, in percent.
+#: src/present.rs:764
+msgid "Cellaris region · {} % computed"
+msgstr "Cellaris-alue · {} % laskettu"
+
+#. Translators: the label drawn on the region of a readout (a readout
+#. summarises predicted values; it is not a measurement).
+#: src/present.rs:770
+msgid "Cellaris region"
+msgstr "Cellaris-alue"
+
+#. Translators: the progress of a region readout: {done} of the
+#. region's {n} cells (squares of the grid the slide is
+#. predicted in, not biological cells).
+#: src/present.rs:834
+msgid "{done} of {n} cell"
+msgid_plural "{done} of {n} cells"
+msgstr[0] "ruutuja {done}/{n}"
+msgstr[1] "ruutuja {done}/{n}"
+
+#: src/present.rs:867
+msgid "Cellaris: loading the model…"
+msgstr "Cellaris: ladataan mallia…"
+
+#. Translators: the status bar while the overlay is on; {} says
+#. what went wrong.
+#: src/present.rs:871
+msgid "Cellaris: {}"
+msgstr "Cellaris: {}"
+
+#. Translators: in the status bar while predictions are shown. Keep all
+#. of its meaning: the colours are predicted, for research only.
+#: src/present.rs:893
+msgid "Cellaris (predicted, research use only)"
+msgstr "Cellaris (ennustettu, vain tutkimuskäyttöön)"
+
+#. Translators: in the status bar: {done} of {n} cells computed, and
+#. how long each window (square image the model predicts from)
+#. takes, in seconds. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell.
+#: src/present.rs:900
+msgid "{done}/{n} cell, {seconds} s per window"
+msgid_plural "{done}/{n} cells, {seconds} s per window"
+msgstr[0] "ruutuja {done}/{n}, {seconds} s/ikkuna"
+msgstr[1] "ruutuja {done}/{n}, {seconds} s/ikkuna"
+
+#. Translators: in the status bar: {n} cells could not be computed.
+#: src/present.rs:908
+msgid "{n} failed"
+msgid_plural "{n} failed"
+msgstr[0] "{n} epäonnistui"
+msgstr[1] "{n} epäonnistui"
+
+#. Translators: in the status bar while a region readout is computed.
+#: src/present.rs:912
+msgid "computing a region readout"
+msgstr "lasketaan alueyhteenvetoa"
+
+#. Translators: {} says why the region's readout cannot be computed
+#. (such as "no markers are selected").
+#: src/present.rs:954
+msgid "Cannot compute the readout: {}"
+msgstr "Yhteenvetoa ei voi laskea: {}"
+
+#: src/present.rs:955
+msgid "Waiting for the model…"
+msgstr "Odotetaan mallia…"
+
+#. Translators: "Cellaris region readout" is the name of the tool
+#. (use the same words as there); the region of interest is eov's
+#. ROI (the panel's button Use ROI).
+#: src/present.rs:964
+msgid ""
+"Outline some tissue with the Cellaris region readout tool, or use the region "
+"of interest."
+msgstr ""
+"Rajaa kudosta Cellaris-alueyhteenvetotyökalulla tai käytä tarkastelualuetta "
+"(ROI)."
+
+#. Translators: what a region readout covers: {n} tissue blocks
+#. (5 µm squares of tissue, not paraffin blocks), their area and
+#. the region's, in square millimetres.
+#: src/present.rs:982
+msgid "{n} tissue block, {tissue} mm² of tissue in {region} mm²"
+msgid_plural "{n} tissue blocks, {tissue} mm² of tissue in {region} mm²"
+msgstr[0] "{n} kudosneliö, kudosta {tissue} mm² (alue {region} mm²)"
+msgstr[1] "{n} kudosneliötä, kudosta {tissue} mm² (alue {region} mm²)"
+
+#. Translators: what a region readout covers: {n} tissue blocks (5 µm
+#. squares of tissue, not paraffin blocks).
+#: src/present.rs:990
+msgid "{n} tissue block"
+msgid_plural "{n} tissue blocks"
+msgstr[0] "{n} kudosneliö"
+msgstr[1] "{n} kudosneliötä"
+
+#: src/present.rs:993
+msgid "Waiting for you to confirm a long readout."
+msgstr "Odotetaan, että vahvistat yhteenvedon pitkään kestävän laskennan."
+
+#. Translators: {done} of the region's {n} cells (squares of the
+#. grid the slide is predicted in, not biological cells) are
+#. computed; {summary} is what the readout covers so far, such
+#. as "12 tissue blocks, …".
+#: src/present.rs:999
+msgid "Computing: {done} of {n} cell · {summary}"
+msgid_plural "Computing: {done} of {n} cells · {summary}"
+msgstr[0] "Lasketaan: ruutuja {done}/{n} · {summary}"
+msgstr[1] "Lasketaan: ruutuja {done}/{n} · {summary}"
+
+#. Translators: {} is what the readout covered until it was
+#. cancelled, such as "12 tissue blocks, …".
+#: src/present.rs:1007
+msgid "Cancelled · {}"
+msgstr "Peruutettu · {}"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:1014
+msgid "{} left on this computer."
+msgstr "{} jäljellä tällä tietokoneella."
+
+#. Translators: density r² is a column of the readout; a tissue
+#. block is a 5 µm square of tissue, not a paraffin block.
+#: src/present.rs:1019
+msgid "Fewer than {n} tissue block, too few for a density r²."
+msgid_plural "Fewer than {n} tissue blocks, too few for a density r²."
+msgstr[0] "Kudosneliöitä alle {n}: liian vähän tiheys r² -arvon laskemiseen."
+msgstr[1] "Kudosneliöitä alle {n}: liian vähän tiheys r² -arvon laskemiseen."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks; {percent} is a percentage;
+#. blocks are 5 µm squares of tissue, not paraffin blocks.
+#: src/present.rs:1035
+msgid ""
+"Mean reconstruction error {recon}, {percent} % of blocks above the model's "
+"threshold."
+msgstr ""
+"Keskimääräinen rekonstruktiovirhe {recon}; {percent} % neliöistä ylittää "
+"mallin kynnysarvon."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks.
+#: src/present.rs:1042
+msgid "Mean reconstruction error {}."
+msgstr "Keskimääräinen rekonstruktiovirhe {}."
+
+#. Translators: {blocks} is a number of blocks ("3 blocks") and
+#. {cells} a number of cells ("1 cell"), both translated
+#. separately.
+#: src/present.rs:1051
+msgid "{blocks} and {cells} skipped as near-black (not bright-field H&E)."
+msgstr ""
+"{blocks} ja {cells} ohitettiin lähes mustina (ei kirkaskenttä-H&E-kuvaa)."
+
+#. Translators: a number of tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks), in "3 blocks and 1 cell skipped
+#. as near-black".
+#: src/present.rs:1055
+msgid "{n} block"
+msgid_plural "{n} blocks"
+msgstr[0] "{n} neliö"
+msgstr[1] "{n} neliötä"
+
+#. Translators: a number of cells (squares of the grid the slide
+#. is predicted in, not biological cells), in "3 blocks and 1
+#. cell skipped as near-black".
+#: src/present.rs:1059
+msgid "{n} cell"
+msgid_plural "{n} cells"
+msgstr[0] "{n} ruutu"
+msgstr[1] "{n} ruutua"
+
+#. Translators: {} is a note on the slide.
+#: src/present.rs:1067
+msgid "Note: {}."
+msgstr "Huomautus: {}."
+
+#. Translators: the labels of the model card in the Cellaris panel.
+#: src/present.rs:1092
+msgctxt "Model card"
+msgid "Model"
+msgstr "Malli"
+
+#: src/present.rs:1093
+msgctxt "Model card"
+msgid "Runtime"
+msgstr "Suoritusympäristö"
+
+#: src/present.rs:1102
+msgctxt "Model card"
+msgid "Version"
+msgstr "Versio"
+
+#: src/present.rs:1105
+msgctxt "Model card"
+msgid "File"
+msgstr "Tiedosto"
+
+#. Translators: the start of the model file's SHA-256, and its
+#. size in megabytes.
+#: src/present.rs:1113
+msgid "{hash} ({size} MB)"
+msgstr "{hash} ({size} MB)"
+
+#. Translators: the pixel size the model was trained at.
+#: src/present.rs:1121
+msgctxt "Model card"
+msgid "Trained at"
+msgstr "Opetustarkkuus"
+
+#. Translators: a pixel size the model does not record, so it
+#. is assumed; µm/px is micrometres per pixel.
+#: src/present.rs:1127
+msgid "{} µm/px (assumed)"
+msgstr "{} µm/px (oletettu)"
+
+#. Translators: what the model takes in.
+#: src/present.rs:1132
+msgctxt "Model card"
+msgid "Input"
+msgstr "Syöte"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, as many at once as wanted.
+#: src/present.rs:1137
+msgid "{side}×{side} px windows, any batch size"
+msgstr "{side}×{side} px:n ikkunat, mikä tahansa eräkoko"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, exactly {n} at once.
+#: src/present.rs:1143
+msgid "{side}×{side} px windows, batches of {n}"
+msgid_plural "{side}×{side} px windows, batches of {n}"
+msgstr[0] "{side}×{side} px:n ikkunat, eräkoko {n}"
+msgstr[1] "{side}×{side} px:n ikkunat, eräkoko {n}"
+
+#. Translators: the markers the model predicts.
+#: src/present.rs:1151
+msgctxt "Model card"
+msgid "Channels"
+msgstr "Kanavat"
+
+#. Translators: what the model computes.
+#: src/present.rs:1160
+msgctxt "Model card"
+msgid "Outputs"
+msgstr "Tulosteet"
+
+#. Translators: the model card's Outputs row: the model's
+#. predicted intensities are on a linear ("raw",
+#. untransformed) scale and shown as arcsinh(x/5); "raw" does
+#. not mean measured signal.
+#: src/present.rs:1167
+msgid "raw intensities, shown as arcsinh(x/5), reconstruction error"
+msgstr ""
+"raaka-intensiteetit, näytetään muodossa arcsinh(x/5), rekonstruktiovirhe"
+
+#. Translators: the model card's Outputs row: the model's predicted
+#. intensities are on a linear ("raw", untransformed) scale and
+#. shown as arcsinh(x/5); "raw" does not mean measured signal.
+#: src/present.rs:1172
+msgid "raw intensities, shown as arcsinh(x/5)"
+msgstr "raaka-intensiteetit, näytetään muodossa arcsinh(x/5)"
+
+#: src/present.rs:1173
+msgid "arcsinh intensities, reconstruction error"
+msgstr "arcsinh-intensiteetit, rekonstruktiovirhe"
+
+#: src/present.rs:1174
+msgid "arcsinh intensities"
+msgstr "arcsinh-intensiteetit"
+
+#. Translators: the data the model was trained on.
+#: src/present.rs:1179
+msgctxt "Model card"
+msgid "Trained on"
+msgstr "Opetusaineisto"
+
+#: src/present.rs:1182
+msgctxt "Model card"
+msgid "Licence"
+msgstr "Lisenssi"
+
+#. Translators: the model's own description follows.
+#: src/present.rs:1186
+msgctxt "Model card"
+msgid "About"
+msgstr "Kuvaus"
+
+#. Translators: the program that wrote the model file.
+#: src/present.rs:1190
+msgctxt "Model card"
+msgid "Exported by"
+msgstr "Vientiohjelma"
+
+#: src/present.rs:1194
+msgctxt "Model card"
+msgid "Note"
+msgstr "Huomautus"
+
+#: src/present.rs:1213
+msgid "the new choice takes effect when eov restarts"
+msgstr "uusi valinta tulee voimaan, kun eov käynnistetään uudelleen"
+
+#. Translators: {version} is ONNX Runtime's version, {library} its
+#. file; {n} threads compute predictions.
+#: src/present.rs:1226
+msgid "ONNX Runtime {version} from {library}, {n} thread"
+msgid_plural "ONNX Runtime {version} from {library}, {n} threads"
+msgstr[0] "ONNX Runtime {version} kirjastosta {library}, {n} säie"
+msgstr[1] "ONNX Runtime {version} kirjastosta {library}, {n} säiettä"
+
+#. Translators: {library} is ONNX Runtime's file; {n} threads compute
+#. predictions.
+#: src/present.rs:1234
+msgid "ONNX Runtime (version unknown) from {library}, {n} thread"
+msgid_plural "ONNX Runtime (version unknown) from {library}, {n} threads"
+msgstr[0] "ONNX Runtime (versio tuntematon) kirjastosta {library}, {n} säie"
+msgstr[1] "ONNX Runtime (versio tuntematon) kirjastosta {library}, {n} säiettä"
+
+#. Translators: {runtime} names ONNX Runtime and its file; {n}
+#. threads compute predictions.
+#: src/present.rs:1241
+msgid "{runtime}, {n} thread"
+msgid_plural "{runtime}, {n} threads"
+msgstr[0] "{runtime}, {n} säie"
+msgstr[1] "{runtime}, {n} säiettä"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours,
+#. but the model sees the slide's own.
+#: src/present.rs:1276
+msgid "the display is adjusted; predictions use the slide's unadjusted colours"
+msgstr ""
+"näyttöä on säädetty; ennusteet käyttävät näytelasin säätämättömiä värejä"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours
+#. ({} says how, in eov's words), but the model sees the slide's own.
+#: src/present.rs:1283
+msgid ""
+"the display is adjusted ({}); predictions use the slide's unadjusted colours"
+msgstr ""
+"näyttöä on säädetty ({}); ennusteet käyttävät näytelasin säätämättömiä värejä"
+
+#: src/present.rs:1298
+msgid ""
+"The model loads when the overlay is turned on or a region readout starts."
+msgstr ""
+"Malli ladataan, kun peittokuva otetaan käyttöön tai alueyhteenvedon laskenta "
+"alkaa."
+
+#. Translators: cells are the small squares of the slide
+#. that are predicted at once.
+#: src/present.rs:1321
+msgid "{n} cell in view could not be computed"
+msgid_plural "{n} cells in view could not be computed"
+msgstr[0] "Näkymän {n} ruutua ei voitu laskea"
+msgstr[1] "Näkymän {n} ruutua ei voitu laskea"
+
+#. Translators: {} is how long each window (square image
+#. the model predicts from) takes, in seconds.
+#: src/present.rs:1333
+msgid "Computing · {} s per window"
+msgstr "Lasketaan · {} s/ikkuna"
+
+#. Translators: {} is the name of the model that is loaded.
+#: src/present.rs:1344
+msgid "Ready: {}"
+msgstr "Valmis: {}"
+
+#: src/present.rs:1367
+msgid "No slide"
+msgstr "Ei näytelasia"
+
+#. Translators: the slide's pixel size in micrometres per pixel
+#. (µm/px), the pyramid level it is read from, and how much
+#. smaller that level is (×4.00).
+#: src/present.rs:1374
+msgid "{x} × {y} µm/px, read from level {level} (×{downsample})"
+msgstr "{x} × {y} µm/px, luettu tasolta {level} (×{downsample})"
+
+#. Translators: the slide does not say its pixel size.
+#: src/present.rs:1385
+msgid "pixel size not reported"
+msgstr "pikselikokoa ei ilmoitettu"
+
+#. Translators: under the progress bar in the Cellaris panel; a
+#. cell is one square of the grid the slide is predicted in, not a
+#. biological cell.
+#: src/present.rs:1418
+msgid "{done} of {n} cell in view"
+msgid_plural "{done} of {n} cells in view"
+msgstr[0] "näkymän ruutuja {done}/{n}"
+msgstr[1] "näkymän ruutuja {done}/{n}"
+
+#. Translators: {} is a marker's display window ("arcsinh 4.50–6.50")
+#. that the user set.
+#: src/present.rs:1446
+msgid "{}, yours"
+msgstr "{}, oma asetus"
+
+#. Translators: eov first asks the user whether to download the model
+#. (nothing is downloaded without that answer), then downloads it.
+#: src/present.rs:1512
+msgid ""
+"eov is asking you whether to download the model, or downloading it (see the "
+"status bar)…"
+msgstr "eov kysyy sinulta, ladataanko malli, tai lataa sitä (katso tilarivi)…"
+
+#. Translators: under the model's address and SHA-256 in the
+#. Cellaris panel; the model store is where eov keeps models.
+#: src/present.rs:1521
+msgid ""
+"eov checks the download against this SHA-256 and keeps it in its model "
+"store; it is then Cellaris's model. Without an address, the copy your "
+"administrator gave eov is used."
+msgstr ""
+"eov tarkistaa latauksen tätä SHA-256-tiivistettä vasten ja säilyttää sen "
+"mallivarastossaan; siitä tulee sitten Cellaris-laajennuksen malli. Ilman "
+"osoitetta käytetään kopiota, jonka ylläpitäjä on antanut eov:lle."
+
+#. Translators: where an ONNX Runtime library was found, shown in
+#. parentheses after it in the list of libraries tried.
+#: src/runtime.rs:128
+msgid "the runtime chosen in the Cellaris panel"
+msgstr "Cellaris-paneelissa valittu suoritusympäristö"
+
+#: src/runtime.rs:129
+msgid "the plugin package"
+msgstr "laajennuspaketti"
+
+#: src/runtime.rs:130
+msgid "the plugin's data directory"
+msgstr "laajennuksen datakansio"
+
+#: src/runtime.rs:131
+msgid "the system library path"
+msgstr "järjestelmän kirjastopolku"
+
+#. Translators: {} is the path the user chose for the ONNX
+#. Runtime library.
+#: src/runtime.rs:142
+msgid ""
+"the runtime chosen in the Cellaris panel points at {}, which does not exist"
+msgstr ""
+"Cellaris-paneelissa valittu suoritusympäristö osoittaa sijaintiin {}, jota "
+"ei ole olemassa"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a path.
+#: src/runtime.rs:150
+msgid "{source} points at {path}, which does not exist"
+msgstr "{source} osoittaa sijaintiin {path}, jota ei ole olemassa"
+
+#. Translators: {path} is the folder the user chose for ONNX
+#. Runtime, {library} the file name of its library.
+#: src/runtime.rs:165
+msgid ""
+"the runtime chosen in the Cellaris panel points at {path}, which holds no "
+"{library}"
+msgstr ""
+"Cellaris-paneelissa valittu suoritusympäristö osoittaa kansioon {path}, "
+"jossa ei ole tiedostoa {library}"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a folder,
+#. {library} the file name of ONNX Runtime's library.
+#: src/runtime.rs:175
+msgid "{source} points at {path}, which holds no {library}"
+msgstr "{source} osoittaa kansioon {path}, jossa ei ole tiedostoa {library}"
+
+#. Translators: where to get ONNX Runtime on Windows; file and release
+#. names are not translated.
+#: src/runtime.rs:334
+msgid "onnxruntime.dll from the onnxruntime-win-x64 release"
+msgstr "onnxruntime.dll julkaisusta onnxruntime-win-x64"
+
+#. Translators: where to get ONNX Runtime on macOS; `brew install
+#. onnxruntime` is a command, and file and release names are not
+#. translated.
+#: src/runtime.rs:339
+msgid ""
+"`brew install onnxruntime`, or libonnxruntime.dylib from the onnxruntime-osx "
+"release"
+msgstr ""
+"`brew install onnxruntime` tai libonnxruntime.dylib julkaisusta onnxruntime-"
+"osx"
+
+#. Translators: where to get ONNX Runtime on Linux; file and release
+#. names are not translated.
+#: src/runtime.rs:344
+msgid ""
+"libonnxruntime.so from the onnxruntime-linux release, or your distribution's "
+"package"
+msgstr "libonnxruntime.so julkaisusta onnxruntime-linux tai jakelusi paketti"
+
+#. Translators: {version} is a version number, {platform} says where to
+#. get ONNX Runtime for this computer; CELLARIS_ORT_DYLIB is an
+#. environment variable (not translated).
+#: src/runtime.rs:351
+msgid ""
+"Install ONNX Runtime {version} or newer ({platform}), then choose it in the "
+"Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data "
+"directory."
+msgstr ""
+"Asenna ONNX Runtime {version} tai uudempi ({platform}) ja valitse se sitten "
+"Cellaris-paneelissa, aseta CELLARIS_ORT_DYLIB tai sijoita se laajennuksen "
+"datakansioon."
+
+#: src/runtime.rs:374
+msgid "ONNX Runtime was not found"
+msgstr "ONNX Runtime -kirjastoa ei löytynyt"
+
+#: src/runtime.rs:378
+msgid "ONNX Runtime could not be loaded"
+msgstr "ONNX Runtime -kirjastoa ei voitu ladata"
+
+#. Translators: {path} is an ONNX Runtime library, {source} where it was
+#. found, {what} what went wrong with it.
+#: src/runtime.rs:390
+msgid "{path} ({source}): {what}"
+msgstr "{path} ({source}): {what}"
+
+#. Translators: "it" is a library file; {} is why the system could
+#. not open it.
+#: src/runtime.rs:431
+msgid "it could not be opened: {}"
+msgstr "sitä ei voitu avata: {}"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name
+#. in ONNX Runtime (not translated).
+#: src/runtime.rs:438
+msgid "it is not ONNX Runtime (it has no OrtGetApiBase)"
+msgstr "se ei ole ONNX Runtime (siitä puuttuu OrtGetApiBase)"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name in
+#. ONNX Runtime (not translated).
+#: src/runtime.rs:446
+msgid "it is not ONNX Runtime (OrtGetApiBase returned nothing)"
+msgstr "se ei ole ONNX Runtime (OrtGetApiBase ei palauttanut mitään)"
+
+#. Translators: "it" is a library file; {version} and {needed}
+#. are version numbers.
+#: src/runtime.rs:465
+msgid "it is ONNX Runtime {version}, older than {needed}"
+msgstr "se on ONNX Runtime {version}, joka on vanhempi kuin {needed}"
+
+#. Translators: {reason} is why ONNX Runtime was not found, {hint}
+#. how to install it.
+#: src/runtime.rs:522
+msgid ""
+"{reason}.\n"
+"{hint}"
+msgstr ""
+"{reason}.\n"
+"{hint}"
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:553
+msgid "opening it crashed"
+msgstr "sen avaaminen kaatui"
+
+#. Translators: {} is why ONNX Runtime could not be
+#. loaded, in its own words.
+#: src/runtime.rs:586
+msgid "{}. Restart eov to try again."
+msgstr "{}. Käynnistä eov uudelleen, niin yritetään uudestaan."
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:596
+msgid "loading it crashed. Restart eov to try again."
+msgstr ""
+"sen lataaminen kaatui. Käynnistä eov uudelleen, niin yritetään uudestaan."
+
+#. Translators: {} is a version number.
+#: src/runtime.rs:606
+msgid "The ONNX Runtime found is older than {}"
+msgstr "Löydetty ONNX Runtime on vanhempi kuin {}"
+
+#. Translators: {attempts} lists the libraries tried, one per line,
+#. {hint} says how to install ONNX Runtime.
+#: src/runtime.rs:613
+msgid ""
+"Tried:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+msgstr ""
+"Kokeiltiin:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+
+#. Translators: keep the full meaning: predicted, research only, no diagnosis.
+#: ui/cellaris.slint:308
+msgctxt "CellarisPanel"
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "ENNUSTETTU — vain tutkimuskäyttöön, ei diagnostiikkaan"
+
+#: ui/cellaris.slint:314
+msgctxt "CellarisPanel"
+msgid "No slide"
+msgstr "Ei näytelasia"
+
+#. Translators: closes the Cellaris panel.
+#: ui/cellaris.slint:408
+msgctxt "CellarisPanel"
+msgid "Close"
+msgstr "Sulje"
+
+#. Translators: keep the full meaning; IF is immunofluorescence.
+#: ui/cellaris.slint:435
+msgctxt "CellarisPanel"
+msgid ""
+"The colours show what a model predicts the immunofluorescence would be. They "
+"are not measurements: check them against measured IF before relying on them."
+msgstr ""
+"Värit näyttävät, millaiseksi malli ennustaa immunofluoresenssin. Ne eivät "
+"ole mittaustuloksia: tarkista ne mitattua immunofluoresenssia (IF) vasten "
+"ennen kuin luotat niihin."
+
+#. Translators: tries again what failed (the model, cells).
+#: ui/cellaris.slint:460
+msgctxt "CellarisPanel"
+msgid "Retry"
+msgstr "Yritä uudelleen"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:472
+msgctxt "CellarisPanel"
+msgid "SLIDE"
+msgstr "NÄYTELASI"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:489
+msgctxt "CellarisPanel"
+msgid "PREDICTED MARKERS"
+msgstr "ENNUSTETUT MERKKIAINEET"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Hide predictions"
+msgstr "Piilota ennusteet"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Show predictions"
+msgstr "Näytä ennusteet"
+
+#. Translators: {} is a marker, such as Pan-CK.
+#: ui/cellaris.slint:551
+msgctxt "CellarisPanel"
+msgid "Display window of {} (arcsinh)"
+msgstr "Merkkiaineen {} näyttöväli (arcsinh)"
+
+#. Translators: the low end of a marker's display window: at or below it
+#. nothing is drawn (black in fluorescence style).
+#: ui/cellaris.slint:560
+msgctxt "CellarisPanel"
+msgid "Low"
+msgstr "Alaraja"
+
+#. Translators: the high end of a marker's display window: at or above it the
+#. marker is drawn in its full colour.
+#: ui/cellaris.slint:588
+msgctxt "CellarisPanel"
+msgid "High"
+msgstr "Yläraja"
+
+#: ui/cellaris.slint:615
+msgctxt "CellarisPanel"
+msgid ""
+"Only how predictions are drawn changes; readouts and batch runs keep their "
+"values."
+msgstr ""
+"Vain ennusteiden piirtotapa muuttuu; yhteenvedot ja eräajot säilyttävät "
+"arvonsa."
+
+#. Translators: resets a marker's display window to Cellaris's own.
+#: ui/cellaris.slint:622
+msgctxt "CellarisPanel"
+msgid "Reset"
+msgstr "Palauta"
+
+#. Translators: how opaque the predicted colours are drawn.
+#: ui/cellaris.slint:636
+msgctxt "CellarisPanel"
+msgid "Opacity"
+msgstr "Peittävyys"
+
+#. Translators: {} is the opacity, in percent.
+#: ui/cellaris.slint:652
+msgctxt "CellarisPanel"
+msgid "{} %"
+msgstr "{} %"
+
+#: ui/cellaris.slint:662
+msgctxt "CellarisPanel"
+msgid "Fluorescence style: colour on black over all tissue"
+msgstr "Fluoresenssityyli: väri mustalla pohjalla koko kudoksen päällä"
+
+#. Translators: a check box; other messages quote its first words.
+#: ui/cellaris.slint:671
+msgctxt "CellarisPanel"
+msgid "Assume the model's pixel size for slides that report none"
+msgstr ""
+"Oleta mallin pikselikoko näytelaseille, jotka eivät ilmoita pikselikokoa"
+
+#: ui/cellaris.slint:678
+msgctxt "CellarisPanel"
+msgid ""
+"Colours are chosen to stay distinct with red-green and blue-yellow colour "
+"blindness; hide markers to look at one at a time. Areas still being computed "
+"are veiled; failed ones are outlined in red."
+msgstr ""
+"Värit on valittu niin, että ne erottuvat toisistaan myös puna-"
+"vihersokeudessa ja sini-keltasokeudessa; piilota merkkiaineita, jos haluat "
+"tarkastella yhtä kerrallaan. Vielä laskettavat alueet näytetään "
+"himmennettyinä; epäonnistuneet alueet on rajattu punaisella."
+
+#. Translators: a section heading, in capitals in English: statistics of the
+#. model's predicted values over a region (not a measurement).
+#: ui/cellaris.slint:684
+msgctxt "CellarisPanel"
+msgid "REGION READOUT"
+msgstr "ALUEYHTEENVETO"
+
+#. Translators: a column of the readout: the marker.
+#: ui/cellaris.slint:707
+msgctxt "CellarisPanel"
+msgid "marker"
+msgstr "merkkiaine"
+
+#. Translators: a narrow column of the readout: the mean predicted value.
+#: ui/cellaris.slint:709
+msgctxt "CellarisPanel"
+msgid "mean"
+msgstr "ka."
+
+#. Translators: a narrow column of the readout: how much the value varies.
+#: ui/cellaris.slint:711
+msgctxt "CellarisPanel"
+msgid "spread"
+msgstr "hajonta"
+
+#. Translators: a narrow column: how much optical density alone explains.
+#: ui/cellaris.slint:713
+msgctxt "CellarisPanel"
+msgid "density r²"
+msgstr "tiheys r²"
+
+#. Translators: picks the tool that outlines a region for a readout of the
+#. predicted values.
+#: ui/cellaris.slint:734
+msgctxt "CellarisPanel"
+msgid "Draw region"
+msgstr "Piirrä alue"
+
+#. Translators: makes the slide's region of interest (ROI) the readout's
+#. region, instead of a drawn one; the readout follows the ROI.
+#: ui/cellaris.slint:741
+msgctxt "CellarisPanel"
+msgid "Use ROI"
+msgstr "Käytä ROI-aluetta"
+
+#. Translators: stops the region readout.
+#: ui/cellaris.slint:751
+msgctxt "CellarisPanel"
+msgid "Cancel"
+msgstr "Peruuta"
+
+#. Translators: copies the region readout as text.
+#: ui/cellaris.slint:758
+msgctxt "CellarisPanel"
+msgid "Copy"
+msgstr "Kopioi"
+
+#. Translators: removes the readout's region and its readout.
+#: ui/cellaris.slint:766
+msgctxt "CellarisPanel"
+msgid "Clear"
+msgstr "Tyhjennä"
+
+#. Translators: explains the readout's columns; keep the meaning exact; the 5
+#. µm blocks are small squares of tissue, not paraffin blocks.
+#: ui/cellaris.slint:775
+msgctxt "CellarisPanel"
+msgid ""
+"Mean is the predicted intensity, arcsinh, over tissue in the region, and "
+"spread how much it varies between 5 µm blocks. Density r² is how much of "
+"that variation optical density alone reproduces. Near 1, the marker is a "
+"density map here. Low with a small spread means the prediction is flat, not "
+"that it learned anything. Low with a wide spread is needed for it to be the "
+"marker, but only measured IF shows it is. Numbers come from the same blended "
+"predictions the overlay shows."
+msgstr ""
+"Keskiarvo on alueen kudoksen ennustettu intensiteetti (arcsinh), ja hajonta "
+"kertoo, kuinka paljon se vaihtelee 5 µm:n neliöiden välillä. Tiheys r² "
+"kertoo, kuinka suuren osan tästä vaihtelusta pelkkä optinen tiheys toistaa. "
+"Kun arvo on lähellä 1:tä, merkkiaine on tässä pelkkä tiheyskartta. Pieni "
+"arvo ja pieni hajonta tarkoittavat, että ennuste on tasainen, eivät sitä, "
+"että malli olisi oppinut jotain. Pieni arvo ja suuri hajonta ovat edellytys "
+"sille, että ennuste vastaa merkkiainetta, mutta vain mitattu IF osoittaa, "
+"että niin on. Luvut tulevat samoista yhdistetyistä ennusteista, jotka "
+"peittokuva näyttää."
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:781
+msgctxt "CellarisPanel"
+msgid "MODEL"
+msgstr "MALLI"
+
+#. Translators: opens a file dialog to choose the model file.
+#: ui/cellaris.slint:805
+msgctxt "CellarisPanel"
+msgid "Choose model…"
+msgstr "Valitse malli…"
+
+#. Translators: opens a form to download the model through eov.
+#: ui/cellaris.slint:807
+msgctxt "CellarisPanel"
+msgid "Download model…"
+msgstr "Lataa malli…"
+
+#. Translators: opens a file dialog to choose ONNX Runtime's library.
+#: ui/cellaris.slint:809
+msgctxt "CellarisPanel"
+msgid "Choose runtime…"
+msgstr "Valitse suoritusympäristö…"
+
+#. Translators: above the fields for the model's address and SHA-256.
+#: ui/cellaris.slint:824
+msgctxt "CellarisPanel"
+msgid "Your site's copy of the model, and its SHA-256:"
+msgstr "Organisaatiosi kopio mallista ja sen SHA-256-tiiviste:"
+
+#. Translators: hex digits are 0–9 and a–f.
+#: ui/cellaris.slint:834
+msgctxt "CellarisPanel"
+msgid "SHA-256 (64 hex digits)"
+msgstr "SHA-256 (64 heksadesimaalinumeroa)"
+
+#. Translators: downloads the model from the address given.
+#: ui/cellaris.slint:840
+msgctxt "CellarisPanel"
+msgid "Download"
+msgstr "Lataa"

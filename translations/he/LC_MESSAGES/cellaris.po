@@ -1,0 +1,1687 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cellaris\n"
+"Report-Msgid-Bugs-To: https://github.com/eosin-platform/eov-cellaris-plugin/"
+"issues\n"
+"Language-Team: Hebrew\n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Review-Status: machine-translated; not yet reviewed by a native speaker\n"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid "Cellaris"
+msgstr "Cellaris"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid ""
+"Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, "
+"with a readout of the predicted values over a region. Research use only: "
+"predictions are not measurements and are not for diagnosis."
+msgstr ""
+"חיזוי של סמני אימונופלואורסצנציה מרובבת של Orion (Hoechst, Pan-CK, SMA) "
+"כשכבת-על על גבי H&E, עם סיכום של הערכים החזויים על פני אזור. לשימוש מחקרי "
+"בלבד: החיזויים אינם מדידות ואין להשתמש בהם לאבחון."
+
+#. Translators: shown wherever predicted colours are. Keep all of its
+#. meaning: the colours are a model's prediction, not a measurement; for
+#. research only; never for diagnosis.
+#: src/config.rs:34
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "חזוי — לשימוש מחקרי בלבד, אין להשתמש לאבחון"
+
+#. Translators: {key} is the name of a setting in Cellaris's
+#. settings.json and {value} its value there; neither is
+#. translated.
+#: src/config.rs:130
+msgid "ignored the setting {key} = {value}"
+msgstr "ההגדרה ⁨{key} = {value}⁩ לא הוחלה"
+
+#. Translators: {low} and {high} are the ends of a
+#. marker's display window as settings.json gives
+#. them, {name} the marker (not translated).
+#: src/config.rs:210
+msgid "ignored the display window {low}–{high} of {name}"
+msgstr "חלון התצוגה ⁨{low}–{high}⁩ של {name} לא הוחל"
+
+#: src/engine.rs:732
+msgid "Cellaris hit an internal error and reset its model"
+msgstr "ב-Cellaris אירעה שגיאה פנימית, והמודל שלו אופס"
+
+#: src/engine.rs:737
+msgid "Cellaris hit an internal error"
+msgstr "ב-Cellaris אירעה שגיאה פנימית"
+
+#: src/engine.rs:928
+msgid "Loading the model crashed"
+msgstr "טעינת המודל קרסה"
+
+#: src/engine.rs:960
+msgid "Cellaris cannot show the chosen markers"
+msgstr "אין באפשרות Cellaris להציג את הסמנים שנבחרו"
+
+#. Translators: {} says why the model did not load.
+#: src/engine.rs:991
+msgid "The model did not load: {}"
+msgstr "המודל לא נטען: {}"
+
+#. Translators: why a region readout stopped; a cell is one
+#. square of the grid the slide is predicted in, not a
+#. biological cell. {error} says what went wrong.
+#: src/engine.rs:1195
+msgid "{n} cell failed: {error}"
+msgid_plural "{n} cells failed: {error}"
+msgstr[0] "משבצת אחת נכשלה: {error}"
+msgstr[1] "‏{n} משבצות נכשלו: {error}"
+
+#. Translators: {n} cells of a region's {total} could not be
+#. computed: the form follows {n}, and {total} is a bare
+#. number. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell. {error} says what went
+#. wrong.
+#: src/engine.rs:1205
+msgid "{n} cell of {total} could not be computed: {error}"
+msgid_plural "{n} cells of {total} could not be computed: {error}"
+msgstr[0] "לא ניתן היה לחשב משבצת אחת מתוך {total}: {error}"
+msgstr[1] "לא ניתן היה לחשב {n} משבצות מתוך {total}: {error}"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:1282
+msgid "replaced by a new region"
+msgstr "האזור הוחלף באזור חדש"
+
+#: src/engine.rs:1294
+msgid "No part of that region is on the slide."
+msgstr "אף חלק מאזור זה אינו נמצא על השקופית."
+
+#. Translators: a window is one of the square images the
+#. model predicts from.
+#: src/engine.rs:1299
+msgid "That region needs more than {n} window. Draw a smaller one."
+msgid_plural "That region needs more than {n} windows. Draw a smaller one."
+msgstr[0] "אזור זה דורש יותר מחלון אחד. יש לשרטט אזור קטן יותר."
+msgstr[1] "אזור זה דורש יותר מ-{n} חלונות. יש לשרטט אזור קטן יותר."
+
+#. Translators: the title of the question asked before a long
+#. region readout; a readout summarises the model's predicted
+#. values over the region, it is not a measurement.
+#: src/engine.rs:1332
+msgid "Compute a readout of a large region?"
+msgstr "לחשב סיכום של אזור גדול?"
+
+#. Translators: {n} windows (square images the model
+#. predicts from); {time} is a duration that already
+#. says "about", such as "about 3 min".
+#: src/engine.rs:1337
+msgid ""
+"This region needs about {n} more window of predictions; computing it takes "
+"{time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgid_plural ""
+"This region needs about {n} more windows of predictions; computing them "
+"takes {time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgstr[0] ""
+"אזור זה דורש עוד חלון חיזוי אחד בערך; במחשב זה החישוב שלו יימשך {time}. "
+"שכבת-העל ממשיכה לפעול בינתיים, וניתן לבטל את חישוב סיכום האזור."
+msgstr[1] ""
+"אזור זה דורש עוד כ-{n} חלונות חיזוי; במחשב זה החישוב שלהם יימשך {time}. "
+"שכבת-העל ממשיכה לפעול בינתיים, וניתן לבטל את חישוב סיכום האזור."
+
+#. Translators: the button that starts the long readout (it
+#. computes the missing predictions and summarises them).
+#: src/engine.rs:1344
+msgid "Compute"
+msgstr "חישוב"
+
+#. Translators: the button that does not start it.
+#: src/engine.rs:1346
+msgid "Cancel"
+msgstr "ביטול"
+
+#. Translators: why part of a slide was not computed: eov is
+#. shutting down.
+#: src/engine.rs:1444
+msgid "stopping"
+msgstr "בתהליך סגירה"
+
+#. Translators: the model failed unexpectedly; {} is the
+#. internal error.
+#: src/engine.rs:1461
+msgid "inference crashed: {}"
+msgstr "ההסקה קרסה: {}"
+
+#. Translators: {} says why the model could not predict.
+#: src/engine.rs:1482
+msgid "inference failed: {}"
+msgstr "ההסקה נכשלה: {}"
+
+#: src/engine.rs:1615
+msgid "Cellaris could not compute part of the slide; retrying"
+msgstr "חלק מהשקופית לא חושב ב-Cellaris; מתבצע ניסיון חוזר"
+
+#. Translators: the names of the layers Cellaris draws on a slide.
+#: src/engine.rs:2047
+msgid "Cellaris — predicted markers (research use only)"
+msgstr "סמנים חזויים של Cellaris (לשימוש מחקרי בלבד)"
+
+#: src/engine.rs:2048
+msgid "Cellaris — progress"
+msgstr "התקדמות Cellaris"
+
+#. Translators: the layer with the outline of a region readout's region;
+#. the readout summarises predicted values, so do not call the region
+#. measured.
+#: src/engine.rs:2052
+msgid "Cellaris — readout region"
+msgstr "אזור הסיכום של Cellaris"
+
+#: src/engine.rs:2053
+msgid "Cellaris — predicted values (research use only)"
+msgstr "ערכים חזויים של Cellaris (לשימוש מחקרי בלבד)"
+
+#. Translators: the name of the tool that outlines a region for a readout,
+#. and the title of the readout while it runs. A readout summarises the
+#. model's predicted values over the region: do not call it a measurement.
+#: src/engine.rs:2086
+msgid "Cellaris region readout"
+msgstr "סיכום אזור של Cellaris"
+
+#. Translators: why nothing could be predicted, for the overlay or for a
+#. region readout.
+#: src/engine.rs:2093
+msgid "the model is not loaded"
+msgstr "המודל לא נטען"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:2099
+msgid "the slide was closed"
+msgstr "השקופית נסגרה"
+
+#. Translators: why part of a slide was not predicted; {} is eov's reason.
+#: src/engine.rs:2105
+msgid "the slide could not be read: {}"
+msgstr "לא ניתן היה לקרוא את השקופית: {}"
+
+#. Translators: the quoted words name the Cellaris panel's
+#. check box "Assume the model's pixel size for slides that
+#. report none": use the same words as there.
+#: src/geometry.rs:83
+msgid ""
+"This slide does not report its pixel size, so it cannot be matched to the "
+"model's. Turn on “Assume the model's pixel size” in the Cellaris panel to "
+"run anyway."
+msgstr ""
+"שקופית זו אינה מדווחת על גודל הפיקסל שלה, ולכן לא ניתן להתאים אותו לזה של "
+"המודל. כדי להריץ בכל זאת, יש להפעיל את האפשרות \"הנחת גודל הפיקסל של המודל\" "
+"בלוח Cellaris."
+
+#. Translators: µm/px is micrometres per pixel; {factor}× is how
+#. many times coarser.
+#: src/geometry.rs:91
+msgid ""
+"This slide is scanned at {slide} µm/px, more than {factor}× coarser than the "
+"{model} µm/px the model was trained at; predictions would be meaningless."
+msgstr ""
+"שקופית זו נסרקה ב-⁨{slide} µm/px⁩, רזולוציה גסה ביותר מ-⁨{factor}×⁩ לעומת "
+"⁨{model} µm/px⁩ שבהם אומן המודל; החיזויים יהיו חסרי משמעות."
+
+#. Translators: {} is a pixel size, as the model gives it.
+#: src/geometry.rs:195
+msgid "the model's pixel size {} is not usable"
+msgstr "לא ניתן להשתמש בגודל הפיקסל של המודל ({})"
+
+#. Translators: {window} is a size in pixels (px).
+#: src/geometry.rs:202
+msgid "the model's window of {window} px is not a multiple of {multiple}"
+msgstr "חלון המודל בגודל ⁨{window} px⁩ אינו כפולה של {multiple}"
+
+#: src/geometry.rs:215
+msgid "the slide is empty"
+msgstr "השקופית ריקה"
+
+#. Translators: a pyramid level is one of the resolutions a slide
+#. is stored at; µm/px is micrometres per pixel.
+#: src/geometry.rs:246
+msgid ""
+"no pyramid level is close to the model's {mpp} µm/px; a window would need "
+"{width}×{height} pixels"
+msgstr ""
+"אין רמת פירמידה קרובה ל-⁨{mpp} µm/px⁩ של המודל; חלון היה דורש ⁨{width}×{height}⁩ "
+"פיקסלים"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. predicted markers; H&E is haematoxylin and eosin. Keep "research use
+#. only".
+#: src/lib.rs:94
+msgid "Cellaris: predicted markers over H&E (research use only)"
+msgstr "סמנים חזויים של Cellaris על גבי H&E (לשימוש מחקרי בלבד)"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. Cellaris panel.
+#: src/lib.rs:115
+msgid "Cellaris panel: legend, region readout and model"
+msgstr "לוח Cellaris: מקרא, סיכום אזור ומודל"
+
+#. Translators: a warning; {} is eov's reason, in English.
+#: src/lib.rs:164
+msgid "Cellaris could not save its settings: {}"
+msgstr "לא ניתן היה לשמור את ההגדרות של Cellaris: {}"
+
+#: src/lib.rs:348
+msgid "The Cellaris panel could not open"
+msgstr "לא ניתן היה לפתוח את לוח Cellaris"
+
+#: src/lib.rs:401
+msgid "Open a slide first."
+msgstr "יש לפתוח תחילה שקופית."
+
+#. Translators: the ROI tool is eov's region-of-interest tool;
+#. "Cellaris region readout" is the name of Cellaris's tool (use
+#. the same words as there).
+#: src/lib.rs:414
+msgid ""
+"This slide has no region of interest; draw one with the ROI tool, or outline "
+"a region with the Cellaris region readout tool."
+msgstr ""
+"בשקופית זו אין אזור עניין; יש לשרטט אחד באמצעות כלי ה-ROI, או לתחום אזור "
+"באמצעות הכלי \"סיכום אזור של Cellaris\"."
+
+#: src/lib.rs:498
+msgid "Readout copied as tab-separated text."
+msgstr "סיכום האזור הועתק כטקסט מופרד בטאבים."
+
+#: src/lib.rs:503
+msgid "There is no finished readout to copy."
+msgstr "אין סיכום אזור מוכן להעתקה."
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:536
+msgid "ONNX Runtime library"
+msgstr "ספריית ONNX Runtime"
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:540
+msgid "ONNX model"
+msgstr "מודל ONNX"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:557
+msgid "Choose a Cellaris marker model"
+msgstr "בחירת מודל סמנים ל-Cellaris"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:559
+msgid "Choose the ONNX Runtime library"
+msgstr "בחירת ספריית ONNX Runtime"
+
+#. Translators: SHA-256 is a checksum (not translated); hex digits
+#. are 0–9 and a–f.
+#: src/lib.rs:638
+msgid ""
+"Enter the model's SHA-256 (64 hex digits): the download is checked against "
+"it."
+msgstr ""
+"יש להזין את תקציר ה-SHA-256 של המודל (64 ספרות הקסדצימליות): ההורדה תיבדק "
+"מולו."
+
+#. Translators: "Choose model…" is the panel's button: use the
+#. same words as there.
+#: src/lib.rs:672
+msgid ""
+"This eov cannot download models: choose the model file with Choose model…"
+msgstr ""
+"בנייה זו של eov אינה יכולה להוריד מודלים: יש לבחור את קובץ המודל באמצעות "
+"\"בחירת מודל…\""
+
+#: src/lib.rs:957
+msgid "Outline a region with at least three points."
+msgstr "יש לתחום אזור בעזרת שלוש נקודות לפחות."
+
+#. Translators: {reason} is eov's explanation, a whole
+#. sentence; {key} is the name of a setting in
+#. settings.json, and "" an empty value there (neither
+#. is translated).
+#: src/lib.rs:1031
+msgid ""
+"{reason} Another key can be set as {key} in Cellaris's settings.json (\"\" "
+"for none)."
+msgstr ""
+"‏{reason} ניתן להגדיר מקש אחר בתור {key} בקובץ settings.json של Cellaris "
+"(\"\" ללא מקש)."
+
+#. Translators: eov did not accept something Cellaris
+#. registered: {id} is its identifier and {what} the kind of
+#. registration as eov names it in English, such as
+#. "hotkey" (neither is translated); {reason} is eov's
+#. explanation, a whole sentence.
+#: src/lib.rs:1042
+msgid "eov refused to register {id} ({what}): {reason}"
+msgstr "הרישום של {id} ({what}) נדחה על ידי eov: {reason}"
+
+#: src/markers.rs:182
+msgid "no markers are selected"
+msgstr "לא נבחרו סמנים"
+
+#: src/markers.rs:185
+msgid "at most {n} marker can be shown at once"
+msgid_plural "at most {n} markers can be shown at once"
+msgstr[0] "ניתן להציג לכל היותר סמן אחד בכל פעם"
+msgstr[1] "ניתן להציג לכל היותר {n} סמנים בבת אחת"
+
+#. Translators: {} is a marker's name, such as Pan-CK.
+#: src/markers.rs:194
+msgid "{} is selected twice"
+msgstr "הסמן {} נבחר פעמיים"
+
+#. Translators: {} is a marker's name, such as Pan-CK; a
+#. channel is one of the markers the model predicts.
+#: src/markers.rs:203
+msgid "the model has no channel named {}"
+msgstr "למודל אין ערוץ בשם {}"
+
+#. Translators: {} is a marker's name, such as Pan-CK; its display
+#. window is the range of values its colour is drawn over.
+#: src/markers.rs:212
+msgid "no display window is known for {}"
+msgstr "לא ידוע חלון תצוגה עבור {}"
+
+#. Translators: the colours of the predicted markers, named in the
+#. legend over the slide ("Hoechst: yellow").
+#: src/markers.rs:367
+msgctxt "Colour"
+msgid "yellow"
+msgstr "צהוב"
+
+#: src/markers.rs:368
+msgctxt "Colour"
+msgid "magenta"
+msgstr "מג'נטה"
+
+#: src/markers.rs:369
+msgctxt "Colour"
+msgid "bluish green"
+msgstr "ירוק-כחלחל"
+
+#: src/markers.rs:370
+msgctxt "Colour"
+msgid "sky blue"
+msgstr "תכלת"
+
+#: src/markers.rs:371
+msgctxt "Colour"
+msgid "orange"
+msgstr "כתום"
+
+#: src/markers.rs:372
+msgctxt "Colour"
+msgid "vermilion"
+msgstr "אדום-כתום"
+
+#. Translators: CELLARIS_MODEL is an environment variable (not
+#. translated); {} is a path.
+#: src/model.rs:207
+msgid "CELLARIS_MODEL points at {}, which does not exist"
+msgstr "משתנה הסביבה CELLARIS_MODEL מפנה אל {}, שאינו קיים"
+
+#. Translators: {} is the path of the model file the user chose.
+#: src/model.rs:219
+msgid "the model chosen in the Cellaris panel, {}, does not exist"
+msgstr "המודל שנבחר בלוח Cellaris, {}, אינו קיים"
+
+#. Translators: {file} is the model's file name (markers.onnx), {dir}
+#. the folder it is looked for in.
+#: src/model.rs:234
+msgid "No {file}: put one in {dir}, or choose a model in the Cellaris panel."
+msgstr ""
+"לא נמצא {file}: יש להציב קובץ כזה ב-{dir}, או לבחור מודל בלוח Cellaris."
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is why it could not be read.
+#: src/model.rs:272
+msgid "channel_names is not a list of names: {}"
+msgstr "השדה channel_names אינו רשימת שמות: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is its value.
+#: src/model.rs:283
+msgid "channel_names has an empty name: {}"
+msgstr "בשדה channel_names יש שם ריק: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is a marker's name.
+#: src/model.rs:292
+msgid "channel_names names {} twice"
+msgstr "השדה channel_names מציין את {} פעמיים"
+
+#. Translators: {key} is a key of the model's metadata, {value} its
+#. value; true and false are the values it may have (none is
+#. translated).
+#: src/model.rs:309
+msgid "{key} must be true or false, not {value}"
+msgstr "הערך של {key} חייב להיות true או false, ולא {value}"
+
+#. Translators: {key} is a key of the model's metadata (not translated),
+#. {value} its value.
+#: src/model.rs:328
+msgid "{key} is not a number: {value}"
+msgstr "הערך של {key} אינו מספר: {value}"
+
+#. Translators: {key} is a key of the model's metadata (not
+#. translated), {value} its value, {min} and {max} what it may be.
+#: src/model.rs:343
+msgid "{key} = {value} is outside {min}–{max}"
+msgstr "הערך ⁨{key} = {value}⁩ נמצא מחוץ לטווח ⁨{min}–{max}⁩"
+
+#. Translators: channel_names is a key of the model's metadata and
+#. export_marker_onnx a program (neither is translated).
+#: src/model.rs:362
+msgid ""
+"the model carries no channel_names, so its channels cannot be told apart; re-"
+"export it with cellaris's export_marker_onnx"
+msgstr ""
+"המודל אינו כולל channel_names, ולכן לא ניתן להבחין בין הערוצים שלו; יש לייצא "
+"אותו מחדש בעזרת export_marker_onnx של cellaris"
+
+#. Translators: a note in the model card; raw_intensity is a key
+#. of the model's metadata (not translated). "raw intensities"
+#. are the model's predictions on a linear (untransformed) scale,
+#. not measured signal.
+#: src/model.rs:374
+msgid "raw_intensity is not recorded; outputs are taken to be raw intensities"
+msgstr "השדה raw_intensity אינו מתועד; הפלטים נחשבים לעוצמות גולמיות"
+
+#. Translators: a note in the model card; {} is a pixel size in
+#. micrometres per pixel (µm/px); Orion is a dataset.
+#: src/model.rs:386
+msgid ""
+"the training pixel size is not recorded; {} µm/px (Orion level 0) is assumed"
+msgstr "גודל הפיקסל באימון אינו מתועד; ההנחה היא ⁨{} µm/px⁩ (רמה 0 של Orion)"
+
+#. Translators: the shape of the model's input; [batch, 3, height,
+#. width] is a notation, keep it as it is.
+#: src/model.rs:434
+msgid "the input has {n} dimension, not [batch, 3, height, width]"
+msgid_plural "the input has {n} dimensions, not [batch, 3, height, width]"
+msgstr[0] "לקלט יש ממד אחד, ולא [batch, 3, height, width]"
+msgstr[1] "לקלט יש {n} ממדים, ולא [batch, 3, height, width]"
+
+#. Translators: RGB is the colour model of the images (not translated).
+#: src/model.rs:442
+msgid "the input takes {n} channel, not RGB"
+msgid_plural "the input takes {n} channels, not RGB"
+msgstr[0] "הקלט מקבל ערוץ אחד, ולא RGB"
+msgstr[1] "הקלט מקבל {n} ערוצים, ולא RGB"
+
+#. Translators: {h}×{w} is the size of the model's input in pixels.
+#: src/model.rs:455
+msgid "the input is {h}×{w}; only square inputs are used"
+msgstr "גודל הקלט הוא ⁨{h}×{w}⁩; נעשה שימוש רק בקלטים ריבועיים"
+
+#. Translators: {} is a size in pixels (px).
+#: src/model.rs:490
+msgid "the model's input of {} px is not a multiple of 32 between 64 and 1024"
+msgstr "קלט המודל בגודל ⁨{} px⁩ אינו כפולה של 32 בין 64 ל-1024"
+
+#. Translators: no model file was found (a summary; the details follow).
+#: src/model.rs:533
+msgid "No marker model"
+msgstr "אין מודל סמנים"
+
+#. Translators: the file chosen as the model is not one Cellaris can use.
+#: src/model.rs:538
+msgid "Not a marker model"
+msgstr "הקובץ אינו מודל סמנים"
+
+#: src/model.rs:542
+msgid "The model's metadata is not usable"
+msgstr "לא ניתן להשתמש במטא-נתונים של המודל"
+
+#. Translators: --param model is a command-line option (not
+#. translated); {} is a path.
+#: src/model.rs:587
+msgid "--param model points at {}, which does not exist"
+msgstr "האפשרות ⁨--param model⁩ מפנה אל {}, שאינו קיים"
+
+#. Translators: {path} is the model file, {detail} what is wrong
+#. with it.
+#: src/model.rs:608
+msgid "{path}: {detail}"
+msgstr "הקובץ {path}: {detail}"
+
+#: src/model.rs:613
+msgid "The model could not be read"
+msgstr "לא ניתן היה לקרוא את המודל"
+
+#: src/model.rs:624
+msgid "The model could not be opened"
+msgstr "לא ניתן היה לפתוח את המודל"
+
+#: src/model.rs:634
+msgid "it has no inputs"
+msgstr "אין לו קלטים"
+
+#. Translators: float32 is a number type (not translated).
+#: src/model.rs:639
+msgid "its input is not float32"
+msgstr "הקלט שלו אינו float32"
+
+#. Translators: a tensor is an array of numbers a model takes.
+#: src/model.rs:646
+msgid "its input is not a tensor"
+msgstr "הקלט שלו אינו טנזור"
+
+#. Translators: a note in the model card; {name} is the name of
+#. one of the model's inputs (not translated).
+#: src/model.rs:657
+msgid "the model has {n} input; only {name} is fed"
+msgid_plural "the model has {n} inputs; only {name} is fed"
+msgstr[0] "למודל יש קלט אחד; רק {name} מוזן"
+msgstr[1] "למודל יש {n} קלטים; רק {name} מוזן"
+
+#. Translators: `markers` is the name of an output of the model
+#. file (not translated).
+#: src/model.rs:673
+msgid "it has no output named `markers`; not a cellaris export"
+msgstr "אין לו פלט בשם `markers`; זה אינו ייצוא של cellaris"
+
+#. Translators: markers is the name of an output of the model file
+#. and float32 a number type (neither is translated).
+#: src/model.rs:682
+msgid "markers is not float32"
+msgstr "הפלט markers אינו float32"
+
+#: src/model.rs:694
+msgid "The model's metadata could not be read"
+msgstr "לא ניתן היה לקרוא את המטא-נתונים של המודל"
+
+#. Translators: {n} channels are named in the model's metadata;
+#. {outputs} is the number of channels the model really outputs,
+#. a bare number (the plural form follows {n} only).
+#: src/model.rs:723
+msgid "it names {n} channel but outputs {outputs}"
+msgid_plural "it names {n} channels but outputs {outputs}"
+msgstr[0] "הוא מציין ערוץ אחד אך מפיק {outputs}"
+msgstr[1] "הוא מציין {n} ערוצים אך מפיק {outputs}"
+
+#. Translators: the model file cannot be used (a summary; the
+#. details follow).
+#: src/model.rs:732
+msgid "Not usable"
+msgstr "לא שמיש"
+
+#. Translators: a note in the model card: the model does not say how
+#. familiar an image looks to it.
+#: src/model.rs:738
+msgid "the model reports no reconstruction error"
+msgstr "המודל אינו מדווח על שגיאת שחזור"
+
+#: src/model.rs:743
+msgid "ONNX Runtime failed"
+msgstr "כשל ב-ONNX Runtime"
+
+#. Translators: how long something will still take; "s" is seconds.
+#: src/present.rs:45
+msgid "about {n} s"
+msgid_plural "about {n} s"
+msgstr[0] "כשנייה"
+msgstr[1] "כ-{n} שניות"
+
+#. Translators: how long something will still take; "min" is minutes.
+#: src/present.rs:49
+msgid "about {n} min"
+msgid_plural "about {n} min"
+msgstr[0] "כדקה"
+msgstr[1] "כ-{n} דקות"
+
+#. Translators: how long something will still take, in hours ("h").
+#: src/present.rs:53
+msgid "about {} h"
+msgstr "כ-{} שעות"
+
+#. Translators: in a cell's tooltip; a tissue block is a 5 µm square
+#. of tissue, not a paraffin block.
+#: src/present.rs:117
+msgid "Mean predicted arcsinh intensity over {n} tissue block"
+msgid_plural "Mean predicted arcsinh intensity over {n} tissue blocks"
+msgstr[0] "עוצמת arcsinh חזויה ממוצעת על פני ריבוע רקמה אחד"
+msgstr[1] "עוצמת arcsinh חזויה ממוצעת על פני {n} ריבועי רקמה"
+
+#. Translators: in a cell's tooltip: {n} of the tissue blocks look
+#. unlike the slides the model learnt from.
+#: src/present.rs:124
+msgid "{n} unlike the training data"
+msgid_plural "{n} unlike the training data"
+msgstr[0] "אחד מהם שונה מנתוני האימון"
+msgstr[1] "‏{n} מהם שונים מנתוני האימון"
+
+#. Translators: joins two parts of a cell's tooltip: "Mean predicted
+#. arcsinh intensity over 2 tissue blocks" and "1 unlike the training
+#. data".
+#: src/present.rs:129
+msgid "{mean}, {unusual}"
+msgstr "{mean}, {unusual}"
+
+#. Translators: in a cell's tooltip: tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks) too dark to be bright-field H&E.
+#: src/present.rs:134
+msgid "{n} near-black block left out"
+msgid_plural "{n} near-black blocks left out"
+msgstr[0] "ריבוע אחד כמעט שחור הושמט"
+msgstr[1] "‏{n} ריבועים כמעט שחורים הושמטו"
+
+#. Translators: joins two parts of a cell's tooltip: the mean of the
+#. predicted values ("Mean predicted arcsinh intensity over 2 tissue
+#. blocks", …) and "1 near-black block left out".
+#: src/present.rs:138
+msgid "{mean}; {dark}"
+msgstr "‏{mean}; {dark}"
+
+#. Translators: the first line of a cell's tooltip. Keep all of its
+#. meaning: the values are a model's prediction, for research only.
+#: src/present.rs:144
+msgid "Predicted — research use only"
+msgstr "חזוי — לשימוש מחקרי בלבד"
+
+#. Translators: a note on a slide; µm/px is micrometres per
+#. pixel.
+#: src/present.rs:276
+msgid "pixel size unknown — assumed {} µm/px"
+msgstr "גודל הפיקסל אינו ידוע — הונח ⁨{} µm/px⁩"
+
+#. Translators: a note on a slide: its pixel size is known for
+#. its width or its height only.
+#: src/present.rs:283
+msgid "pixel size reported for one axis only"
+msgstr "גודל הפיקסל מדווח לציר אחד בלבד"
+
+#. Translators: a note on a slide: it was enlarged {factor} times
+#. from its pixel size, {mpp} micrometres per pixel.
+#: src/present.rs:293
+msgid "upsampled ×{factor} from {mpp} µm/px — less reliable"
+msgstr "הוגדל ⁨×{factor}⁩ מ-⁨{mpp} µm/px⁩ — אמין פחות"
+
+#. Translators: a note on a slide whose pixels are not square.
+#: src/present.rs:300
+msgid "non-square pixels, resampled per axis"
+msgstr "פיקסלים לא ריבועיים, נדגמו מחדש לכל ציר בנפרד"
+
+#. Translators: a note on a slide; {} is the stain its metadata
+#. names (not translated); H&E is haematoxylin and eosin.
+#: src/present.rs:313
+msgid "the slide says {}; the model was trained on H&E"
+msgstr "השקופית מציינת {}; המודל אומן על H&E"
+
+#. Translators: a note on a slide; a window is one of the square
+#. images the model predicts from.
+#: src/present.rs:323
+msgid "{n} window skipped as not bright-field"
+msgid_plural "{n} windows skipped as not bright-field"
+msgstr[0] "חלון אחד דולג כי אינו בשדה בהיר"
+msgstr[1] "‏{n} חלונות דולגו כי אינם בשדה בהיר"
+
+#. Translators: a note on a slide: {n} of its {total} windows with
+#. tissue look unlike the slides the model learnt from. The form
+#. follows {n}, the windows that do; {total} is a bare number.
+#: src/present.rs:333
+msgid "{n} window of {total} looks unlike the training data"
+msgid_plural "{n} windows of {total} look unlike the training data"
+msgstr[0] "חלון אחד מתוך {total} נראה שונה מנתוני האימון"
+msgstr[1] "‏{n} חלונות מתוך {total} נראים שונים מנתוני האימון"
+
+#. Translators: a note on a slide: the model does not say at which
+#. pixel size it was trained.
+#: src/present.rs:341
+msgid "the model does not record its pixel size"
+msgstr "המודל אינו מתעד את גודל הפיקסל שלו"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:358
+msgid "Not computed: {} (see the Cellaris panel)"
+msgstr "לא חושב: {} (פרטים בלוח Cellaris)"
+
+#: src/present.rs:363 src/present.rs:1303
+msgid "Loading the model…"
+msgstr "המודל בטעינה…"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:368 src/present.rs:421
+msgid "Not computed: {}"
+msgstr "לא חושב: {}"
+
+#. Translators: a legend entry over the slide, such as
+#. "Pan-CK: magenta (arcsinh 4.50–6.50)": a marker, its colour,
+#. and the display window the user set for it.
+#: src/present.rs:387
+msgid "{marker}: {colour} ({window})"
+msgstr "‏{marker}: {colour} ({window})"
+
+#. Translators: a legend entry over the slide, such as
+#. "Hoechst: yellow": a marker and its colour.
+#: src/present.rs:395
+msgid "{marker}: {colour}"
+msgstr "‏{marker}: {colour}"
+
+#: src/present.rs:400
+msgid "Every marker is hidden (see the Cellaris panel)"
+msgstr "כל הסמנים מוסתרים (פרטים בלוח Cellaris)"
+
+#. Translators: {markers} is the legend over the slide; {n} markers are
+#. hidden.
+#: src/present.rs:408
+msgid "{markers} ({n} hidden)"
+msgid_plural "{markers} ({n} hidden)"
+msgstr[0] "‏{markers} (סמן אחד מוסתר)"
+msgstr[1] "‏{markers} ({n} מוסתרים)"
+
+#. Translators: over the slide; a cell is a small square of the
+#. slide that is predicted at once.
+#: src/present.rs:433
+msgid "Computing {done} of {n} cell"
+msgid_plural "Computing {done} of {n} cells"
+msgstr[0] "חישוב: {done} מתוך משבצת אחת"
+msgstr[1] "חישוב: {done} מתוך {n} משבצות"
+
+#. Translators: {n} cells could not be computed; Retry is a
+#. button in the Cellaris panel.
+#: src/present.rs:442
+msgid "{n} failed (Retry in the Cellaris panel)"
+msgid_plural "{n} failed (Retry in the Cellaris panel)"
+msgstr[0] "משבצת אחת נכשלה (\"ניסיון חוזר\" בלוח Cellaris)"
+msgstr[1] "‏{n} משבצות נכשלו (\"ניסיון חוזר\" בלוח Cellaris)"
+
+#. Translators: {n} cells could not be computed and are tried again.
+#: src/present.rs:447
+msgid "{n} failed, retrying"
+msgid_plural "{n} failed, retrying"
+msgstr[0] "משבצת אחת נכשלה, מתבצע ניסיון חוזר"
+msgstr[1] "‏{n} משבצות נכשלו, מתבצע ניסיון חוזר"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:451
+msgid "{} left"
+msgstr "נותרו {}"
+
+#. Translators: over the slide, when it is shown in several views:
+#. one of them shows too much of it to predict ({n} cells; at most
+#. {limit}). A cell is one square of the grid the slide is predicted
+#. in, not a biological cell.
+#: src/present.rs:475
+msgid ""
+"Zoom in to predict: one view of this slide needs {n} cell (limit {limit})"
+msgid_plural ""
+"Zoom in to predict: one view of this slide needs {n} cells (limit {limit})"
+msgstr[0] ""
+"יש להתקרב כדי לחזות: אחת התצוגות של שקופית זו דורשת משבצת אחת (המגבלה: "
+"{limit})"
+msgstr[1] ""
+"יש להתקרב כדי לחזות: אחת התצוגות של שקופית זו דורשת {n} משבצות (המגבלה: "
+"{limit})"
+
+#. Translators: over the slide: the view shows too much of it to
+#. predict ({n} cells; at most {limit}). A cell is one square of the
+#. grid the slide is predicted in, not a biological cell.
+#: src/present.rs:485
+msgid "Zoom in to predict: this view needs {n} cell (limit {limit})"
+msgid_plural "Zoom in to predict: this view needs {n} cells (limit {limit})"
+msgstr[0] "יש להתקרב כדי לחזות: תצוגה זו דורשת משבצת אחת (המגבלה: {limit})"
+msgstr[1] "יש להתקרב כדי לחזות: תצוגה זו דורשת {n} משבצות (המגבלה: {limit})"
+
+#. Translators: why a slide is not predicted (over the slide).
+#: src/present.rs:496
+msgid "pixel size unknown"
+msgstr "גודל הפיקסל אינו ידוע"
+
+#. Translators: why a slide is not predicted (over the slide); µm/px
+#. is micrometres per pixel.
+#: src/present.rs:502
+msgid "slide too coarse ({} µm/px)"
+msgstr "רזולוציית השקופית גסה מדי (⁨{} µm/px⁩)"
+
+#. Translators: a legend entry drawn on the slide: a
+#. marker, and the display window the user set for it.
+#: src/present.rs:720
+msgid "{marker} (predicted, {window})"
+msgstr "‏{marker} (חזוי, {window})"
+
+#. Translators: a legend entry drawn on the slide: a marker.
+#: src/present.rs:727
+msgid "{} (predicted)"
+msgstr "‏{} (חזוי)"
+
+#. Translators: the label drawn on a region while its readout is
+#. computed; {} is how much of it is done, in percent.
+#: src/present.rs:764
+msgid "Cellaris region · {} % computed"
+msgstr "אזור Cellaris · חושבו ⁨{}%⁩"
+
+#. Translators: the label drawn on the region of a readout (a readout
+#. summarises predicted values; it is not a measurement).
+#: src/present.rs:770
+msgid "Cellaris region"
+msgstr "אזור Cellaris"
+
+#. Translators: the progress of a region readout: {done} of the
+#. region's {n} cells (squares of the grid the slide is
+#. predicted in, not biological cells).
+#: src/present.rs:834
+msgid "{done} of {n} cell"
+msgid_plural "{done} of {n} cells"
+msgstr[0] "‏{done} מתוך משבצת אחת"
+msgstr[1] "‏{done} מתוך {n} משבצות"
+
+#: src/present.rs:867
+msgid "Cellaris: loading the model…"
+msgstr "תוסף Cellaris: המודל בטעינה…"
+
+#. Translators: the status bar while the overlay is on; {} says
+#. what went wrong.
+#: src/present.rs:871
+msgid "Cellaris: {}"
+msgstr "תוסף Cellaris: {}"
+
+#. Translators: in the status bar while predictions are shown. Keep all
+#. of its meaning: the colours are predicted, for research only.
+#: src/present.rs:893
+msgid "Cellaris (predicted, research use only)"
+msgstr "תוסף Cellaris (חזוי, לשימוש מחקרי בלבד)"
+
+#. Translators: in the status bar: {done} of {n} cells computed, and
+#. how long each window (square image the model predicts from)
+#. takes, in seconds. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell.
+#: src/present.rs:900
+msgid "{done}/{n} cell, {seconds} s per window"
+msgid_plural "{done}/{n} cells, {seconds} s per window"
+msgstr[0] "‏⁨{done}/{n}⁩ משבצת, {seconds} שניות לחלון"
+msgstr[1] "‏⁨{done}/{n}⁩ משבצות, {seconds} שניות לחלון"
+
+#. Translators: in the status bar: {n} cells could not be computed.
+#: src/present.rs:908
+msgid "{n} failed"
+msgid_plural "{n} failed"
+msgstr[0] "משבצת אחת נכשלה"
+msgstr[1] "‏{n} משבצות נכשלו"
+
+#. Translators: in the status bar while a region readout is computed.
+#: src/present.rs:912
+msgid "computing a region readout"
+msgstr "מתבצע חישוב של סיכום אזור"
+
+#. Translators: {} says why the region's readout cannot be computed
+#. (such as "no markers are selected").
+#: src/present.rs:954
+msgid "Cannot compute the readout: {}"
+msgstr "לא ניתן לחשב את סיכום האזור: {}"
+
+#: src/present.rs:955
+msgid "Waiting for the model…"
+msgstr "בהמתנה למודל…"
+
+#. Translators: "Cellaris region readout" is the name of the tool
+#. (use the same words as there); the region of interest is eov's
+#. ROI (the panel's button Use ROI).
+#: src/present.rs:964
+msgid ""
+"Outline some tissue with the Cellaris region readout tool, or use the region "
+"of interest."
+msgstr ""
+"יש לתחום רקמה באמצעות הכלי \"סיכום אזור של Cellaris\", או להשתמש באזור "
+"העניין."
+
+#. Translators: what a region readout covers: {n} tissue blocks
+#. (5 µm squares of tissue, not paraffin blocks), their area and
+#. the region's, in square millimetres.
+#: src/present.rs:982
+msgid "{n} tissue block, {tissue} mm² of tissue in {region} mm²"
+msgid_plural "{n} tissue blocks, {tissue} mm² of tissue in {region} mm²"
+msgstr[0] "ריבוע רקמה אחד, ⁨{tissue} mm²⁩ של רקמה בתוך ⁨{region} mm²⁩"
+msgstr[1] "‏{n} ריבועי רקמה, ⁨{tissue} mm²⁩ של רקמה בתוך ⁨{region} mm²⁩"
+
+#. Translators: what a region readout covers: {n} tissue blocks (5 µm
+#. squares of tissue, not paraffin blocks).
+#: src/present.rs:990
+msgid "{n} tissue block"
+msgid_plural "{n} tissue blocks"
+msgstr[0] "ריבוע רקמה אחד"
+msgstr[1] "‏{n} ריבועי רקמה"
+
+#: src/present.rs:993
+msgid "Waiting for you to confirm a long readout."
+msgstr "בהמתנה לאישורך לחישוב ארוך של סיכום אזור."
+
+#. Translators: {done} of the region's {n} cells (squares of the
+#. grid the slide is predicted in, not biological cells) are
+#. computed; {summary} is what the readout covers so far, such
+#. as "12 tissue blocks, …".
+#: src/present.rs:999
+msgid "Computing: {done} of {n} cell · {summary}"
+msgid_plural "Computing: {done} of {n} cells · {summary}"
+msgstr[0] "חישוב: {done} מתוך משבצת אחת · {summary}"
+msgstr[1] "חישוב: {done} מתוך {n} משבצות · {summary}"
+
+#. Translators: {} is what the readout covered until it was
+#. cancelled, such as "12 tissue blocks, …".
+#: src/present.rs:1007
+msgid "Cancelled · {}"
+msgstr "בוטל · {}"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:1014
+msgid "{} left on this computer."
+msgstr "נותרו {} במחשב זה."
+
+#. Translators: density r² is a column of the readout; a tissue
+#. block is a 5 µm square of tissue, not a paraffin block.
+#: src/present.rs:1019
+msgid "Fewer than {n} tissue block, too few for a density r²."
+msgid_plural "Fewer than {n} tissue blocks, too few for a density r²."
+msgstr[0] "פחות מריבוע רקמה אחד, מעט מדי לחישוב צפיפות r²."
+msgstr[1] "פחות מ-{n} ריבועי רקמה, מעט מדי לחישוב צפיפות r²."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks; {percent} is a percentage;
+#. blocks are 5 µm squares of tissue, not paraffin blocks.
+#: src/present.rs:1035
+msgid ""
+"Mean reconstruction error {recon}, {percent} % of blocks above the model's "
+"threshold."
+msgstr "שגיאת שחזור ממוצעת {recon}, ⁨{percent}%⁩ מהריבועים מעל הסף של המודל."
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks.
+#: src/present.rs:1042
+msgid "Mean reconstruction error {}."
+msgstr "שגיאת שחזור ממוצעת {}."
+
+#. Translators: {blocks} is a number of blocks ("3 blocks") and
+#. {cells} a number of cells ("1 cell"), both translated
+#. separately.
+#: src/present.rs:1051
+msgid "{blocks} and {cells} skipped as near-black (not bright-field H&E)."
+msgstr "דולגו {blocks} ו-{cells} שהם כמעט שחורים (אינם H&E בשדה בהיר)."
+
+#. Translators: a number of tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks), in "3 blocks and 1 cell skipped
+#. as near-black".
+#: src/present.rs:1055
+msgid "{n} block"
+msgid_plural "{n} blocks"
+msgstr[0] "ריבוע אחד"
+msgstr[1] "‏{n} ריבועים"
+
+#. Translators: a number of cells (squares of the grid the slide
+#. is predicted in, not biological cells), in "3 blocks and 1
+#. cell skipped as near-black".
+#: src/present.rs:1059
+msgid "{n} cell"
+msgid_plural "{n} cells"
+msgstr[0] "משבצת אחת"
+msgstr[1] "‏{n} משבצות"
+
+#. Translators: {} is a note on the slide.
+#: src/present.rs:1067
+msgid "Note: {}."
+msgstr "הערה: {}."
+
+#. Translators: the labels of the model card in the Cellaris panel.
+#: src/present.rs:1092
+msgctxt "Model card"
+msgid "Model"
+msgstr "מודל"
+
+#: src/present.rs:1093
+msgctxt "Model card"
+msgid "Runtime"
+msgstr "סביבת ריצה"
+
+#: src/present.rs:1102
+msgctxt "Model card"
+msgid "Version"
+msgstr "גרסה"
+
+#: src/present.rs:1105
+msgctxt "Model card"
+msgid "File"
+msgstr "קובץ"
+
+#. Translators: the start of the model file's SHA-256, and its
+#. size in megabytes.
+#: src/present.rs:1113
+msgid "{hash} ({size} MB)"
+msgstr "{hash} ({size} MB)"
+
+#. Translators: the pixel size the model was trained at.
+#: src/present.rs:1121
+msgctxt "Model card"
+msgid "Trained at"
+msgstr "רזולוציית אימון"
+
+#. Translators: a pixel size the model does not record, so it
+#. is assumed; µm/px is micrometres per pixel.
+#: src/present.rs:1127
+msgid "{} µm/px (assumed)"
+msgstr "בהנחה: ⁨{} µm/px⁩"
+
+#. Translators: what the model takes in.
+#: src/present.rs:1132
+msgctxt "Model card"
+msgid "Input"
+msgstr "קלט"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, as many at once as wanted.
+#: src/present.rs:1137
+msgid "{side}×{side} px windows, any batch size"
+msgstr "חלונות של ⁨{side}×{side} px⁩, כל גודל אצווה"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, exactly {n} at once.
+#: src/present.rs:1143
+msgid "{side}×{side} px windows, batches of {n}"
+msgid_plural "{side}×{side} px windows, batches of {n}"
+msgstr[0] "חלונות של ⁨{side}×{side} px⁩, אצוות של חלון אחד"
+msgstr[1] "חלונות של ⁨{side}×{side} px⁩, אצוות של {n}"
+
+#. Translators: the markers the model predicts.
+#: src/present.rs:1151
+msgctxt "Model card"
+msgid "Channels"
+msgstr "ערוצים"
+
+#. Translators: what the model computes.
+#: src/present.rs:1160
+msgctxt "Model card"
+msgid "Outputs"
+msgstr "פלטים"
+
+#. Translators: the model card's Outputs row: the model's
+#. predicted intensities are on a linear ("raw",
+#. untransformed) scale and shown as arcsinh(x/5); "raw" does
+#. not mean measured signal.
+#: src/present.rs:1167
+msgid "raw intensities, shown as arcsinh(x/5), reconstruction error"
+msgstr "עוצמות גולמיות, מוצגות כ-arcsinh(x/5), שגיאת שחזור"
+
+#. Translators: the model card's Outputs row: the model's predicted
+#. intensities are on a linear ("raw", untransformed) scale and
+#. shown as arcsinh(x/5); "raw" does not mean measured signal.
+#: src/present.rs:1172
+msgid "raw intensities, shown as arcsinh(x/5)"
+msgstr "עוצמות גולמיות, מוצגות כ-arcsinh(x/5)"
+
+#: src/present.rs:1173
+msgid "arcsinh intensities, reconstruction error"
+msgstr "עוצמות arcsinh, שגיאת שחזור"
+
+#: src/present.rs:1174
+msgid "arcsinh intensities"
+msgstr "עוצמות arcsinh"
+
+#. Translators: the data the model was trained on.
+#: src/present.rs:1179
+msgctxt "Model card"
+msgid "Trained on"
+msgstr "נתוני אימון"
+
+#: src/present.rs:1182
+msgctxt "Model card"
+msgid "Licence"
+msgstr "רישיון"
+
+#. Translators: the model's own description follows.
+#: src/present.rs:1186
+msgctxt "Model card"
+msgid "About"
+msgstr "אודות"
+
+#. Translators: the program that wrote the model file.
+#: src/present.rs:1190
+msgctxt "Model card"
+msgid "Exported by"
+msgstr "יוצא באמצעות"
+
+#: src/present.rs:1194
+msgctxt "Model card"
+msgid "Note"
+msgstr "הערה"
+
+#: src/present.rs:1213
+msgid "the new choice takes effect when eov restarts"
+msgstr "הבחירה החדשה תיכנס לתוקף לאחר הפעלה מחדש של eov"
+
+#. Translators: {version} is ONNX Runtime's version, {library} its
+#. file; {n} threads compute predictions.
+#: src/present.rs:1226
+msgid "ONNX Runtime {version} from {library}, {n} thread"
+msgid_plural "ONNX Runtime {version} from {library}, {n} threads"
+msgstr[0] "סביבת ⁨ONNX Runtime {version}⁩ מתוך {library}, תהליכון אחד"
+msgstr[1] "סביבת ⁨ONNX Runtime {version}⁩ מתוך {library}, {n} תהליכונים"
+
+#. Translators: {library} is ONNX Runtime's file; {n} threads compute
+#. predictions.
+#: src/present.rs:1234
+msgid "ONNX Runtime (version unknown) from {library}, {n} thread"
+msgid_plural "ONNX Runtime (version unknown) from {library}, {n} threads"
+msgstr[0] "סביבת ONNX Runtime (גרסה לא ידועה) מתוך {library}, תהליכון אחד"
+msgstr[1] "סביבת ONNX Runtime (גרסה לא ידועה) מתוך {library}, {n} תהליכונים"
+
+#. Translators: {runtime} names ONNX Runtime and its file; {n}
+#. threads compute predictions.
+#: src/present.rs:1241
+msgid "{runtime}, {n} thread"
+msgid_plural "{runtime}, {n} threads"
+msgstr[0] "‏{runtime}, תהליכון אחד"
+msgstr[1] "‏{runtime}, {n} תהליכונים"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours,
+#. but the model sees the slide's own.
+#: src/present.rs:1276
+msgid "the display is adjusted; predictions use the slide's unadjusted colours"
+msgstr "התצוגה מכווננת; החיזויים משתמשים בצבעים הלא מכווננים של השקופית"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours
+#. ({} says how, in eov's words), but the model sees the slide's own.
+#: src/present.rs:1283
+msgid ""
+"the display is adjusted ({}); predictions use the slide's unadjusted colours"
+msgstr "התצוגה מכווננת ({}); החיזויים משתמשים בצבעים הלא מכווננים של השקופית"
+
+#: src/present.rs:1298
+msgid ""
+"The model loads when the overlay is turned on or a region readout starts."
+msgstr "המודל נטען כאשר שכבת-העל מופעלת או כאשר מתחיל חישוב של סיכום אזור."
+
+#. Translators: cells are the small squares of the slide
+#. that are predicted at once.
+#: src/present.rs:1321
+msgid "{n} cell in view could not be computed"
+msgid_plural "{n} cells in view could not be computed"
+msgstr[0] "לא ניתן היה לחשב משבצת אחת בתצוגה"
+msgstr[1] "לא ניתן היה לחשב {n} משבצות בתצוגה"
+
+#. Translators: {} is how long each window (square image
+#. the model predicts from) takes, in seconds.
+#: src/present.rs:1333
+msgid "Computing · {} s per window"
+msgstr "חישוב · {} שניות לחלון"
+
+#. Translators: {} is the name of the model that is loaded.
+#: src/present.rs:1344
+msgid "Ready: {}"
+msgstr "מוכן: {}"
+
+#: src/present.rs:1367
+msgid "No slide"
+msgstr "אין שקופית"
+
+#. Translators: the slide's pixel size in micrometres per pixel
+#. (µm/px), the pyramid level it is read from, and how much
+#. smaller that level is (×4.00).
+#: src/present.rs:1374
+msgid "{x} × {y} µm/px, read from level {level} (×{downsample})"
+msgstr "נקרא מרמה {level} (⁨×{downsample}⁩): ⁨{x} × {y} µm/px⁩"
+
+#. Translators: the slide does not say its pixel size.
+#: src/present.rs:1385
+msgid "pixel size not reported"
+msgstr "גודל הפיקסל אינו מדווח"
+
+#. Translators: under the progress bar in the Cellaris panel; a
+#. cell is one square of the grid the slide is predicted in, not a
+#. biological cell.
+#: src/present.rs:1418
+msgid "{done} of {n} cell in view"
+msgid_plural "{done} of {n} cells in view"
+msgstr[0] "‏{done} מתוך משבצת אחת בתצוגה"
+msgstr[1] "‏{done} מתוך {n} משבצות בתצוגה"
+
+#. Translators: {} is a marker's display window ("arcsinh 4.50–6.50")
+#. that the user set.
+#: src/present.rs:1446
+msgid "{}, yours"
+msgstr "‏{}, שלך"
+
+#. Translators: eov first asks the user whether to download the model
+#. (nothing is downloaded without that answer), then downloads it.
+#: src/present.rs:1512
+msgid ""
+"eov is asking you whether to download the model, or downloading it (see the "
+"status bar)…"
+msgstr ""
+"תוכנת eov שואלת אותך אם להוריד את המודל, או שהיא מורידה אותו (פרטים בשורת "
+"המצב)…"
+
+#. Translators: under the model's address and SHA-256 in the
+#. Cellaris panel; the model store is where eov keeps models.
+#: src/present.rs:1521
+msgid ""
+"eov checks the download against this SHA-256 and keeps it in its model "
+"store; it is then Cellaris's model. Without an address, the copy your "
+"administrator gave eov is used."
+msgstr ""
+"תוכנת eov בודקת את ההורדה מול תקציר SHA-256 זה ושומרת אותה במאגר המודלים "
+"שלה; לאחר מכן זהו המודל של Cellaris. ללא כתובת, נעשה שימוש בעותק שמנהל "
+"המערכת סיפק ל-eov."
+
+#. Translators: where an ONNX Runtime library was found, shown in
+#. parentheses after it in the list of libraries tried.
+#: src/runtime.rs:128
+msgid "the runtime chosen in the Cellaris panel"
+msgstr "סביבת הריצה שנבחרה בלוח Cellaris"
+
+#: src/runtime.rs:129
+msgid "the plugin package"
+msgstr "חבילת התוסף"
+
+#: src/runtime.rs:130
+msgid "the plugin's data directory"
+msgstr "תיקיית הנתונים של התוסף"
+
+#: src/runtime.rs:131
+msgid "the system library path"
+msgstr "נתיב הספריות של המערכת"
+
+#. Translators: {} is the path the user chose for the ONNX
+#. Runtime library.
+#: src/runtime.rs:142
+msgid ""
+"the runtime chosen in the Cellaris panel points at {}, which does not exist"
+msgstr "סביבת הריצה שנבחרה בלוח Cellaris מפנה אל {}, שאינו קיים"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a path.
+#: src/runtime.rs:150
+msgid "{source} points at {path}, which does not exist"
+msgstr "ההגדרה {source} מפנה אל {path}, שאינו קיים"
+
+#. Translators: {path} is the folder the user chose for ONNX
+#. Runtime, {library} the file name of its library.
+#: src/runtime.rs:165
+msgid ""
+"the runtime chosen in the Cellaris panel points at {path}, which holds no "
+"{library}"
+msgstr "סביבת הריצה שנבחרה בלוח Cellaris מפנה אל {path}, שאין בו {library}"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a folder,
+#. {library} the file name of ONNX Runtime's library.
+#: src/runtime.rs:175
+msgid "{source} points at {path}, which holds no {library}"
+msgstr "ההגדרה {source} מפנה אל {path}, שאין בו {library}"
+
+#. Translators: where to get ONNX Runtime on Windows; file and release
+#. names are not translated.
+#: src/runtime.rs:334
+msgid "onnxruntime.dll from the onnxruntime-win-x64 release"
+msgstr "הקובץ onnxruntime.dll מהמהדורה onnxruntime-win-x64"
+
+#. Translators: where to get ONNX Runtime on macOS; `brew install
+#. onnxruntime` is a command, and file and release names are not
+#. translated.
+#: src/runtime.rs:339
+msgid ""
+"`brew install onnxruntime`, or libonnxruntime.dylib from the onnxruntime-osx "
+"release"
+msgstr ""
+"הפקודה `brew install onnxruntime`, או הקובץ libonnxruntime.dylib מהמהדורה "
+"onnxruntime-osx"
+
+#. Translators: where to get ONNX Runtime on Linux; file and release
+#. names are not translated.
+#: src/runtime.rs:344
+msgid ""
+"libonnxruntime.so from the onnxruntime-linux release, or your distribution's "
+"package"
+msgstr ""
+"הקובץ libonnxruntime.so מהמהדורה onnxruntime-linux, או החבילה של ההפצה שלך"
+
+#. Translators: {version} is a version number, {platform} says where to
+#. get ONNX Runtime for this computer; CELLARIS_ORT_DYLIB is an
+#. environment variable (not translated).
+#: src/runtime.rs:351
+msgid ""
+"Install ONNX Runtime {version} or newer ({platform}), then choose it in the "
+"Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data "
+"directory."
+msgstr ""
+"יש להתקין את ONNX Runtime בגרסה {version} ומעלה ({platform}), ואז לבחור בה "
+"בלוח Cellaris, להגדיר את CELLARIS_ORT_DYLIB, או להציב אותה בתיקיית הנתונים "
+"של התוסף."
+
+#: src/runtime.rs:374
+msgid "ONNX Runtime was not found"
+msgstr "לא נמצאה ספריית ONNX Runtime"
+
+#: src/runtime.rs:378
+msgid "ONNX Runtime could not be loaded"
+msgstr "לא ניתן היה לטעון את ONNX Runtime"
+
+#. Translators: {path} is an ONNX Runtime library, {source} where it was
+#. found, {what} what went wrong with it.
+#: src/runtime.rs:390
+msgid "{path} ({source}): {what}"
+msgstr "הקובץ {path} ({source}): {what}"
+
+#. Translators: "it" is a library file; {} is why the system could
+#. not open it.
+#: src/runtime.rs:431
+msgid "it could not be opened: {}"
+msgstr "לא ניתן היה לפתוח אותו: {}"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name
+#. in ONNX Runtime (not translated).
+#: src/runtime.rs:438
+msgid "it is not ONNX Runtime (it has no OrtGetApiBase)"
+msgstr "זה אינו ONNX Runtime (אין בו OrtGetApiBase)"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name in
+#. ONNX Runtime (not translated).
+#: src/runtime.rs:446
+msgid "it is not ONNX Runtime (OrtGetApiBase returned nothing)"
+msgstr "זה אינו ONNX Runtime (הפונקציה OrtGetApiBase לא החזירה דבר)"
+
+#. Translators: "it" is a library file; {version} and {needed}
+#. are version numbers.
+#: src/runtime.rs:465
+msgid "it is ONNX Runtime {version}, older than {needed}"
+msgstr "זהו ⁨ONNX Runtime {version}⁩, ישן יותר מ-{needed}"
+
+#. Translators: {reason} is why ONNX Runtime was not found, {hint}
+#. how to install it.
+#: src/runtime.rs:522
+msgid ""
+"{reason}.\n"
+"{hint}"
+msgstr ""
+"‏{reason}.\n"
+"{hint}"
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:553
+msgid "opening it crashed"
+msgstr "פתיחת הספרייה קרסה"
+
+#. Translators: {} is why ONNX Runtime could not be
+#. loaded, in its own words.
+#: src/runtime.rs:586
+msgid "{}. Restart eov to try again."
+msgstr "‏{}. יש להפעיל מחדש את eov כדי לנסות שוב."
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:596
+msgid "loading it crashed. Restart eov to try again."
+msgstr "טעינת הספרייה קרסה. יש להפעיל מחדש את eov כדי לנסות שוב."
+
+#. Translators: {} is a version number.
+#: src/runtime.rs:606
+msgid "The ONNX Runtime found is older than {}"
+msgstr "ספריית ONNX Runtime שנמצאה ישנה יותר מ-{}"
+
+#. Translators: {attempts} lists the libraries tried, one per line,
+#. {hint} says how to install ONNX Runtime.
+#: src/runtime.rs:613
+msgid ""
+"Tried:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+msgstr ""
+"המיקומים שנוסו:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+
+#. Translators: keep the full meaning: predicted, research only, no diagnosis.
+#: ui/cellaris.slint:308
+msgctxt "CellarisPanel"
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "חזוי — לשימוש מחקרי בלבד, אין להשתמש לאבחון"
+
+#: ui/cellaris.slint:314
+msgctxt "CellarisPanel"
+msgid "No slide"
+msgstr "אין שקופית"
+
+#. Translators: closes the Cellaris panel.
+#: ui/cellaris.slint:408
+msgctxt "CellarisPanel"
+msgid "Close"
+msgstr "סגירה"
+
+#. Translators: keep the full meaning; IF is immunofluorescence.
+#: ui/cellaris.slint:435
+msgctxt "CellarisPanel"
+msgid ""
+"The colours show what a model predicts the immunofluorescence would be. They "
+"are not measurements: check them against measured IF before relying on them."
+msgstr ""
+"הצבעים מציגים את מה שמודל חוזה שתהיה האימונופלואורסצנציה. הם אינם מדידות: יש "
+"לבדוק אותם מול IF שנמדד בפועל לפני שמסתמכים עליהם."
+
+#. Translators: tries again what failed (the model, cells).
+#: ui/cellaris.slint:460
+msgctxt "CellarisPanel"
+msgid "Retry"
+msgstr "ניסיון חוזר"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:472
+msgctxt "CellarisPanel"
+msgid "SLIDE"
+msgstr "שקופית"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:489
+msgctxt "CellarisPanel"
+msgid "PREDICTED MARKERS"
+msgstr "סמנים חזויים"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Hide predictions"
+msgstr "הסתרת החיזויים"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Show predictions"
+msgstr "הצגת החיזויים"
+
+#. Translators: {} is a marker, such as Pan-CK.
+#: ui/cellaris.slint:551
+msgctxt "CellarisPanel"
+msgid "Display window of {} (arcsinh)"
+msgstr "חלון התצוגה של {} (arcsinh)"
+
+#. Translators: the low end of a marker's display window: at or below it
+#. nothing is drawn (black in fluorescence style).
+#: ui/cellaris.slint:560
+msgctxt "CellarisPanel"
+msgid "Low"
+msgstr "תחתון"
+
+#. Translators: the high end of a marker's display window: at or above it the
+#. marker is drawn in its full colour.
+#: ui/cellaris.slint:588
+msgctxt "CellarisPanel"
+msgid "High"
+msgstr "עליון"
+
+#: ui/cellaris.slint:615
+msgctxt "CellarisPanel"
+msgid ""
+"Only how predictions are drawn changes; readouts and batch runs keep their "
+"values."
+msgstr ""
+"רק אופן הצגת החיזויים משתנה; הערכים בסיכומי האזורים ובהרצות האצווה נשארים "
+"ללא שינוי."
+
+#. Translators: resets a marker's display window to Cellaris's own.
+#: ui/cellaris.slint:622
+msgctxt "CellarisPanel"
+msgid "Reset"
+msgstr "איפוס"
+
+#. Translators: how opaque the predicted colours are drawn.
+#: ui/cellaris.slint:636
+msgctxt "CellarisPanel"
+msgid "Opacity"
+msgstr "אטימות"
+
+#. Translators: {} is the opacity, in percent.
+#: ui/cellaris.slint:652
+msgctxt "CellarisPanel"
+msgid "{} %"
+msgstr "{}%"
+
+#: ui/cellaris.slint:662
+msgctxt "CellarisPanel"
+msgid "Fluorescence style: colour on black over all tissue"
+msgstr "סגנון פלואורסצנציה: צבע על רקע שחור על פני כל הרקמה"
+
+#. Translators: a check box; other messages quote its first words.
+#: ui/cellaris.slint:671
+msgctxt "CellarisPanel"
+msgid "Assume the model's pixel size for slides that report none"
+msgstr "הנחת גודל הפיקסל של המודל עבור שקופיות שאינן מדווחות עליו"
+
+#: ui/cellaris.slint:678
+msgctxt "CellarisPanel"
+msgid ""
+"Colours are chosen to stay distinct with red-green and blue-yellow colour "
+"blindness; hide markers to look at one at a time. Areas still being computed "
+"are veiled; failed ones are outlined in red."
+msgstr ""
+"הצבעים נבחרו כך שיישארו מובחנים גם בעיוורון צבעים אדום-ירוק וכחול-צהוב; ניתן "
+"להסתיר סמנים כדי לבחון סמן אחד בכל פעם. אזורים שעדיין בחישוב מוצגים "
+"מעומעמים; אזורים שנכשלו מוקפים בקו אדום."
+
+#. Translators: a section heading, in capitals in English: statistics of the
+#. model's predicted values over a region (not a measurement).
+#: ui/cellaris.slint:684
+msgctxt "CellarisPanel"
+msgid "REGION READOUT"
+msgstr "סיכום אזור"
+
+#. Translators: a column of the readout: the marker.
+#: ui/cellaris.slint:707
+msgctxt "CellarisPanel"
+msgid "marker"
+msgstr "סמן"
+
+#. Translators: a narrow column of the readout: the mean predicted value.
+#: ui/cellaris.slint:709
+msgctxt "CellarisPanel"
+msgid "mean"
+msgstr "ממוצע"
+
+#. Translators: a narrow column of the readout: how much the value varies.
+#: ui/cellaris.slint:711
+msgctxt "CellarisPanel"
+msgid "spread"
+msgstr "פיזור"
+
+#. Translators: a narrow column: how much optical density alone explains.
+#: ui/cellaris.slint:713
+msgctxt "CellarisPanel"
+msgid "density r²"
+msgstr "צפיפות r²"
+
+#. Translators: picks the tool that outlines a region for a readout of the
+#. predicted values.
+#: ui/cellaris.slint:734
+msgctxt "CellarisPanel"
+msgid "Draw region"
+msgstr "שרטוט אזור"
+
+#. Translators: makes the slide's region of interest (ROI) the readout's
+#. region, instead of a drawn one; the readout follows the ROI.
+#: ui/cellaris.slint:741
+msgctxt "CellarisPanel"
+msgid "Use ROI"
+msgstr "שימוש ב-ROI"
+
+#. Translators: stops the region readout.
+#: ui/cellaris.slint:751
+msgctxt "CellarisPanel"
+msgid "Cancel"
+msgstr "ביטול"
+
+#. Translators: copies the region readout as text.
+#: ui/cellaris.slint:758
+msgctxt "CellarisPanel"
+msgid "Copy"
+msgstr "העתקה"
+
+#. Translators: removes the readout's region and its readout.
+#: ui/cellaris.slint:766
+msgctxt "CellarisPanel"
+msgid "Clear"
+msgstr "ניקוי"
+
+#. Translators: explains the readout's columns; keep the meaning exact; the 5
+#. µm blocks are small squares of tissue, not paraffin blocks.
+#: ui/cellaris.slint:775
+msgctxt "CellarisPanel"
+msgid ""
+"Mean is the predicted intensity, arcsinh, over tissue in the region, and "
+"spread how much it varies between 5 µm blocks. Density r² is how much of "
+"that variation optical density alone reproduces. Near 1, the marker is a "
+"density map here. Low with a small spread means the prediction is flat, not "
+"that it learned anything. Low with a wide spread is needed for it to be the "
+"marker, but only measured IF shows it is. Numbers come from the same blended "
+"predictions the overlay shows."
+msgstr ""
+"הממוצע הוא העוצמה החזויה (arcsinh) על פני הרקמה באזור, והפיזור הוא מידת "
+"השונות שלה בין ריבועים של ⁨5 µm⁩. צפיפות r² היא החלק מהשונות הזו שהצפיפות "
+"האופטית לבדה משחזרת. ערך קרוב ל-1 פירושו שהסמן כאן הוא מפת צפיפות. ערך נמוך "
+"עם פיזור קטן פירושו שהחיזוי שטוח, ולא שהמודל למד משהו. ערך נמוך עם פיזור רחב "
+"נדרש כדי שזה יהיה הסמן, אך רק IF שנמדד בפועל מראה שאכן כך. המספרים מחושבים "
+"מאותם חיזויים ממוזגים שמוצגים בשכבת-העל."
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:781
+msgctxt "CellarisPanel"
+msgid "MODEL"
+msgstr "מודל"
+
+#. Translators: opens a file dialog to choose the model file.
+#: ui/cellaris.slint:805
+msgctxt "CellarisPanel"
+msgid "Choose model…"
+msgstr "בחירת מודל…"
+
+#. Translators: opens a form to download the model through eov.
+#: ui/cellaris.slint:807
+msgctxt "CellarisPanel"
+msgid "Download model…"
+msgstr "הורדת מודל…"
+
+#. Translators: opens a file dialog to choose ONNX Runtime's library.
+#: ui/cellaris.slint:809
+msgctxt "CellarisPanel"
+msgid "Choose runtime…"
+msgstr "בחירת סביבת ריצה…"
+
+#. Translators: above the fields for the model's address and SHA-256.
+#: ui/cellaris.slint:824
+msgctxt "CellarisPanel"
+msgid "Your site's copy of the model, and its SHA-256:"
+msgstr "העותק של המודל במוסד שלך, ותקציר ה-SHA-256 שלו:"
+
+#. Translators: hex digits are 0–9 and a–f.
+#: ui/cellaris.slint:834
+msgctxt "CellarisPanel"
+msgid "SHA-256 (64 hex digits)"
+msgstr "תקציר SHA-256 (64 ספרות הקסדצימליות)"
+
+#. Translators: downloads the model from the address given.
+#: ui/cellaris.slint:840
+msgctxt "CellarisPanel"
+msgid "Download"
+msgstr "הורדה"
