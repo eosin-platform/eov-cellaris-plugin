@@ -1,6 +1,6 @@
 id = "cellaris"
 name = "Cellaris"
-version = "1.0.0"
+version = "1.1.0"
 description = "Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, with a readout of the predicted values over a region. Research use only: predictions are not measurements and are not for diagnosis."
 repository = "https://github.com/eosin-platform/eov-cellaris-plugin"
 api = ">=1.0, <2"
