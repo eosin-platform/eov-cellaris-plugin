@@ -14,6 +14,7 @@
 //! Slides coarser than the model are upsampled (and flagged) up to
 //! [`MAX_UPSAMPLE`]; beyond that they are refused.
 
+use crate::text::{Text, decimal, text};
 use eov_plugin_api::abi::{MAX_REGION_PIXELS, RegionRequest};
 use eov_plugin_api::protocol::{FileId, FileInfo, Rect};
 
@@ -68,25 +69,30 @@ pub enum ScaleProblem {
     /// The slide is too coarse to resample to the model's pixel size.
     TooCoarse { slide_mpp: f64, model_mpp: f64 },
     /// The pyramid cannot serve windows (bad levels, or none close enough).
-    BadSlide(String),
+    BadSlide(Text),
 }
 
 impl ScaleProblem {
     /// One line for the user.
-    pub fn message(&self) -> String {
+    pub fn message(&self) -> Text {
         match self {
-            ScaleProblem::Unknown => "This slide does not report its pixel size, so it cannot be \
-                matched to the model's. Turn on \u{201c}Assume the model's pixel size\u{201d} in \
-                the Cellaris panel to run anyway."
-                .to_string(),
-            ScaleProblem::TooCoarse {
+            ScaleProblem::Unknown => text!(tr!(
+                // Translators: the quoted words name the Cellaris panel's
+                // check box "Assume the model's pixel size for slides that
+                // report none": use the same words as there.
+                "This slide does not report its pixel size, so it cannot be matched to the model's. Turn on \u{201c}Assume the model's pixel size\u{201d} in the Cellaris panel to run anyway."
+            )),
+            &ScaleProblem::TooCoarse {
                 slide_mpp,
                 model_mpp,
-            } => format!(
-                "This slide is scanned at {slide_mpp:.3} \u{b5}m/px, more than {MAX_UPSAMPLE:.0}\u{d7} \
-                 coarser than the {model_mpp:.3} \u{b5}m/px the model was trained at; predictions \
-                 would be meaningless."
-            ),
+            } => text!(tr!(
+                // Translators: µm/px is micrometres per pixel; {factor}× is how
+                // many times coarser.
+                "This slide is scanned at {slide} \u{b5}m/px, more than {factor}\u{d7} coarser than the {model} \u{b5}m/px the model was trained at; predictions would be meaningless.",
+                slide = decimal(slide_mpp, 3),
+                factor = decimal(MAX_UPSAMPLE, 0),
+                model = decimal(model_mpp, 3)
+            )),
             ScaleProblem::BadSlide(reason) => reason.clone(),
         }
     }
@@ -184,15 +190,19 @@ impl Grid {
         window: usize,
     ) -> Result<Grid, ScaleProblem> {
         if !(model_mpp.is_finite() && model_mpp > 0.0) {
-            return Err(ScaleProblem::BadSlide(format!(
-                "the model's pixel size {model_mpp} is not usable"
-            )));
+            return Err(ScaleProblem::BadSlide(text!(tr!(
+                // Translators: {} is a pixel size, as the model gives it.
+                "the model's pixel size {} is not usable",
+                model_mpp
+            ))));
         }
         if window < 2 * BLOCK || !window.is_multiple_of(2 * BLOCK) {
-            return Err(ScaleProblem::BadSlide(format!(
-                "the model's window of {window} px is not a multiple of {}",
-                2 * BLOCK
-            )));
+            return Err(ScaleProblem::BadSlide(text!(tr!(
+                // Translators: {window} is a size in pixels (px).
+                "the model's window of {window} px is not a multiple of {multiple}",
+                window,
+                multiple = 2 * BLOCK
+            ))));
         }
         let upsampling = scale.upsampling(model_mpp);
         if upsampling > MAX_UPSAMPLE {
@@ -202,7 +212,7 @@ impl Grid {
             });
         }
         if info.width == 0 || info.height == 0 {
-            return Err(ScaleProblem::BadSlide("the slide is empty".to_string()));
+            return Err(ScaleProblem::BadSlide(text!(tr!("the slide is empty"))));
         }
         let sx = model_mpp / scale.mpp_x;
         let sy = model_mpp / scale.mpp_y;
@@ -230,10 +240,14 @@ impl Grid {
         let side = |step: f64| (window as f64 * step + 2.0 * PAD + 2.0).ceil() as u64;
         let (read_w, read_h) = (side(sx / downsample), side(sy / downsample));
         if read_w * read_h > MAX_REGION_PIXELS || read_w > u64::from(u32::MAX) {
-            return Err(ScaleProblem::BadSlide(format!(
-                "no pyramid level is close to the model's {model_mpp:.3} \u{b5}m/px; a window \
-                 would need {read_w}\u{d7}{read_h} pixels"
-            )));
+            return Err(ScaleProblem::BadSlide(text!(tr!(
+                // Translators: a pyramid level is one of the resolutions a slide
+                // is stored at; µm/px is micrometres per pixel.
+                "no pyramid level is close to the model's {mpp} \u{b5}m/px; a window would need {width}\u{d7}{height} pixels",
+                mpp = decimal(model_mpp, 3),
+                width = read_w,
+                height = read_h
+            ))));
         }
 
         let width = info.width as f64;

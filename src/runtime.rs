@@ -16,6 +16,7 @@
 //! nothing here can panic the worker: the version check happens before
 //! `ort` is used, and loading runs inside `catch_unwind`.
 
+use crate::text::{Text, isolate, text};
 use std::ffi::OsString;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -117,14 +118,66 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn describe(&self) -> String {
+    /// Where the candidate came from, for the list of libraries tried.
+    pub fn describe(&self) -> Text {
         match self {
-            Source::Param => "--param runtime".to_string(),
-            Source::Env(name) => name.to_string(),
-            Source::Setting => "the runtime chosen in the Cellaris panel".to_string(),
-            Source::Bundled => "the plugin package".to_string(),
-            Source::DataDir => "the plugin's data directory".to_string(),
-            Source::System => "the system library path".to_string(),
+            Source::Param => Text::plain("--param runtime"),
+            Source::Env(name) => Text::plain(*name),
+            // Translators: where an ONNX Runtime library was found, shown in
+            // parentheses after it in the list of libraries tried.
+            Source::Setting => text!(tr!("the runtime chosen in the Cellaris panel")),
+            Source::Bundled => text!(tr!("the plugin package")),
+            Source::DataDir => text!(tr!("the plugin's data directory")),
+            Source::System => text!(tr!("the system library path")),
+        }
+    }
+
+    /// `path`, given by this source, does not exist.
+    fn points_nowhere(&self, path: &Path) -> Text {
+        let path = path.display().to_string();
+        match self {
+            Source::Setting => text!(tr!(
+                // Translators: {} is the path the user chose for the ONNX
+                // Runtime library.
+                "the runtime chosen in the Cellaris panel points at {}, which does not exist",
+                isolate(&path)
+            )),
+            _ => {
+                let source = self.describe();
+                text!(tr!(
+                    // Translators: {source} is an environment variable or a
+                    // command-line option (not translated), {path} a path.
+                    "{source} points at {path}, which does not exist",
+                    source = isolate(&source),
+                    path = isolate(&path)
+                ))
+            }
+        }
+    }
+
+    /// `path`, a folder given by this source, holds no `library`.
+    fn holds_none(&self, path: &Path, library: &'static str) -> Text {
+        let path = path.display().to_string();
+        match self {
+            Source::Setting => text!(tr!(
+                // Translators: {path} is the folder the user chose for ONNX
+                // Runtime, {library} the file name of its library.
+                "the runtime chosen in the Cellaris panel points at {path}, which holds no {library}",
+                path = isolate(&path),
+                library
+            )),
+            _ => {
+                let source = self.describe();
+                text!(tr!(
+                    // Translators: {source} is an environment variable or a
+                    // command-line option (not translated), {path} a folder,
+                    // {library} the file name of ONNX Runtime's library.
+                    "{source} points at {path}, which holds no {library}",
+                    source = isolate(&source),
+                    path = isolate(&path),
+                    library
+                ))
+            }
         }
     }
 }
@@ -184,7 +237,7 @@ fn find_in(dir: &Path, os: &str, probe: &dyn Probe) -> Option<PathBuf> {
 
 /// The candidates to try, in order. An explicit setting that points nowhere
 /// is an error rather than a reason to look elsewhere.
-pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Candidate>, String> {
+pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Candidate>, Text> {
     let names = match os {
         "windows" => "onnxruntime.dll",
         "macos" => "libonnxruntime.dylib",
@@ -205,11 +258,7 @@ pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Ca
     for (path, source) in explicit {
         let Some(path) = path else { continue };
         if !probe.exists(&path) {
-            return Err(format!(
-                "{} points at {}, which does not exist",
-                source.describe(),
-                path.display()
-            ));
+            return Err(source.points_nowhere(&path));
         }
         if probe.is_dir(&path) {
             return match find_in(&path, os, probe) {
@@ -217,11 +266,7 @@ pub fn candidates(search: &Search, os: &str, probe: &dyn Probe) -> Result<Vec<Ca
                     path: found,
                     source,
                 }]),
-                None => Err(format!(
-                    "{} points at {}, which holds no {names}",
-                    source.describe(),
-                    path.display()
-                )),
+                None => Err(source.holds_none(&path, names)),
             };
         }
         return Ok(vec![Candidate { path, source }]);
@@ -278,22 +323,75 @@ pub struct Loaded {
 /// Why no runtime could be loaded.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Failure {
-    pub summary: String,
-    pub detail: String,
+    pub summary: Text,
+    pub detail: Text,
 }
 
-fn install_hint() -> String {
+fn install_hint() -> Text {
     let platform = match current_os() {
-        "windows" => "onnxruntime.dll from the onnxruntime-win-x64 release",
-        "macos" => {
+        // Translators: where to get ONNX Runtime on Windows; file and release
+        // names are not translated.
+        "windows" => text!(tr!("onnxruntime.dll from the onnxruntime-win-x64 release")),
+        // Translators: where to get ONNX Runtime on macOS; `brew install
+        // onnxruntime` is a command, and file and release names are not
+        // translated.
+        "macos" => text!(tr!(
             "`brew install onnxruntime`, or libonnxruntime.dylib from the onnxruntime-osx release"
-        }
-        _ => "libonnxruntime.so from the onnxruntime-linux release, or your distribution's package",
+        )),
+        // Translators: where to get ONNX Runtime on Linux; file and release
+        // names are not translated.
+        _ => text!(tr!(
+            "libonnxruntime.so from the onnxruntime-linux release, or your distribution's package"
+        )),
     };
-    format!(
-        "Install ONNX Runtime {MIN_VERSION} or newer ({platform}), then choose it in the \
-         Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data directory."
-    )
+    text!(tr!(
+        // Translators: {version} is a version number, {platform} says where to
+        // get ONNX Runtime for this computer; CELLARIS_ORT_DYLIB is an
+        // environment variable (not translated).
+        "Install ONNX Runtime {version} or newer ({platform}), then choose it in the Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data directory.",
+        version = MIN_VERSION,
+        platform
+    ))
+}
+
+/// Why a candidate was passed over.
+struct Refusal {
+    reason: Text,
+    /// It is ONNX Runtime, older than [`MIN_VERSION`].
+    too_old: bool,
+}
+
+impl From<Text> for Refusal {
+    fn from(reason: Text) -> Self {
+        Refusal {
+            reason,
+            too_old: false,
+        }
+    }
+}
+
+fn not_found() -> Text {
+    text!(tr!("ONNX Runtime was not found"))
+}
+
+fn could_not_load() -> Text {
+    text!(tr!("ONNX Runtime could not be loaded"))
+}
+
+/// One line of the libraries tried: the library, where it came from, and
+/// what went wrong. The source is isolated as the path is: an environment
+/// variable or `--param runtime` keeps its order in right-to-left text and
+/// does not make the line run from left to right.
+fn attempt(path: &Path, source: &Source, what: Text) -> Text {
+    let (path, source) = (path.display().to_string(), source.describe());
+    text!(tr!(
+        // Translators: {path} is an ONNX Runtime library, {source} where it was
+        // found, {what} what went wrong with it.
+        "{path} ({source}): {what}",
+        path = isolate(&path),
+        source = isolate(&source),
+        what
+    ))
 }
 
 /// Where `ort` looks for `path`: a relative name next to the executable
@@ -320,21 +418,33 @@ struct Checked {
 /// new enough. `ort` can try only once per process: its 2.0.0-rc.13 keeps a
 /// failed load as if it had succeeded (and then uses an empty library), so
 /// it is only given a library known to open.
-fn check(path: &Path) -> Result<Checked, String> {
+fn check(path: &Path) -> Result<Checked, Refusal> {
     let path = resolve_like_ort(path);
     // SAFETY: opening a library runs its initialisers, as loading it would.
     // OrtGetApiBase and GetVersionString take no arguments, and the string
     // they return is static.
     unsafe {
-        let library =
-            libloading::Library::new(&path).map_err(|e| format!("it could not be opened: {e}"))?;
+        let library = libloading::Library::new(&path).map_err(|e| {
+            let e = e.to_string();
+            // Translators: "it" is a library file; {} is why the system could
+            // not open it.
+            Refusal::from(text!(tr!("it could not be opened: {}", e)))
+        })?;
         let get_base: libloading::Symbol<unsafe extern "C" fn() -> *const ort::sys::OrtApiBase> =
-            library
-                .get(b"OrtGetApiBase")
-                .map_err(|_| "it is not ONNX Runtime (it has no OrtGetApiBase)".to_string())?;
+            library.get(b"OrtGetApiBase").map_err(|_| {
+                // Translators: "it" is a library file; OrtGetApiBase is a name
+                // in ONNX Runtime (not translated).
+                Refusal::from(text!(tr!(
+                    "it is not ONNX Runtime (it has no OrtGetApiBase)"
+                )))
+            })?;
         let base = get_base();
         if base.is_null() {
-            return Err("it is not ONNX Runtime (OrtGetApiBase returned nothing)".into());
+            return Err(Refusal::from(text!(tr!(
+                // Translators: "it" is a library file; OrtGetApiBase is a name in
+                // ONNX Runtime (not translated).
+                "it is not ONNX Runtime (OrtGetApiBase returned nothing)"
+            ))));
         }
         let text = ((*base).GetVersionString)();
         let version = (!text.is_null()).then(|| {
@@ -347,9 +457,17 @@ fn check(path: &Path) -> Result<Checked, String> {
         if let Some(version) = &version
             && minor(version).is_some_and(|m| m < needed)
         {
-            return Err(format!(
-                "it is ONNX Runtime {version}, older than {MIN_VERSION}"
-            ));
+            let version = version.clone();
+            return Err(Refusal {
+                reason: text!(tr!(
+                    // Translators: "it" is a library file; {version} and {needed}
+                    // are version numbers.
+                    "it is ONNX Runtime {version}, older than {needed}",
+                    version,
+                    needed = MIN_VERSION
+                )),
+                too_old: true,
+            });
         }
         Ok(Checked {
             path,
@@ -395,17 +513,23 @@ pub fn load(search: &Search) -> Result<Loaded, Failure> {
     if let Some(done) = LOADED.get() {
         return done.clone();
     }
-    let candidates = candidates(search, current_os(), &Disk).map_err(|reason| Failure {
-        summary: "ONNX Runtime was not found".to_string(),
-        detail: format!("{reason}.\n{}", install_hint()),
+    let candidates = candidates(search, current_os(), &Disk).map_err(|reason| {
+        let hint = install_hint();
+        Failure {
+            summary: not_found(),
+            // Translators: {reason} is why ONNX Runtime was not found, {hint}
+            // how to install it.
+            detail: text!(tr!("{reason}.\n{hint}", reason, hint)),
+        }
     })?;
     if candidates.is_empty() {
         return Err(Failure {
-            summary: "ONNX Runtime was not found".to_string(),
+            summary: not_found(),
             detail: install_hint(),
         });
     }
-    let mut attempts = Vec::new();
+    let mut attempts: Vec<Text> = Vec::new();
+    let mut too_old = false;
     for candidate in candidates {
         let explicit = !matches!(
             candidate.source,
@@ -413,22 +537,20 @@ pub fn load(search: &Search) -> Result<Loaded, Failure> {
         );
         let checked = match catch_unwind(AssertUnwindSafe(|| check(&candidate.path))) {
             Ok(Ok(checked)) => checked,
-            Ok(Err(reason)) => {
-                attempts.push(format!(
-                    "{} ({}): {reason}",
-                    candidate.path.display(),
-                    candidate.source.describe()
-                ));
+            Ok(Err(refusal)) => {
+                too_old |= refusal.too_old;
+                attempts.push(attempt(&candidate.path, &candidate.source, refusal.reason));
                 if explicit {
                     break;
                 }
                 continue;
             }
             Err(_) => {
-                attempts.push(format!(
-                    "{} ({}): opening it crashed",
-                    candidate.path.display(),
-                    candidate.source.describe()
+                attempts.push(attempt(
+                    &candidate.path,
+                    &candidate.source,
+                    // Translators: "it" is an ONNX Runtime library.
+                    text!(tr!("opening it crashed")),
                 ));
                 if explicit {
                     break;
@@ -452,33 +574,50 @@ pub fn load(search: &Search) -> Result<Loaded, Failure> {
                 path: candidate.path,
                 source: candidate.source,
             }),
-            Ok(Err(error)) => Err(Failure {
-                summary: "ONNX Runtime could not be loaded".to_string(),
-                detail: format!(
-                    "{} ({}): {error}. Restart eov to try again.",
-                    checked.path.display(),
-                    candidate.source.describe()
-                ),
-            }),
+            Ok(Err(error)) => {
+                let error = error.to_string();
+                Err(Failure {
+                    summary: could_not_load(),
+                    detail: attempt(
+                        &checked.path,
+                        &candidate.source,
+                        // Translators: {} is why ONNX Runtime could not be
+                        // loaded, in its own words.
+                        text!(tr!("{}. Restart eov to try again.", error)),
+                    ),
+                })
+            }
             Err(_) => Err(Failure {
-                summary: "ONNX Runtime could not be loaded".to_string(),
-                detail: format!(
-                    "{} ({}): loading it crashed. Restart eov to try again.",
-                    checked.path.display(),
-                    candidate.source.describe()
+                summary: could_not_load(),
+                detail: attempt(
+                    &checked.path,
+                    &candidate.source,
+                    // Translators: "it" is an ONNX Runtime library.
+                    text!(tr!("loading it crashed. Restart eov to try again.")),
                 ),
             }),
         };
         return LOADED.get_or_init(|| result).clone();
     }
-    let old = attempts.iter().any(|a| a.contains("older than"));
+    let hint = install_hint();
     Err(Failure {
-        summary: if old {
-            format!("The ONNX Runtime found is older than {MIN_VERSION}")
+        summary: if too_old {
+            // Translators: {} is a version number.
+            text!(tr!("The ONNX Runtime found is older than {}", MIN_VERSION))
         } else {
-            "ONNX Runtime could not be loaded".to_string()
+            could_not_load()
         },
-        detail: format!("Tried:\n{}\n\n{}", attempts.join("\n"), install_hint()),
+        detail: text!(tr!(
+            // Translators: {attempts} lists the libraries tried, one per line,
+            // {hint} says how to install ONNX Runtime.
+            "Tried:\n{attempts}\n\n{hint}",
+            attempts = attempts
+                .iter()
+                .map(Text::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+            hint
+        )),
     })
 }
 
@@ -544,7 +683,8 @@ mod tests {
             "linux",
             &fake,
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
         assert!(
             error.contains("CELLARIS_ORT_DYLIB") && error.contains("/nope"),
             "{error}"
@@ -560,7 +700,8 @@ mod tests {
             "linux",
             &fake,
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("holds no libonnxruntime.so"), "{error}");
     }
 
@@ -664,10 +805,75 @@ mod tests {
             ..Default::default()
         })
         .unwrap_err();
-        assert!(
-            failure.detail.contains("/definitely/not/here"),
-            "{failure:?}"
-        );
-        assert!(failure.detail.contains(MIN_VERSION));
+        let detail = failure.detail.to_string();
+        assert!(detail.contains("/definitely/not/here"), "{failure:?}");
+        assert!(detail.contains(MIN_VERSION));
+    }
+
+    /// In a right-to-left language the line of a library tried isolates
+    /// where the library came from, as it isolates the path: otherwise an
+    /// environment variable's name makes the line run from left to right
+    /// and `--param runtime` shows as `param runtime--`. The English text,
+    /// for logs and batch output, has no marks.
+    ///
+    /// The language is global to the library, so the right-to-left half
+    /// runs in a process of its own: this test binary running only this
+    /// test, in Hebrew without a catalog (English texts, with the values
+    /// they insert isolated as in every right-to-left language).
+    #[test]
+    fn a_tried_library_keeps_its_source_in_order_in_right_to_left_text() {
+        const CHILD: &str = "CELLARIS_TEST_RIGHT_TO_LEFT";
+        let lines = || {
+            [
+                (Source::Env("ORT_DYLIB_PATH"), "ORT_DYLIB_PATH"),
+                (Source::Param, "--param runtime"),
+                (Source::Bundled, "the plugin package"),
+            ]
+            .map(|(source, shown)| {
+                let line = attempt(
+                    Path::new("/opt/ort/libonnxruntime.so"),
+                    &source,
+                    Text::plain("it could not be opened"),
+                );
+                let english =
+                    format!("/opt/ort/libonnxruntime.so ({shown}): it could not be opened");
+                (line, shown, english)
+            })
+        };
+        if std::env::var_os(CHILD).is_none() {
+            for (line, _, english) in lines() {
+                assert_eq!(line.to_string(), english);
+                assert_eq!(line.english(), english);
+            }
+            let module = module_path!().split_once("::").unwrap().1;
+            let name = format!(
+                "{module}::a_tried_library_keeps_its_source_in_order_in_right_to_left_text"
+            );
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([name.as_str(), "--exact"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            let report = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(output.status.success(), "{report}");
+            assert!(report.contains("1 passed"), "{report}");
+            return;
+        }
+        let hebrew = eov_plugin_api::i18n::by_tag("he").unwrap();
+        eov_plugin_api::i18n::set_current(hebrew);
+        for (line, shown, english) in lines() {
+            assert_eq!(
+                line.to_string(),
+                format!(
+                    "\u{2068}/opt/ort/libonnxruntime.so\u{2069} (\u{2068}{shown}\u{2069}): \
+                     it could not be opened"
+                )
+            );
+            assert_eq!(line.english(), english);
+        }
     }
 }

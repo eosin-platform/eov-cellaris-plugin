@@ -62,7 +62,7 @@ The model, and how good it is, live in cellaris.
 
 ## Region readout
 
-The region tool outlines a polygon; the panel can also measure eov's region of interest. For each
+The region tool outlines a polygon; the panel can also use eov's region of interest (*Use ROI*). For each
 marker the panel gives three numbers: its mean predicted intensity over the tissue inside, its
 spread, how much it varies between blocks, and density r², how much of that variation optical
 density alone reproduces there.
@@ -81,17 +81,17 @@ because there is nothing for density to explain, and that is what the spread is 
 measured IF can say a marker is the marker.
 
 The numbers come from the same feathered predictions the overlay paints, so there are no window
-joins in them and they match what is on screen. The first version measured non-overlapping 256 px
-windows, where about a quarter of the blocks sit at a window edge; the join variance inflated the
-spread and pulled r² down. Regions are re-measured when the outline is edited, and a readout of the
-region of interest follows it: moving, redrawing or undoing the ROI measures it again, and removing
-it clears the readout (a region drawn with the Cellaris tool stays where it was drawn). Large
-regions ask before they start, a running readout can be cancelled, and Copy puts the numbers on
-the clipboard as tab-separated text with their provenance: slide, model SHA-256, pixel sizes,
-windows, area and date.
+joins in them and they match what is on screen. The first version computed the readout from
+non-overlapping 256 px windows, where about a quarter of the blocks sit at a window edge; the join
+variance inflated the spread and pulled r² down. A region's readout is computed again when its
+outline is edited, and a readout of the region of interest follows it: moving, redrawing or undoing
+the ROI computes it again, and removing it clears the readout (a region drawn with the Cellaris tool
+stays where it was drawn). Large regions ask before they start, a running readout can be cancelled,
+and Copy puts the numbers on the clipboard as tab-separated text with their provenance: slide,
+model SHA-256, pixel sizes, windows, area and date.
 
-Two regions on CRC11, measured by the first version (unblended 256 px windows, blocks of 16 slide
-pixels) and not yet measured again with this one:
+Two regions on CRC11, read out by the first version (unblended 256 px windows, blocks of 16 slide
+pixels) and not yet read out again with this one:
 
 | Region | Tissue | Hoechst mean / spread / r² | Pan-CK | SMA |
 |---|---|---|---|---|
@@ -180,7 +180,7 @@ never painted. Split views compute each pane's view; work starts at the centre o
 the panes take turns.
 
 Pointing at a predicted cell shows its values: each marker's mean over the cell's tissue blocks,
-the blocks a region readout would measure there, and how many of them look unlike the training
+the blocks a region readout would use there, and how many of them look unlike the training
 data. They are offered once a cell (41.6 µm) is at least 24 screen pixels wide.
 
 eov's display adjustments (gamma, contrast, stain normalisation) change what you see, not what the
@@ -196,7 +196,7 @@ names a stain other than H&E is flagged.
 Each marker's display window is the arcsinh range drawn from no colour to full colour. By default
 it runs from the 1st to the 99.5th percentile of measured Orion IF, fixed rather than stretched to
 what is in view, so an empty area looks empty. Click a marker's window in the panel to set its
-black and white points; *Reset* goes back to the default. Windows are kept between sessions, and
+*Low* and *High* ends; *Reset* goes back to the default. Windows are kept between sessions, and
 the legend shows any that are not the default. They change only how predictions are drawn:
 readouts, values on hover and batch runs give the same numbers whatever the windows. Cells keep
 their values (in 16 bits), so a window is redrawn at once, without predicting again.
@@ -302,6 +302,17 @@ Packaging:
 bundles ONNX Runtime together with its licence and third-party notices, and writes the package's
 SHA-256 beside it. CI builds, tests and packages on Linux, macOS and Windows, x86_64 and arm64; the
 *Release* workflow publishes the packages with a `release.toml` that `eov plugin install` reads.
+
+## Translations
+
+The panel, the slide's badges and the plugin's messages follow the language of eov's interface,
+also when it changes. The catalogs are `translations/<tag>/LC_MESSAGES/cellaris.po`, one per
+language (`de`, `pt-BR`, `zh-Hant`, … as eov names them), and `package.py` puts them in the
+package. The texts are extracted and the catalogs updated with `tools/i18n/i18n.py` in the eov
+repository. Copied readouts and batch results stay in English, their research-use notice included:
+they are data, read by programs and shared with others.
+
+Corrections are welcome: open an issue, or a pull request against your language's `.po` file.
 
 ## Intended use, safety and privacy
 

@@ -1,0 +1,1680 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cellaris\n"
+"Report-Msgid-Bugs-To: https://github.com/eosin-platform/eov-cellaris-plugin/"
+"issues\n"
+"Language-Team: Hindi\n"
+"Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Review-Status: machine-translated; not yet reviewed by a native speaker\n"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid "Cellaris"
+msgstr "Cellaris"
+
+#: plugin.toml
+msgctxt "plugin.toml"
+msgid ""
+"Predicted Orion multiplex-IF markers (Hoechst, Pan-CK, SMA) overlaid on H&E, "
+"with a readout of the predicted values over a region. Research use only: "
+"predictions are not measurements and are not for diagnosis."
+msgstr ""
+"H&E पर ओवरले किए गए पूर्वानुमानित Orion मल्टीप्लेक्स-IF मार्कर (Hoechst, Pan-CK, "
+"SMA), किसी क्षेत्र पर पूर्वानुमानित मानों के सारांश के साथ। केवल अनुसंधान उपयोग के लिए: "
+"पूर्वानुमान माप नहीं हैं और निदान के लिए नहीं हैं।"
+
+#. Translators: shown wherever predicted colours are. Keep all of its
+#. meaning: the colours are a model's prediction, not a measurement; for
+#. research only; never for diagnosis.
+#: src/config.rs:34
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "पूर्वानुमानित — केवल अनुसंधान उपयोग के लिए, निदान के लिए नहीं"
+
+#. Translators: {key} is the name of a setting in Cellaris's
+#. settings.json and {value} its value there; neither is
+#. translated.
+#: src/config.rs:130
+msgid "ignored the setting {key} = {value}"
+msgstr "सेटिंग {key} = {value} को अनदेखा किया गया"
+
+#. Translators: {low} and {high} are the ends of a
+#. marker's display window as settings.json gives
+#. them, {name} the marker (not translated).
+#: src/config.rs:210
+msgid "ignored the display window {low}–{high} of {name}"
+msgstr "{name} की प्रदर्शन विंडो {low}–{high} को अनदेखा किया गया"
+
+#: src/engine.rs:732
+msgid "Cellaris hit an internal error and reset its model"
+msgstr "Cellaris में आंतरिक त्रुटि हुई और उसने अपना मॉडल रीसेट कर दिया"
+
+#: src/engine.rs:737
+msgid "Cellaris hit an internal error"
+msgstr "Cellaris में आंतरिक त्रुटि हुई"
+
+#: src/engine.rs:928
+msgid "Loading the model crashed"
+msgstr "मॉडल लोड करते समय क्रैश हुआ"
+
+#: src/engine.rs:960
+msgid "Cellaris cannot show the chosen markers"
+msgstr "Cellaris चुने गए मार्कर नहीं दिखा सकता"
+
+#. Translators: {} says why the model did not load.
+#: src/engine.rs:991
+msgid "The model did not load: {}"
+msgstr "मॉडल लोड नहीं हुआ: {}"
+
+#. Translators: why a region readout stopped; a cell is one
+#. square of the grid the slide is predicted in, not a
+#. biological cell. {error} says what went wrong.
+#: src/engine.rs:1195
+msgid "{n} cell failed: {error}"
+msgid_plural "{n} cells failed: {error}"
+msgstr[0] "{n} कक्ष विफल रहा: {error}"
+msgstr[1] "{n} कक्ष विफल रहे: {error}"
+
+#. Translators: {n} cells of a region's {total} could not be
+#. computed: the form follows {n}, and {total} is a bare
+#. number. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell. {error} says what went
+#. wrong.
+#: src/engine.rs:1205
+msgid "{n} cell of {total} could not be computed: {error}"
+msgid_plural "{n} cells of {total} could not be computed: {error}"
+msgstr[0] "{total} में से {n} कक्ष की गणना नहीं की जा सकी: {error}"
+msgstr[1] "{total} में से {n} कक्षों की गणना नहीं की जा सकी: {error}"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:1282
+msgid "replaced by a new region"
+msgstr "नए क्षेत्र से बदला गया"
+
+#: src/engine.rs:1294
+msgid "No part of that region is on the slide."
+msgstr "उस क्षेत्र का कोई भी भाग स्लाइड पर नहीं है।"
+
+#. Translators: a window is one of the square images the
+#. model predicts from.
+#: src/engine.rs:1299
+msgid "That region needs more than {n} window. Draw a smaller one."
+msgid_plural "That region needs more than {n} windows. Draw a smaller one."
+msgstr[0] "उस क्षेत्र के लिए {n} से अधिक विंडो चाहिए। छोटा क्षेत्र बनाएँ।"
+msgstr[1] "उस क्षेत्र के लिए {n} से अधिक विंडो चाहिए। छोटा क्षेत्र बनाएँ।"
+
+#. Translators: the title of the question asked before a long
+#. region readout; a readout summarises the model's predicted
+#. values over the region, it is not a measurement.
+#: src/engine.rs:1332
+msgid "Compute a readout of a large region?"
+msgstr "बड़े क्षेत्र के सारांश की गणना करें?"
+
+#. Translators: {n} windows (square images the model
+#. predicts from); {time} is a duration that already
+#. says "about", such as "about 3 min".
+#: src/engine.rs:1337
+msgid ""
+"This region needs about {n} more window of predictions; computing it takes "
+"{time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgid_plural ""
+"This region needs about {n} more windows of predictions; computing them "
+"takes {time} on this computer. The overlay keeps working meanwhile, and the "
+"readout can be cancelled."
+msgstr[0] ""
+"इस क्षेत्र के लिए पूर्वानुमानों की लगभग {n} और विंडो चाहिए; इस कंप्यूटर पर इसकी गणना में "
+"{time} का समय लगेगा। इस दौरान ओवरले काम करता रहता है, और सारांश की गणना रद्द की "
+"जा सकती है।"
+msgstr[1] ""
+"इस क्षेत्र के लिए पूर्वानुमानों की लगभग {n} और विंडो चाहिए; इस कंप्यूटर पर इनकी गणना में "
+"{time} का समय लगेगा। इस दौरान ओवरले काम करता रहता है, और सारांश की गणना रद्द की "
+"जा सकती है।"
+
+#. Translators: the button that starts the long readout (it
+#. computes the missing predictions and summarises them).
+#: src/engine.rs:1344
+msgid "Compute"
+msgstr "गणना करें"
+
+#. Translators: the button that does not start it.
+#: src/engine.rs:1346
+msgid "Cancel"
+msgstr "रद्द करें"
+
+#. Translators: why part of a slide was not computed: eov is
+#. shutting down.
+#: src/engine.rs:1444
+msgid "stopping"
+msgstr "eov बंद हो रहा है"
+
+#. Translators: the model failed unexpectedly; {} is the
+#. internal error.
+#: src/engine.rs:1461
+msgid "inference crashed: {}"
+msgstr "इन्फ़रेंस क्रैश हो गया: {}"
+
+#. Translators: {} says why the model could not predict.
+#: src/engine.rs:1482
+msgid "inference failed: {}"
+msgstr "इन्फ़रेंस विफल रहा: {}"
+
+#: src/engine.rs:1615
+msgid "Cellaris could not compute part of the slide; retrying"
+msgstr "Cellaris स्लाइड के एक भाग की गणना नहीं कर सका; फिर से प्रयास किया जा रहा है"
+
+#. Translators: the names of the layers Cellaris draws on a slide.
+#: src/engine.rs:2047
+msgid "Cellaris — predicted markers (research use only)"
+msgstr "Cellaris — पूर्वानुमानित मार्कर (केवल अनुसंधान उपयोग के लिए)"
+
+#: src/engine.rs:2048
+msgid "Cellaris — progress"
+msgstr "Cellaris — प्रगति"
+
+#. Translators: the layer with the outline of a region readout's region;
+#. the readout summarises predicted values, so do not call the region
+#. measured.
+#: src/engine.rs:2052
+msgid "Cellaris — readout region"
+msgstr "Cellaris — सारांश क्षेत्र"
+
+#: src/engine.rs:2053
+msgid "Cellaris — predicted values (research use only)"
+msgstr "Cellaris — पूर्वानुमानित मान (केवल अनुसंधान उपयोग के लिए)"
+
+#. Translators: the name of the tool that outlines a region for a readout,
+#. and the title of the readout while it runs. A readout summarises the
+#. model's predicted values over the region: do not call it a measurement.
+#: src/engine.rs:2086
+msgid "Cellaris region readout"
+msgstr "Cellaris क्षेत्र सारांश"
+
+#. Translators: why nothing could be predicted, for the overlay or for a
+#. region readout.
+#: src/engine.rs:2093
+msgid "the model is not loaded"
+msgstr "मॉडल लोड नहीं है"
+
+#. Translators: why a region readout stopped.
+#: src/engine.rs:2099
+msgid "the slide was closed"
+msgstr "स्लाइड बंद कर दी गई"
+
+#. Translators: why part of a slide was not predicted; {} is eov's reason.
+#: src/engine.rs:2105
+msgid "the slide could not be read: {}"
+msgstr "स्लाइड पढ़ी नहीं जा सकी: {}"
+
+#. Translators: the quoted words name the Cellaris panel's
+#. check box "Assume the model's pixel size for slides that
+#. report none": use the same words as there.
+#: src/geometry.rs:83
+msgid ""
+"This slide does not report its pixel size, so it cannot be matched to the "
+"model's. Turn on “Assume the model's pixel size” in the Cellaris panel to "
+"run anyway."
+msgstr ""
+"यह स्लाइड अपना पिक्सेल आकार नहीं बताती, इसलिए इसे मॉडल के पिक्सेल आकार से मिलाया नहीं "
+"जा सकता। फिर भी चलाने के लिए Cellaris पैनल में “मॉडल का पिक्सेल आकार मान लें” चालू करें।"
+
+#. Translators: µm/px is micrometres per pixel; {factor}× is how
+#. many times coarser.
+#: src/geometry.rs:91
+msgid ""
+"This slide is scanned at {slide} µm/px, more than {factor}× coarser than the "
+"{model} µm/px the model was trained at; predictions would be meaningless."
+msgstr ""
+"यह स्लाइड {slide} µm/px पर स्कैन की गई है, यानी इसका रिज़ॉल्यूशन मॉडल के प्रशिक्षण के "
+"{model} µm/px से {factor}× से भी अधिक कम है; पूर्वानुमान अर्थहीन होंगे।"
+
+#. Translators: {} is a pixel size, as the model gives it.
+#: src/geometry.rs:195
+msgid "the model's pixel size {} is not usable"
+msgstr "मॉडल का पिक्सेल आकार {} उपयोग योग्य नहीं है"
+
+#. Translators: {window} is a size in pixels (px).
+#: src/geometry.rs:202
+msgid "the model's window of {window} px is not a multiple of {multiple}"
+msgstr "मॉडल की {window} px की विंडो {multiple} का गुणज नहीं है"
+
+#: src/geometry.rs:215
+msgid "the slide is empty"
+msgstr "स्लाइड खाली है"
+
+#. Translators: a pyramid level is one of the resolutions a slide
+#. is stored at; µm/px is micrometres per pixel.
+#: src/geometry.rs:246
+msgid ""
+"no pyramid level is close to the model's {mpp} µm/px; a window would need "
+"{width}×{height} pixels"
+msgstr ""
+"कोई भी पिरामिड स्तर मॉडल के {mpp} µm/px के निकट नहीं है; एक विंडो के लिए {width}"
+"×{height} पिक्सेल चाहिए होंगे"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. predicted markers; H&E is haematoxylin and eosin. Keep "research use
+#. only".
+#: src/lib.rs:94
+msgid "Cellaris: predicted markers over H&E (research use only)"
+msgstr "Cellaris: H&E पर पूर्वानुमानित मार्कर (केवल अनुसंधान उपयोग के लिए)"
+
+#. Translators: the tooltip of the toolbar button that shows or hides the
+#. Cellaris panel.
+#: src/lib.rs:115
+msgid "Cellaris panel: legend, region readout and model"
+msgstr "Cellaris पैनल: लेजेंड, क्षेत्र सारांश और मॉडल"
+
+#. Translators: a warning; {} is eov's reason, in English.
+#: src/lib.rs:164
+msgid "Cellaris could not save its settings: {}"
+msgstr "Cellaris अपनी सेटिंग्स सहेज नहीं सका: {}"
+
+#: src/lib.rs:348
+msgid "The Cellaris panel could not open"
+msgstr "Cellaris पैनल नहीं खुल सका"
+
+#: src/lib.rs:401
+msgid "Open a slide first."
+msgstr "पहले कोई स्लाइड खोलें।"
+
+#. Translators: the ROI tool is eov's region-of-interest tool;
+#. "Cellaris region readout" is the name of Cellaris's tool (use
+#. the same words as there).
+#: src/lib.rs:414
+msgid ""
+"This slide has no region of interest; draw one with the ROI tool, or outline "
+"a region with the Cellaris region readout tool."
+msgstr ""
+"इस स्लाइड में कोई रुचि क्षेत्र नहीं है; ROI टूल से एक बनाएँ, या “Cellaris क्षेत्र सारांश” टूल "
+"से किसी क्षेत्र की रूपरेखा बनाएँ।"
+
+#: src/lib.rs:498
+msgid "Readout copied as tab-separated text."
+msgstr "सारांश टैब-पृथक टेक्स्ट के रूप में कॉपी किया गया।"
+
+#: src/lib.rs:503
+msgid "There is no finished readout to copy."
+msgstr "कॉपी करने के लिए कोई पूरा सारांश नहीं है।"
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:536
+msgid "ONNX Runtime library"
+msgstr "ONNX Runtime लाइब्रेरी"
+
+#. Translators: a kind of file in the file dialog.
+#: src/lib.rs:540
+msgid "ONNX model"
+msgstr "ONNX मॉडल"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:557
+msgid "Choose a Cellaris marker model"
+msgstr "Cellaris मार्कर मॉडल चुनें"
+
+#. Translators: the title of the file dialog.
+#: src/lib.rs:559
+msgid "Choose the ONNX Runtime library"
+msgstr "ONNX Runtime लाइब्रेरी चुनें"
+
+#. Translators: SHA-256 is a checksum (not translated); hex digits
+#. are 0–9 and a–f.
+#: src/lib.rs:638
+msgid ""
+"Enter the model's SHA-256 (64 hex digits): the download is checked against "
+"it."
+msgstr "मॉडल का SHA-256 (64 हेक्स अंक) दर्ज करें: डाउनलोड की जाँच इसी से की जाती है।"
+
+#. Translators: "Choose model…" is the panel's button: use the
+#. same words as there.
+#: src/lib.rs:672
+msgid ""
+"This eov cannot download models: choose the model file with Choose model…"
+msgstr "यह eov मॉडल डाउनलोड नहीं कर सकता: “मॉडल चुनें…” से मॉडल फ़ाइल चुनें"
+
+#: src/lib.rs:957
+msgid "Outline a region with at least three points."
+msgstr "कम से कम तीन बिंदुओं से किसी क्षेत्र की रूपरेखा बनाएँ।"
+
+#. Translators: {reason} is eov's explanation, a whole
+#. sentence; {key} is the name of a setting in
+#. settings.json, and "" an empty value there (neither
+#. is translated).
+#: src/lib.rs:1031
+msgid ""
+"{reason} Another key can be set as {key} in Cellaris's settings.json (\"\" "
+"for none)."
+msgstr ""
+"{reason} Cellaris की settings.json में {key} के रूप में कोई दूसरी कुंजी सेट की जा सकती "
+"है (कोई नहीं के लिए \"\")।"
+
+#. Translators: eov did not accept something Cellaris
+#. registered: {id} is its identifier and {what} the kind of
+#. registration as eov names it in English, such as
+#. "hotkey" (neither is translated); {reason} is eov's
+#. explanation, a whole sentence.
+#: src/lib.rs:1042
+msgid "eov refused to register {id} ({what}): {reason}"
+msgstr "eov ने {id} ({what}) का पंजीकरण अस्वीकार कर दिया: {reason}"
+
+#: src/markers.rs:182
+msgid "no markers are selected"
+msgstr "कोई मार्कर चुना नहीं गया है"
+
+#: src/markers.rs:185
+msgid "at most {n} marker can be shown at once"
+msgid_plural "at most {n} markers can be shown at once"
+msgstr[0] "एक साथ अधिकतम {n} मार्कर दिखाया जा सकता है"
+msgstr[1] "एक साथ अधिकतम {n} मार्कर दिखाए जा सकते हैं"
+
+#. Translators: {} is a marker's name, such as Pan-CK.
+#: src/markers.rs:194
+msgid "{} is selected twice"
+msgstr "{} दो बार चुना गया है"
+
+#. Translators: {} is a marker's name, such as Pan-CK; a
+#. channel is one of the markers the model predicts.
+#: src/markers.rs:203
+msgid "the model has no channel named {}"
+msgstr "मॉडल में {} नाम का कोई चैनल नहीं है"
+
+#. Translators: {} is a marker's name, such as Pan-CK; its display
+#. window is the range of values its colour is drawn over.
+#: src/markers.rs:212
+msgid "no display window is known for {}"
+msgstr "{} के लिए कोई ज्ञात प्रदर्शन विंडो नहीं है"
+
+#. Translators: the colours of the predicted markers, named in the
+#. legend over the slide ("Hoechst: yellow").
+#: src/markers.rs:367
+msgctxt "Colour"
+msgid "yellow"
+msgstr "पीला"
+
+#: src/markers.rs:368
+msgctxt "Colour"
+msgid "magenta"
+msgstr "मैजेंटा"
+
+#: src/markers.rs:369
+msgctxt "Colour"
+msgid "bluish green"
+msgstr "नीला-हरा"
+
+#: src/markers.rs:370
+msgctxt "Colour"
+msgid "sky blue"
+msgstr "आसमानी नीला"
+
+#: src/markers.rs:371
+msgctxt "Colour"
+msgid "orange"
+msgstr "नारंगी"
+
+#: src/markers.rs:372
+msgctxt "Colour"
+msgid "vermilion"
+msgstr "सिंदूरी"
+
+#. Translators: CELLARIS_MODEL is an environment variable (not
+#. translated); {} is a path.
+#: src/model.rs:207
+msgid "CELLARIS_MODEL points at {}, which does not exist"
+msgstr "CELLARIS_MODEL {} की ओर इशारा करता है, जो मौजूद नहीं है"
+
+#. Translators: {} is the path of the model file the user chose.
+#: src/model.rs:219
+msgid "the model chosen in the Cellaris panel, {}, does not exist"
+msgstr "Cellaris पैनल में चुना गया मॉडल, {}, मौजूद नहीं है"
+
+#. Translators: {file} is the model's file name (markers.onnx), {dir}
+#. the folder it is looked for in.
+#: src/model.rs:234
+msgid "No {file}: put one in {dir}, or choose a model in the Cellaris panel."
+msgstr "कोई {file} नहीं: {dir} में एक रखें, या Cellaris पैनल में कोई मॉडल चुनें।"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is why it could not be read.
+#: src/model.rs:272
+msgid "channel_names is not a list of names: {}"
+msgstr "channel_names नामों की सूची नहीं है: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is its value.
+#: src/model.rs:283
+msgid "channel_names has an empty name: {}"
+msgstr "channel_names में एक खाली नाम है: {}"
+
+#. Translators: channel_names is a key of the model's metadata (not
+#. translated); {} is a marker's name.
+#: src/model.rs:292
+msgid "channel_names names {} twice"
+msgstr "channel_names में {} दो बार है"
+
+#. Translators: {key} is a key of the model's metadata, {value} its
+#. value; true and false are the values it may have (none is
+#. translated).
+#: src/model.rs:309
+msgid "{key} must be true or false, not {value}"
+msgstr "{key} का मान true या false होना चाहिए, {value} नहीं"
+
+#. Translators: {key} is a key of the model's metadata (not translated),
+#. {value} its value.
+#: src/model.rs:328
+msgid "{key} is not a number: {value}"
+msgstr "{key} कोई संख्या नहीं है: {value}"
+
+#. Translators: {key} is a key of the model's metadata (not
+#. translated), {value} its value, {min} and {max} what it may be.
+#: src/model.rs:343
+msgid "{key} = {value} is outside {min}–{max}"
+msgstr "{key} = {value}, {min}–{max} की सीमा से बाहर है"
+
+#. Translators: channel_names is a key of the model's metadata and
+#. export_marker_onnx a program (neither is translated).
+#: src/model.rs:362
+msgid ""
+"the model carries no channel_names, so its channels cannot be told apart; re-"
+"export it with cellaris's export_marker_onnx"
+msgstr ""
+"मॉडल में channel_names नहीं है, इसलिए इसके चैनलों में अंतर नहीं किया जा सकता; इसे "
+"cellaris के export_marker_onnx से फिर से निर्यात करें"
+
+#. Translators: a note in the model card; raw_intensity is a key
+#. of the model's metadata (not translated). "raw intensities"
+#. are the model's predictions on a linear (untransformed) scale,
+#. not measured signal.
+#: src/model.rs:374
+msgid "raw_intensity is not recorded; outputs are taken to be raw intensities"
+msgstr "raw_intensity दर्ज नहीं है; आउटपुट को कच्ची तीव्रताएँ माना जाता है"
+
+#. Translators: a note in the model card; {} is a pixel size in
+#. micrometres per pixel (µm/px); Orion is a dataset.
+#: src/model.rs:386
+msgid ""
+"the training pixel size is not recorded; {} µm/px (Orion level 0) is assumed"
+msgstr "प्रशिक्षण का पिक्सेल आकार दर्ज नहीं है; {} µm/px (Orion स्तर 0) माना जाता है"
+
+#. Translators: the shape of the model's input; [batch, 3, height,
+#. width] is a notation, keep it as it is.
+#: src/model.rs:434
+msgid "the input has {n} dimension, not [batch, 3, height, width]"
+msgid_plural "the input has {n} dimensions, not [batch, 3, height, width]"
+msgstr[0] "इनपुट में {n} आयाम है, [batch, 3, height, width] नहीं"
+msgstr[1] "इनपुट में {n} आयाम हैं, [batch, 3, height, width] नहीं"
+
+#. Translators: RGB is the colour model of the images (not translated).
+#: src/model.rs:442
+msgid "the input takes {n} channel, not RGB"
+msgid_plural "the input takes {n} channels, not RGB"
+msgstr[0] "इनपुट {n} चैनल लेता है, RGB नहीं"
+msgstr[1] "इनपुट {n} चैनल लेता है, RGB नहीं"
+
+#. Translators: {h}×{w} is the size of the model's input in pixels.
+#: src/model.rs:455
+msgid "the input is {h}×{w}; only square inputs are used"
+msgstr "इनपुट {h}×{w} है; केवल वर्गाकार इनपुट उपयोग किए जाते हैं"
+
+#. Translators: {} is a size in pixels (px).
+#: src/model.rs:490
+msgid "the model's input of {} px is not a multiple of 32 between 64 and 1024"
+msgstr "मॉडल का {} px का इनपुट 64 और 1024 के बीच 32 का गुणज नहीं है"
+
+#. Translators: no model file was found (a summary; the details follow).
+#: src/model.rs:533
+msgid "No marker model"
+msgstr "कोई मार्कर मॉडल नहीं"
+
+#. Translators: the file chosen as the model is not one Cellaris can use.
+#: src/model.rs:538
+msgid "Not a marker model"
+msgstr "मार्कर मॉडल नहीं"
+
+#: src/model.rs:542
+msgid "The model's metadata is not usable"
+msgstr "मॉडल का मेटाडेटा उपयोग योग्य नहीं है"
+
+#. Translators: --param model is a command-line option (not
+#. translated); {} is a path.
+#: src/model.rs:587
+msgid "--param model points at {}, which does not exist"
+msgstr "--param model {} की ओर इशारा करता है, जो मौजूद नहीं है"
+
+#. Translators: {path} is the model file, {detail} what is wrong
+#. with it.
+#: src/model.rs:608
+msgid "{path}: {detail}"
+msgstr "{path}: {detail}"
+
+#: src/model.rs:613
+msgid "The model could not be read"
+msgstr "मॉडल पढ़ा नहीं जा सका"
+
+#: src/model.rs:624
+msgid "The model could not be opened"
+msgstr "मॉडल खोला नहीं जा सका"
+
+#: src/model.rs:634
+msgid "it has no inputs"
+msgstr "इसमें कोई इनपुट नहीं है"
+
+#. Translators: float32 is a number type (not translated).
+#: src/model.rs:639
+msgid "its input is not float32"
+msgstr "इसका इनपुट float32 नहीं है"
+
+#. Translators: a tensor is an array of numbers a model takes.
+#: src/model.rs:646
+msgid "its input is not a tensor"
+msgstr "इसका इनपुट टेंसर नहीं है"
+
+#. Translators: a note in the model card; {name} is the name of
+#. one of the model's inputs (not translated).
+#: src/model.rs:657
+msgid "the model has {n} input; only {name} is fed"
+msgid_plural "the model has {n} inputs; only {name} is fed"
+msgstr[0] "मॉडल में {n} इनपुट है; केवल {name} को डेटा दिया जाता है"
+msgstr[1] "मॉडल में {n} इनपुट हैं; केवल {name} को डेटा दिया जाता है"
+
+#. Translators: `markers` is the name of an output of the model
+#. file (not translated).
+#: src/model.rs:673
+msgid "it has no output named `markers`; not a cellaris export"
+msgstr "इसमें `markers` नाम का कोई आउटपुट नहीं है; यह cellaris निर्यात नहीं है"
+
+#. Translators: markers is the name of an output of the model file
+#. and float32 a number type (neither is translated).
+#: src/model.rs:682
+msgid "markers is not float32"
+msgstr "markers, float32 नहीं है"
+
+#: src/model.rs:694
+msgid "The model's metadata could not be read"
+msgstr "मॉडल का मेटाडेटा पढ़ा नहीं जा सका"
+
+#. Translators: {n} channels are named in the model's metadata;
+#. {outputs} is the number of channels the model really outputs,
+#. a bare number (the plural form follows {n} only).
+#: src/model.rs:723
+msgid "it names {n} channel but outputs {outputs}"
+msgid_plural "it names {n} channels but outputs {outputs}"
+msgstr[0] "यह {n} चैनल का नाम देता है लेकिन {outputs} आउटपुट करता है"
+msgstr[1] "यह {n} चैनलों के नाम देता है लेकिन {outputs} आउटपुट करता है"
+
+#. Translators: the model file cannot be used (a summary; the
+#. details follow).
+#: src/model.rs:732
+msgid "Not usable"
+msgstr "उपयोग योग्य नहीं"
+
+#. Translators: a note in the model card: the model does not say how
+#. familiar an image looks to it.
+#: src/model.rs:738
+msgid "the model reports no reconstruction error"
+msgstr "मॉडल कोई पुनर्निर्माण त्रुटि नहीं बताता"
+
+#: src/model.rs:743
+msgid "ONNX Runtime failed"
+msgstr "ONNX Runtime विफल रहा"
+
+#. Translators: how long something will still take; "s" is seconds.
+#: src/present.rs:45
+msgid "about {n} s"
+msgid_plural "about {n} s"
+msgstr[0] "लगभग {n} से॰"
+msgstr[1] "लगभग {n} से॰"
+
+#. Translators: how long something will still take; "min" is minutes.
+#: src/present.rs:49
+msgid "about {n} min"
+msgid_plural "about {n} min"
+msgstr[0] "लगभग {n} मि॰"
+msgstr[1] "लगभग {n} मि॰"
+
+#. Translators: how long something will still take, in hours ("h").
+#: src/present.rs:53
+msgid "about {} h"
+msgstr "लगभग {} घं॰"
+
+#. Translators: in a cell's tooltip; a tissue block is a 5 µm square
+#. of tissue, not a paraffin block.
+#: src/present.rs:117
+msgid "Mean predicted arcsinh intensity over {n} tissue block"
+msgid_plural "Mean predicted arcsinh intensity over {n} tissue blocks"
+msgstr[0] "{n} ऊतक ब्लॉक पर माध्य पूर्वानुमानित arcsinh तीव्रता"
+msgstr[1] "{n} ऊतक ब्लॉकों पर माध्य पूर्वानुमानित arcsinh तीव्रता"
+
+#. Translators: in a cell's tooltip: {n} of the tissue blocks look
+#. unlike the slides the model learnt from.
+#: src/present.rs:124
+msgid "{n} unlike the training data"
+msgid_plural "{n} unlike the training data"
+msgstr[0] "{n} प्रशिक्षण डेटा से भिन्न"
+msgstr[1] "{n} प्रशिक्षण डेटा से भिन्न"
+
+#. Translators: joins two parts of a cell's tooltip: "Mean predicted
+#. arcsinh intensity over 2 tissue blocks" and "1 unlike the training
+#. data".
+#: src/present.rs:129
+msgid "{mean}, {unusual}"
+msgstr "{mean}, {unusual}"
+
+#. Translators: in a cell's tooltip: tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks) too dark to be bright-field H&E.
+#: src/present.rs:134
+msgid "{n} near-black block left out"
+msgid_plural "{n} near-black blocks left out"
+msgstr[0] "{n} लगभग काला ब्लॉक छोड़ा गया"
+msgstr[1] "{n} लगभग काले ब्लॉक छोड़े गए"
+
+#. Translators: joins two parts of a cell's tooltip: the mean of the
+#. predicted values ("Mean predicted arcsinh intensity over 2 tissue
+#. blocks", …) and "1 near-black block left out".
+#: src/present.rs:138
+msgid "{mean}; {dark}"
+msgstr "{mean}; {dark}"
+
+#. Translators: the first line of a cell's tooltip. Keep all of its
+#. meaning: the values are a model's prediction, for research only.
+#: src/present.rs:144
+msgid "Predicted — research use only"
+msgstr "पूर्वानुमानित — केवल अनुसंधान उपयोग के लिए"
+
+#. Translators: a note on a slide; µm/px is micrometres per
+#. pixel.
+#: src/present.rs:276
+msgid "pixel size unknown — assumed {} µm/px"
+msgstr "पिक्सेल आकार अज्ञात — {} µm/px माना गया"
+
+#. Translators: a note on a slide: its pixel size is known for
+#. its width or its height only.
+#: src/present.rs:283
+msgid "pixel size reported for one axis only"
+msgstr "पिक्सेल आकार केवल एक अक्ष के लिए बताया गया है"
+
+#. Translators: a note on a slide: it was enlarged {factor} times
+#. from its pixel size, {mpp} micrometres per pixel.
+#: src/present.rs:293
+msgid "upsampled ×{factor} from {mpp} µm/px — less reliable"
+msgstr "{mpp} µm/px से ×{factor} अपसैंपल किया गया — कम विश्वसनीय"
+
+#. Translators: a note on a slide whose pixels are not square.
+#: src/present.rs:300
+msgid "non-square pixels, resampled per axis"
+msgstr "गैर-वर्गाकार पिक्सेल, हर अक्ष के अनुसार अलग से रीसैंपल किए गए"
+
+#. Translators: a note on a slide; {} is the stain its metadata
+#. names (not translated); H&E is haematoxylin and eosin.
+#: src/present.rs:313
+msgid "the slide says {}; the model was trained on H&E"
+msgstr "स्लाइड के मेटाडेटा के अनुसार: {}; मॉडल को H&E पर प्रशिक्षित किया गया था"
+
+#. Translators: a note on a slide; a window is one of the square
+#. images the model predicts from.
+#: src/present.rs:323
+msgid "{n} window skipped as not bright-field"
+msgid_plural "{n} windows skipped as not bright-field"
+msgstr[0] "{n} विंडो ब्राइट-फ़ील्ड न होने के कारण छोड़ी गई"
+msgstr[1] "{n} विंडो ब्राइट-फ़ील्ड न होने के कारण छोड़ी गईं"
+
+#. Translators: a note on a slide: {n} of its {total} windows with
+#. tissue look unlike the slides the model learnt from. The form
+#. follows {n}, the windows that do; {total} is a bare number.
+#: src/present.rs:333
+msgid "{n} window of {total} looks unlike the training data"
+msgid_plural "{n} windows of {total} look unlike the training data"
+msgstr[0] "{total} में से {n} विंडो प्रशिक्षण डेटा से भिन्न दिखती है"
+msgstr[1] "{total} में से {n} विंडो प्रशिक्षण डेटा से भिन्न दिखती हैं"
+
+#. Translators: a note on a slide: the model does not say at which
+#. pixel size it was trained.
+#: src/present.rs:341
+msgid "the model does not record its pixel size"
+msgstr "मॉडल अपना पिक्सेल आकार दर्ज नहीं करता"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:358
+msgid "Not computed: {} (see the Cellaris panel)"
+msgstr "गणना नहीं की गई: {} (Cellaris पैनल देखें)"
+
+#: src/present.rs:363 src/present.rs:1303
+msgid "Loading the model…"
+msgstr "मॉडल लोड हो रहा है…"
+
+#. Translators: over the slide; {} says why nothing was predicted.
+#: src/present.rs:368 src/present.rs:421
+msgid "Not computed: {}"
+msgstr "गणना नहीं की गई: {}"
+
+#. Translators: a legend entry over the slide, such as
+#. "Pan-CK: magenta (arcsinh 4.50–6.50)": a marker, its colour,
+#. and the display window the user set for it.
+#: src/present.rs:387
+msgid "{marker}: {colour} ({window})"
+msgstr "{marker}: {colour} ({window})"
+
+#. Translators: a legend entry over the slide, such as
+#. "Hoechst: yellow": a marker and its colour.
+#: src/present.rs:395
+msgid "{marker}: {colour}"
+msgstr "{marker}: {colour}"
+
+#: src/present.rs:400
+msgid "Every marker is hidden (see the Cellaris panel)"
+msgstr "सभी मार्कर छिपे हुए हैं (Cellaris पैनल देखें)"
+
+#. Translators: {markers} is the legend over the slide; {n} markers are
+#. hidden.
+#: src/present.rs:408
+msgid "{markers} ({n} hidden)"
+msgid_plural "{markers} ({n} hidden)"
+msgstr[0] "{markers} ({n} छिपा हुआ)"
+msgstr[1] "{markers} ({n} छिपे हुए)"
+
+#. Translators: over the slide; a cell is a small square of the
+#. slide that is predicted at once.
+#: src/present.rs:433
+msgid "Computing {done} of {n} cell"
+msgid_plural "Computing {done} of {n} cells"
+msgstr[0] "कक्ष की गणना हो रही है: {n} में से {done}"
+msgstr[1] "कक्षों की गणना हो रही है: {n} में से {done}"
+
+#. Translators: {n} cells could not be computed; Retry is a
+#. button in the Cellaris panel.
+#: src/present.rs:442
+msgid "{n} failed (Retry in the Cellaris panel)"
+msgid_plural "{n} failed (Retry in the Cellaris panel)"
+msgstr[0] "{n} विफल रहा (Cellaris पैनल में “पुनः प्रयास करें”)"
+msgstr[1] "{n} विफल रहे (Cellaris पैनल में “पुनः प्रयास करें”)"
+
+#. Translators: {n} cells could not be computed and are tried again.
+#: src/present.rs:447
+msgid "{n} failed, retrying"
+msgid_plural "{n} failed, retrying"
+msgstr[0] "{n} विफल रहा, फिर से प्रयास किया जा रहा है"
+msgstr[1] "{n} विफल रहे, फिर से प्रयास किया जा रहा है"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:451
+msgid "{} left"
+msgstr "{} शेष"
+
+#. Translators: over the slide, when it is shown in several views:
+#. one of them shows too much of it to predict ({n} cells; at most
+#. {limit}). A cell is one square of the grid the slide is predicted
+#. in, not a biological cell.
+#: src/present.rs:475
+msgid ""
+"Zoom in to predict: one view of this slide needs {n} cell (limit {limit})"
+msgid_plural ""
+"Zoom in to predict: one view of this slide needs {n} cells (limit {limit})"
+msgstr[0] ""
+"पूर्वानुमान के लिए ज़ूम इन करें: इस स्लाइड के एक दृश्य के लिए {n} कक्ष चाहिए (सीमा {limit})"
+msgstr[1] ""
+"पूर्वानुमान के लिए ज़ूम इन करें: इस स्लाइड के एक दृश्य के लिए {n} कक्ष चाहिए (सीमा {limit})"
+
+#. Translators: over the slide: the view shows too much of it to
+#. predict ({n} cells; at most {limit}). A cell is one square of the
+#. grid the slide is predicted in, not a biological cell.
+#: src/present.rs:485
+msgid "Zoom in to predict: this view needs {n} cell (limit {limit})"
+msgid_plural "Zoom in to predict: this view needs {n} cells (limit {limit})"
+msgstr[0] "पूर्वानुमान के लिए ज़ूम इन करें: इस दृश्य के लिए {n} कक्ष चाहिए (सीमा {limit})"
+msgstr[1] "पूर्वानुमान के लिए ज़ूम इन करें: इस दृश्य के लिए {n} कक्ष चाहिए (सीमा {limit})"
+
+#. Translators: why a slide is not predicted (over the slide).
+#: src/present.rs:496
+msgid "pixel size unknown"
+msgstr "पिक्सेल आकार अज्ञात"
+
+#. Translators: why a slide is not predicted (over the slide); µm/px
+#. is micrometres per pixel.
+#: src/present.rs:502
+msgid "slide too coarse ({} µm/px)"
+msgstr "स्लाइड का रिज़ॉल्यूशन बहुत कम है ({} µm/px)"
+
+#. Translators: a legend entry drawn on the slide: a
+#. marker, and the display window the user set for it.
+#: src/present.rs:720
+msgid "{marker} (predicted, {window})"
+msgstr "{marker} (पूर्वानुमानित, {window})"
+
+#. Translators: a legend entry drawn on the slide: a marker.
+#: src/present.rs:727
+msgid "{} (predicted)"
+msgstr "{} (पूर्वानुमानित)"
+
+#. Translators: the label drawn on a region while its readout is
+#. computed; {} is how much of it is done, in percent.
+#: src/present.rs:764
+msgid "Cellaris region · {} % computed"
+msgstr "Cellaris क्षेत्र · {}% गणना पूर्ण"
+
+#. Translators: the label drawn on the region of a readout (a readout
+#. summarises predicted values; it is not a measurement).
+#: src/present.rs:770
+msgid "Cellaris region"
+msgstr "Cellaris क्षेत्र"
+
+#. Translators: the progress of a region readout: {done} of the
+#. region's {n} cells (squares of the grid the slide is
+#. predicted in, not biological cells).
+#: src/present.rs:834
+msgid "{done} of {n} cell"
+msgid_plural "{done} of {n} cells"
+msgstr[0] "{n} कक्ष में से {done}"
+msgstr[1] "{n} कक्षों में से {done}"
+
+#: src/present.rs:867
+msgid "Cellaris: loading the model…"
+msgstr "Cellaris: मॉडल लोड हो रहा है…"
+
+#. Translators: the status bar while the overlay is on; {} says
+#. what went wrong.
+#: src/present.rs:871
+msgid "Cellaris: {}"
+msgstr "Cellaris: {}"
+
+#. Translators: in the status bar while predictions are shown. Keep all
+#. of its meaning: the colours are predicted, for research only.
+#: src/present.rs:893
+msgid "Cellaris (predicted, research use only)"
+msgstr "Cellaris (पूर्वानुमानित, केवल अनुसंधान उपयोग के लिए)"
+
+#. Translators: in the status bar: {done} of {n} cells computed, and
+#. how long each window (square image the model predicts from)
+#. takes, in seconds. A cell is one square of the grid the slide is
+#. predicted in, not a biological cell.
+#: src/present.rs:900
+msgid "{done}/{n} cell, {seconds} s per window"
+msgid_plural "{done}/{n} cells, {seconds} s per window"
+msgstr[0] "{done}/{n} कक्ष, प्रति विंडो {seconds} से॰"
+msgstr[1] "{done}/{n} कक्ष, प्रति विंडो {seconds} से॰"
+
+#. Translators: in the status bar: {n} cells could not be computed.
+#: src/present.rs:908
+msgid "{n} failed"
+msgid_plural "{n} failed"
+msgstr[0] "{n} विफल"
+msgstr[1] "{n} विफल"
+
+#. Translators: in the status bar while a region readout is computed.
+#: src/present.rs:912
+msgid "computing a region readout"
+msgstr "क्षेत्र सारांश की गणना हो रही है"
+
+#. Translators: {} says why the region's readout cannot be computed
+#. (such as "no markers are selected").
+#: src/present.rs:954
+msgid "Cannot compute the readout: {}"
+msgstr "सारांश की गणना नहीं की जा सकती: {}"
+
+#: src/present.rs:955
+msgid "Waiting for the model…"
+msgstr "मॉडल की प्रतीक्षा की जा रही है…"
+
+#. Translators: "Cellaris region readout" is the name of the tool
+#. (use the same words as there); the region of interest is eov's
+#. ROI (the panel's button Use ROI).
+#: src/present.rs:964
+msgid ""
+"Outline some tissue with the Cellaris region readout tool, or use the region "
+"of interest."
+msgstr ""
+"“Cellaris क्षेत्र सारांश” टूल से कुछ ऊतक की रूपरेखा बनाएँ, या रुचि क्षेत्र का उपयोग करें।"
+
+#. Translators: what a region readout covers: {n} tissue blocks
+#. (5 µm squares of tissue, not paraffin blocks), their area and
+#. the region's, in square millimetres.
+#: src/present.rs:982
+msgid "{n} tissue block, {tissue} mm² of tissue in {region} mm²"
+msgid_plural "{n} tissue blocks, {tissue} mm² of tissue in {region} mm²"
+msgstr[0] "{n} ऊतक ब्लॉक, {region} mm² में {tissue} mm² ऊतक"
+msgstr[1] "{n} ऊतक ब्लॉक, {region} mm² में {tissue} mm² ऊतक"
+
+#. Translators: what a region readout covers: {n} tissue blocks (5 µm
+#. squares of tissue, not paraffin blocks).
+#: src/present.rs:990
+msgid "{n} tissue block"
+msgid_plural "{n} tissue blocks"
+msgstr[0] "{n} ऊतक ब्लॉक"
+msgstr[1] "{n} ऊतक ब्लॉक"
+
+#: src/present.rs:993
+msgid "Waiting for you to confirm a long readout."
+msgstr "सारांश की लंबी गणना के लिए आपकी पुष्टि की प्रतीक्षा है।"
+
+#. Translators: {done} of the region's {n} cells (squares of the
+#. grid the slide is predicted in, not biological cells) are
+#. computed; {summary} is what the readout covers so far, such
+#. as "12 tissue blocks, …".
+#: src/present.rs:999
+msgid "Computing: {done} of {n} cell · {summary}"
+msgid_plural "Computing: {done} of {n} cells · {summary}"
+msgstr[0] "गणना हो रही है: {n} कक्ष में से {done} · {summary}"
+msgstr[1] "गणना हो रही है: {n} कक्षों में से {done} · {summary}"
+
+#. Translators: {} is what the readout covered until it was
+#. cancelled, such as "12 tissue blocks, …".
+#: src/present.rs:1007
+msgid "Cancelled · {}"
+msgstr "रद्द किया गया · {}"
+
+#. Translators: {} is a duration such as "about 3 min".
+#: src/present.rs:1014
+msgid "{} left on this computer."
+msgstr "इस कंप्यूटर पर {} शेष।"
+
+#. Translators: density r² is a column of the readout; a tissue
+#. block is a 5 µm square of tissue, not a paraffin block.
+#: src/present.rs:1019
+msgid "Fewer than {n} tissue block, too few for a density r²."
+msgid_plural "Fewer than {n} tissue blocks, too few for a density r²."
+msgstr[0] "{n} से कम ऊतक ब्लॉक, घनत्व r² के लिए बहुत कम।"
+msgstr[1] "{n} से कम ऊतक ब्लॉक, घनत्व r² के लिए बहुत कम।"
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks; {percent} is a percentage;
+#. blocks are 5 µm squares of tissue, not paraffin blocks.
+#: src/present.rs:1035
+msgid ""
+"Mean reconstruction error {recon}, {percent} % of blocks above the model's "
+"threshold."
+msgstr "माध्य पुनर्निर्माण त्रुटि {recon}, {percent}% ब्लॉक मॉडल के सीमा-मान से ऊपर।"
+
+#. Translators: the reconstruction error says how unlike the
+#. training data the tissue looks.
+#: src/present.rs:1042
+msgid "Mean reconstruction error {}."
+msgstr "माध्य पुनर्निर्माण त्रुटि {}।"
+
+#. Translators: {blocks} is a number of blocks ("3 blocks") and
+#. {cells} a number of cells ("1 cell"), both translated
+#. separately.
+#: src/present.rs:1051
+msgid "{blocks} and {cells} skipped as near-black (not bright-field H&E)."
+msgstr "{blocks} और {cells} लगभग काले होने के कारण छोड़े गए (ब्राइट-फ़ील्ड H&E नहीं)।"
+
+#. Translators: a number of tissue blocks (5 µm squares of
+#. tissue, not paraffin blocks), in "3 blocks and 1 cell skipped
+#. as near-black".
+#: src/present.rs:1055
+msgid "{n} block"
+msgid_plural "{n} blocks"
+msgstr[0] "{n} ब्लॉक"
+msgstr[1] "{n} ब्लॉक"
+
+#. Translators: a number of cells (squares of the grid the slide
+#. is predicted in, not biological cells), in "3 blocks and 1
+#. cell skipped as near-black".
+#: src/present.rs:1059
+msgid "{n} cell"
+msgid_plural "{n} cells"
+msgstr[0] "{n} कक्ष"
+msgstr[1] "{n} कक्ष"
+
+#. Translators: {} is a note on the slide.
+#: src/present.rs:1067
+msgid "Note: {}."
+msgstr "नोट: {}।"
+
+#. Translators: the labels of the model card in the Cellaris panel.
+#: src/present.rs:1092
+msgctxt "Model card"
+msgid "Model"
+msgstr "मॉडल"
+
+#: src/present.rs:1093
+msgctxt "Model card"
+msgid "Runtime"
+msgstr "रनटाइम"
+
+#: src/present.rs:1102
+msgctxt "Model card"
+msgid "Version"
+msgstr "संस्करण"
+
+#: src/present.rs:1105
+msgctxt "Model card"
+msgid "File"
+msgstr "फ़ाइल"
+
+#. Translators: the start of the model file's SHA-256, and its
+#. size in megabytes.
+#: src/present.rs:1113
+msgid "{hash} ({size} MB)"
+msgstr "{hash} ({size} MB)"
+
+#. Translators: the pixel size the model was trained at.
+#: src/present.rs:1121
+msgctxt "Model card"
+msgid "Trained at"
+msgstr "प्रशिक्षण पिक्सेल आकार"
+
+#. Translators: a pixel size the model does not record, so it
+#. is assumed; µm/px is micrometres per pixel.
+#: src/present.rs:1127
+msgid "{} µm/px (assumed)"
+msgstr "{} µm/px (माना गया)"
+
+#. Translators: what the model takes in.
+#: src/present.rs:1132
+msgctxt "Model card"
+msgid "Input"
+msgstr "इनपुट"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, as many at once as wanted.
+#: src/present.rs:1137
+msgid "{side}×{side} px windows, any batch size"
+msgstr "{side}×{side} px विंडो, कोई भी बैच आकार"
+
+#. Translators: the model's input: square windows of {side}
+#. pixels, exactly {n} at once.
+#: src/present.rs:1143
+msgid "{side}×{side} px windows, batches of {n}"
+msgid_plural "{side}×{side} px windows, batches of {n}"
+msgstr[0] "{side}×{side} px विंडो, {n} का बैच"
+msgstr[1] "{side}×{side} px विंडो, {n} के बैच"
+
+#. Translators: the markers the model predicts.
+#: src/present.rs:1151
+msgctxt "Model card"
+msgid "Channels"
+msgstr "चैनल"
+
+#. Translators: what the model computes.
+#: src/present.rs:1160
+msgctxt "Model card"
+msgid "Outputs"
+msgstr "आउटपुट"
+
+#. Translators: the model card's Outputs row: the model's
+#. predicted intensities are on a linear ("raw",
+#. untransformed) scale and shown as arcsinh(x/5); "raw" does
+#. not mean measured signal.
+#: src/present.rs:1167
+msgid "raw intensities, shown as arcsinh(x/5), reconstruction error"
+msgstr "कच्ची तीव्रताएँ, arcsinh(x/5) के रूप में दिखाई गईं, पुनर्निर्माण त्रुटि"
+
+#. Translators: the model card's Outputs row: the model's predicted
+#. intensities are on a linear ("raw", untransformed) scale and
+#. shown as arcsinh(x/5); "raw" does not mean measured signal.
+#: src/present.rs:1172
+msgid "raw intensities, shown as arcsinh(x/5)"
+msgstr "कच्ची तीव्रताएँ, arcsinh(x/5) के रूप में दिखाई गईं"
+
+#: src/present.rs:1173
+msgid "arcsinh intensities, reconstruction error"
+msgstr "arcsinh तीव्रताएँ, पुनर्निर्माण त्रुटि"
+
+#: src/present.rs:1174
+msgid "arcsinh intensities"
+msgstr "arcsinh तीव्रताएँ"
+
+#. Translators: the data the model was trained on.
+#: src/present.rs:1179
+msgctxt "Model card"
+msgid "Trained on"
+msgstr "प्रशिक्षण डेटा"
+
+#: src/present.rs:1182
+msgctxt "Model card"
+msgid "Licence"
+msgstr "लाइसेंस"
+
+#. Translators: the model's own description follows.
+#: src/present.rs:1186
+msgctxt "Model card"
+msgid "About"
+msgstr "विवरण"
+
+#. Translators: the program that wrote the model file.
+#: src/present.rs:1190
+msgctxt "Model card"
+msgid "Exported by"
+msgstr "निर्यातक"
+
+#: src/present.rs:1194
+msgctxt "Model card"
+msgid "Note"
+msgstr "नोट"
+
+#: src/present.rs:1213
+msgid "the new choice takes effect when eov restarts"
+msgstr "नया चुनाव eov के फिर से शुरू होने पर लागू होगा"
+
+#. Translators: {version} is ONNX Runtime's version, {library} its
+#. file; {n} threads compute predictions.
+#: src/present.rs:1226
+msgid "ONNX Runtime {version} from {library}, {n} thread"
+msgid_plural "ONNX Runtime {version} from {library}, {n} threads"
+msgstr[0] "{library} से ONNX Runtime {version}, {n} थ्रेड"
+msgstr[1] "{library} से ONNX Runtime {version}, {n} थ्रेड"
+
+#. Translators: {library} is ONNX Runtime's file; {n} threads compute
+#. predictions.
+#: src/present.rs:1234
+msgid "ONNX Runtime (version unknown) from {library}, {n} thread"
+msgid_plural "ONNX Runtime (version unknown) from {library}, {n} threads"
+msgstr[0] "{library} से ONNX Runtime (संस्करण अज्ञात), {n} थ्रेड"
+msgstr[1] "{library} से ONNX Runtime (संस्करण अज्ञात), {n} थ्रेड"
+
+#. Translators: {runtime} names ONNX Runtime and its file; {n}
+#. threads compute predictions.
+#: src/present.rs:1241
+msgid "{runtime}, {n} thread"
+msgid_plural "{runtime}, {n} threads"
+msgstr[0] "{runtime}, {n} थ्रेड"
+msgstr[1] "{runtime}, {n} थ्रेड"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours,
+#. but the model sees the slide's own.
+#: src/present.rs:1276
+msgid "the display is adjusted; predictions use the slide's unadjusted colours"
+msgstr "प्रदर्शन समायोजित है; पूर्वानुमान स्लाइड के असमायोजित रंगों का उपयोग करते हैं"
+
+#. Translators: a note on a slide: eov shows it with adjusted colours
+#. ({} says how, in eov's words), but the model sees the slide's own.
+#: src/present.rs:1283
+msgid ""
+"the display is adjusted ({}); predictions use the slide's unadjusted colours"
+msgstr "प्रदर्शन समायोजित है ({}); पूर्वानुमान स्लाइड के असमायोजित रंगों का उपयोग करते हैं"
+
+#: src/present.rs:1298
+msgid ""
+"The model loads when the overlay is turned on or a region readout starts."
+msgstr "ओवरले चालू होने पर या क्षेत्र सारांश शुरू होने पर मॉडल लोड होता है।"
+
+#. Translators: cells are the small squares of the slide
+#. that are predicted at once.
+#: src/present.rs:1321
+msgid "{n} cell in view could not be computed"
+msgid_plural "{n} cells in view could not be computed"
+msgstr[0] "दृश्य में {n} कक्ष की गणना नहीं की जा सकी"
+msgstr[1] "दृश्य में {n} कक्षों की गणना नहीं की जा सकी"
+
+#. Translators: {} is how long each window (square image
+#. the model predicts from) takes, in seconds.
+#: src/present.rs:1333
+msgid "Computing · {} s per window"
+msgstr "गणना हो रही है · प्रति विंडो {} से॰"
+
+#. Translators: {} is the name of the model that is loaded.
+#: src/present.rs:1344
+msgid "Ready: {}"
+msgstr "तैयार: {}"
+
+#: src/present.rs:1367
+msgid "No slide"
+msgstr "कोई स्लाइड नहीं"
+
+#. Translators: the slide's pixel size in micrometres per pixel
+#. (µm/px), the pyramid level it is read from, and how much
+#. smaller that level is (×4.00).
+#: src/present.rs:1374
+msgid "{x} × {y} µm/px, read from level {level} (×{downsample})"
+msgstr "{x} × {y} µm/px, स्तर {level} से पढ़ा गया (×{downsample})"
+
+#. Translators: the slide does not say its pixel size.
+#: src/present.rs:1385
+msgid "pixel size not reported"
+msgstr "पिक्सेल आकार नहीं बताया गया"
+
+#. Translators: under the progress bar in the Cellaris panel; a
+#. cell is one square of the grid the slide is predicted in, not a
+#. biological cell.
+#: src/present.rs:1418
+msgid "{done} of {n} cell in view"
+msgid_plural "{done} of {n} cells in view"
+msgstr[0] "दृश्य में {n} कक्ष में से {done}"
+msgstr[1] "दृश्य में {n} कक्षों में से {done}"
+
+#. Translators: {} is a marker's display window ("arcsinh 4.50–6.50")
+#. that the user set.
+#: src/present.rs:1446
+msgid "{}, yours"
+msgstr "{}, आपके द्वारा सेट"
+
+#. Translators: eov first asks the user whether to download the model
+#. (nothing is downloaded without that answer), then downloads it.
+#: src/present.rs:1512
+msgid ""
+"eov is asking you whether to download the model, or downloading it (see the "
+"status bar)…"
+msgstr ""
+"eov आपसे पूछ रहा है कि मॉडल डाउनलोड करना है या नहीं, या उसे डाउनलोड कर रहा है "
+"(स्थिति पट्टी देखें)…"
+
+#. Translators: under the model's address and SHA-256 in the
+#. Cellaris panel; the model store is where eov keeps models.
+#: src/present.rs:1521
+msgid ""
+"eov checks the download against this SHA-256 and keeps it in its model "
+"store; it is then Cellaris's model. Without an address, the copy your "
+"administrator gave eov is used."
+msgstr ""
+"eov डाउनलोड की जाँच इस SHA-256 से करता है और उसे अपने मॉडल स्टोर में रखता है; इसके बाद "
+"वही Cellaris का मॉडल होता है। पता न होने पर वह प्रति उपयोग की जाती है जो आपके "
+"व्यवस्थापक ने eov को दी है।"
+
+#. Translators: where an ONNX Runtime library was found, shown in
+#. parentheses after it in the list of libraries tried.
+#: src/runtime.rs:128
+msgid "the runtime chosen in the Cellaris panel"
+msgstr "Cellaris पैनल में चुना गया रनटाइम"
+
+#: src/runtime.rs:129
+msgid "the plugin package"
+msgstr "प्लगइन पैकेज"
+
+#: src/runtime.rs:130
+msgid "the plugin's data directory"
+msgstr "प्लगइन का डेटा फ़ोल्डर"
+
+#: src/runtime.rs:131
+msgid "the system library path"
+msgstr "सिस्टम लाइब्रेरी पथ"
+
+#. Translators: {} is the path the user chose for the ONNX
+#. Runtime library.
+#: src/runtime.rs:142
+msgid ""
+"the runtime chosen in the Cellaris panel points at {}, which does not exist"
+msgstr "Cellaris पैनल में चुना गया रनटाइम {} की ओर इशारा करता है, जो मौजूद नहीं है"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a path.
+#: src/runtime.rs:150
+msgid "{source} points at {path}, which does not exist"
+msgstr "{source} {path} की ओर इशारा करता है, जो मौजूद नहीं है"
+
+#. Translators: {path} is the folder the user chose for ONNX
+#. Runtime, {library} the file name of its library.
+#: src/runtime.rs:165
+msgid ""
+"the runtime chosen in the Cellaris panel points at {path}, which holds no "
+"{library}"
+msgstr ""
+"Cellaris पैनल में चुना गया रनटाइम {path} की ओर इशारा करता है, जिसमें कोई {library} "
+"नहीं है"
+
+#. Translators: {source} is an environment variable or a
+#. command-line option (not translated), {path} a folder,
+#. {library} the file name of ONNX Runtime's library.
+#: src/runtime.rs:175
+msgid "{source} points at {path}, which holds no {library}"
+msgstr "{source} {path} की ओर इशारा करता है, जिसमें कोई {library} नहीं है"
+
+#. Translators: where to get ONNX Runtime on Windows; file and release
+#. names are not translated.
+#: src/runtime.rs:334
+msgid "onnxruntime.dll from the onnxruntime-win-x64 release"
+msgstr "onnxruntime-win-x64 रिलीज़ की onnxruntime.dll"
+
+#. Translators: where to get ONNX Runtime on macOS; `brew install
+#. onnxruntime` is a command, and file and release names are not
+#. translated.
+#: src/runtime.rs:339
+msgid ""
+"`brew install onnxruntime`, or libonnxruntime.dylib from the onnxruntime-osx "
+"release"
+msgstr ""
+"`brew install onnxruntime`, या onnxruntime-osx रिलीज़ की libonnxruntime.dylib"
+
+#. Translators: where to get ONNX Runtime on Linux; file and release
+#. names are not translated.
+#: src/runtime.rs:344
+msgid ""
+"libonnxruntime.so from the onnxruntime-linux release, or your distribution's "
+"package"
+msgstr "onnxruntime-linux रिलीज़ की libonnxruntime.so, या आपके डिस्ट्रीब्यूशन का पैकेज"
+
+#. Translators: {version} is a version number, {platform} says where to
+#. get ONNX Runtime for this computer; CELLARIS_ORT_DYLIB is an
+#. environment variable (not translated).
+#: src/runtime.rs:351
+msgid ""
+"Install ONNX Runtime {version} or newer ({platform}), then choose it in the "
+"Cellaris panel, set CELLARIS_ORT_DYLIB, or put it in the plugin's data "
+"directory."
+msgstr ""
+"ONNX Runtime {version} या नया संस्करण इंस्टॉल करें ({platform}), फिर उसे Cellaris "
+"पैनल में चुनें, CELLARIS_ORT_DYLIB सेट करें, या उसे प्लगइन के डेटा फ़ोल्डर में रखें।"
+
+#: src/runtime.rs:374
+msgid "ONNX Runtime was not found"
+msgstr "ONNX Runtime नहीं मिला"
+
+#: src/runtime.rs:378
+msgid "ONNX Runtime could not be loaded"
+msgstr "ONNX Runtime लोड नहीं किया जा सका"
+
+#. Translators: {path} is an ONNX Runtime library, {source} where it was
+#. found, {what} what went wrong with it.
+#: src/runtime.rs:390
+msgid "{path} ({source}): {what}"
+msgstr "{path} ({source}): {what}"
+
+#. Translators: "it" is a library file; {} is why the system could
+#. not open it.
+#: src/runtime.rs:431
+msgid "it could not be opened: {}"
+msgstr "इसे खोला नहीं जा सका: {}"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name
+#. in ONNX Runtime (not translated).
+#: src/runtime.rs:438
+msgid "it is not ONNX Runtime (it has no OrtGetApiBase)"
+msgstr "यह ONNX Runtime नहीं है (इसमें OrtGetApiBase नहीं है)"
+
+#. Translators: "it" is a library file; OrtGetApiBase is a name in
+#. ONNX Runtime (not translated).
+#: src/runtime.rs:446
+msgid "it is not ONNX Runtime (OrtGetApiBase returned nothing)"
+msgstr "यह ONNX Runtime नहीं है (OrtGetApiBase ने कुछ नहीं लौटाया)"
+
+#. Translators: "it" is a library file; {version} and {needed}
+#. are version numbers.
+#: src/runtime.rs:465
+msgid "it is ONNX Runtime {version}, older than {needed}"
+msgstr "यह ONNX Runtime {version} है, जो {needed} से पुराना है"
+
+#. Translators: {reason} is why ONNX Runtime was not found, {hint}
+#. how to install it.
+#: src/runtime.rs:522
+msgid ""
+"{reason}.\n"
+"{hint}"
+msgstr ""
+"{reason}।\n"
+"{hint}"
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:553
+msgid "opening it crashed"
+msgstr "इसे खोलते समय क्रैश हुआ"
+
+#. Translators: {} is why ONNX Runtime could not be
+#. loaded, in its own words.
+#: src/runtime.rs:586
+msgid "{}. Restart eov to try again."
+msgstr "{}। फिर से प्रयास करने के लिए eov को फिर से शुरू करें।"
+
+#. Translators: "it" is an ONNX Runtime library.
+#: src/runtime.rs:596
+msgid "loading it crashed. Restart eov to try again."
+msgstr "इसे लोड करते समय क्रैश हुआ। फिर से प्रयास करने के लिए eov को फिर से शुरू करें।"
+
+#. Translators: {} is a version number.
+#: src/runtime.rs:606
+msgid "The ONNX Runtime found is older than {}"
+msgstr "मिला हुआ ONNX Runtime {} से पुराना है"
+
+#. Translators: {attempts} lists the libraries tried, one per line,
+#. {hint} says how to install ONNX Runtime.
+#: src/runtime.rs:613
+msgid ""
+"Tried:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+msgstr ""
+"आज़माए गए:\n"
+"{attempts}\n"
+"\n"
+"{hint}"
+
+#. Translators: keep the full meaning: predicted, research only, no diagnosis.
+#: ui/cellaris.slint:308
+msgctxt "CellarisPanel"
+msgid "PREDICTED — research use only, not for diagnosis"
+msgstr "पूर्वानुमानित — केवल अनुसंधान उपयोग के लिए, निदान के लिए नहीं"
+
+#: ui/cellaris.slint:314
+msgctxt "CellarisPanel"
+msgid "No slide"
+msgstr "कोई स्लाइड नहीं"
+
+#. Translators: closes the Cellaris panel.
+#: ui/cellaris.slint:408
+msgctxt "CellarisPanel"
+msgid "Close"
+msgstr "बंद करें"
+
+#. Translators: keep the full meaning; IF is immunofluorescence.
+#: ui/cellaris.slint:435
+msgctxt "CellarisPanel"
+msgid ""
+"The colours show what a model predicts the immunofluorescence would be. They "
+"are not measurements: check them against measured IF before relying on them."
+msgstr ""
+"रंग दिखाते हैं कि मॉडल के पूर्वानुमान के अनुसार इम्यूनोफ़्लोरेसेंस कैसा होगा। ये माप नहीं हैं: इन "
+"पर भरोसा करने से पहले इनकी तुलना मापे गए IF से करें।"
+
+#. Translators: tries again what failed (the model, cells).
+#: ui/cellaris.slint:460
+msgctxt "CellarisPanel"
+msgid "Retry"
+msgstr "पुनः प्रयास करें"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:472
+msgctxt "CellarisPanel"
+msgid "SLIDE"
+msgstr "स्लाइड"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:489
+msgctxt "CellarisPanel"
+msgid "PREDICTED MARKERS"
+msgstr "पूर्वानुमानित मार्कर"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Hide predictions"
+msgstr "पूर्वानुमान छिपाएँ"
+
+#: ui/cellaris.slint:495
+msgctxt "CellarisPanel"
+msgid "Show predictions"
+msgstr "पूर्वानुमान दिखाएँ"
+
+#. Translators: {} is a marker, such as Pan-CK.
+#: ui/cellaris.slint:551
+msgctxt "CellarisPanel"
+msgid "Display window of {} (arcsinh)"
+msgstr "{} की प्रदर्शन विंडो (arcsinh)"
+
+#. Translators: the low end of a marker's display window: at or below it
+#. nothing is drawn (black in fluorescence style).
+#: ui/cellaris.slint:560
+msgctxt "CellarisPanel"
+msgid "Low"
+msgstr "निम्न"
+
+#. Translators: the high end of a marker's display window: at or above it the
+#. marker is drawn in its full colour.
+#: ui/cellaris.slint:588
+msgctxt "CellarisPanel"
+msgid "High"
+msgstr "उच्च"
+
+#: ui/cellaris.slint:615
+msgctxt "CellarisPanel"
+msgid ""
+"Only how predictions are drawn changes; readouts and batch runs keep their "
+"values."
+msgstr ""
+"केवल पूर्वानुमानों के दिखाए जाने का तरीका बदलता है; क्षेत्र सारांश और बैच रन अपने मान बनाए "
+"रखते हैं।"
+
+#. Translators: resets a marker's display window to Cellaris's own.
+#: ui/cellaris.slint:622
+msgctxt "CellarisPanel"
+msgid "Reset"
+msgstr "रीसेट करें"
+
+#. Translators: how opaque the predicted colours are drawn.
+#: ui/cellaris.slint:636
+msgctxt "CellarisPanel"
+msgid "Opacity"
+msgstr "अपारदर्शिता"
+
+#. Translators: {} is the opacity, in percent.
+#: ui/cellaris.slint:652
+msgctxt "CellarisPanel"
+msgid "{} %"
+msgstr "{}%"
+
+#: ui/cellaris.slint:662
+msgctxt "CellarisPanel"
+msgid "Fluorescence style: colour on black over all tissue"
+msgstr "प्रतिदीप्ति शैली: पूरे ऊतक पर काली पृष्ठभूमि पर रंग"
+
+#. Translators: a check box; other messages quote its first words.
+#: ui/cellaris.slint:671
+msgctxt "CellarisPanel"
+msgid "Assume the model's pixel size for slides that report none"
+msgstr "मॉडल का पिक्सेल आकार मान लें, उन स्लाइडों के लिए जो कोई पिक्सेल आकार नहीं बतातीं"
+
+#: ui/cellaris.slint:678
+msgctxt "CellarisPanel"
+msgid ""
+"Colours are chosen to stay distinct with red-green and blue-yellow colour "
+"blindness; hide markers to look at one at a time. Areas still being computed "
+"are veiled; failed ones are outlined in red."
+msgstr ""
+"रंग इस तरह चुने गए हैं कि वे लाल-हरी और नीली-पीली वर्णांधता में भी अलग दिखें; एक समय में "
+"एक मार्कर देखने के लिए बाकी मार्कर छिपाएँ। जिन क्षेत्रों की गणना अभी हो रही है, वे धुंधले "
+"आवरण से ढके रहते हैं; विफल क्षेत्रों की रूपरेखा लाल रंग में होती है।"
+
+#. Translators: a section heading, in capitals in English: statistics of the
+#. model's predicted values over a region (not a measurement).
+#: ui/cellaris.slint:684
+msgctxt "CellarisPanel"
+msgid "REGION READOUT"
+msgstr "क्षेत्र सारांश"
+
+#. Translators: a column of the readout: the marker.
+#: ui/cellaris.slint:707
+msgctxt "CellarisPanel"
+msgid "marker"
+msgstr "मार्कर"
+
+#. Translators: a narrow column of the readout: the mean predicted value.
+#: ui/cellaris.slint:709
+msgctxt "CellarisPanel"
+msgid "mean"
+msgstr "माध्य"
+
+#. Translators: a narrow column of the readout: how much the value varies.
+#: ui/cellaris.slint:711
+msgctxt "CellarisPanel"
+msgid "spread"
+msgstr "फैलाव"
+
+#. Translators: a narrow column: how much optical density alone explains.
+#: ui/cellaris.slint:713
+msgctxt "CellarisPanel"
+msgid "density r²"
+msgstr "घनत्व r²"
+
+#. Translators: picks the tool that outlines a region for a readout of the
+#. predicted values.
+#: ui/cellaris.slint:734
+msgctxt "CellarisPanel"
+msgid "Draw region"
+msgstr "क्षेत्र बनाएँ"
+
+#. Translators: makes the slide's region of interest (ROI) the readout's
+#. region, instead of a drawn one; the readout follows the ROI.
+#: ui/cellaris.slint:741
+msgctxt "CellarisPanel"
+msgid "Use ROI"
+msgstr "ROI का उपयोग करें"
+
+#. Translators: stops the region readout.
+#: ui/cellaris.slint:751
+msgctxt "CellarisPanel"
+msgid "Cancel"
+msgstr "रद्द करें"
+
+#. Translators: copies the region readout as text.
+#: ui/cellaris.slint:758
+msgctxt "CellarisPanel"
+msgid "Copy"
+msgstr "कॉपी करें"
+
+#. Translators: removes the readout's region and its readout.
+#: ui/cellaris.slint:766
+msgctxt "CellarisPanel"
+msgid "Clear"
+msgstr "हटाएँ"
+
+#. Translators: explains the readout's columns; keep the meaning exact; the 5
+#. µm blocks are small squares of tissue, not paraffin blocks.
+#: ui/cellaris.slint:775
+msgctxt "CellarisPanel"
+msgid ""
+"Mean is the predicted intensity, arcsinh, over tissue in the region, and "
+"spread how much it varies between 5 µm blocks. Density r² is how much of "
+"that variation optical density alone reproduces. Near 1, the marker is a "
+"density map here. Low with a small spread means the prediction is flat, not "
+"that it learned anything. Low with a wide spread is needed for it to be the "
+"marker, but only measured IF shows it is. Numbers come from the same blended "
+"predictions the overlay shows."
+msgstr ""
+"“माध्य” क्षेत्र के ऊतक पर पूर्वानुमानित तीव्रता (arcsinh) है, और “फैलाव” यह कि यह 5 µm "
+"के ब्लॉकों के बीच कितनी बदलती है। “घनत्व r²” बताता है कि उस भिन्नता का कितना हिस्सा "
+"अकेले प्रकाशीय घनत्व से पुनरुत्पन्न होता है। 1 के निकट होने पर, यहाँ मार्कर बस एक घनत्व मैप "
+"है। कम r² और छोटे फैलाव का अर्थ है कि पूर्वानुमान सपाट है, यह नहीं कि मॉडल ने कुछ सीखा "
+"है। मार्कर होने के लिए कम r² के साथ बड़ा फैलाव आवश्यक है, लेकिन यह वास्तव में मार्कर है, यह "
+"केवल मापा गया IF ही दिखा सकता है। संख्याएँ उन्हीं मिश्रित पूर्वानुमानों से आती हैं जो ओवरले "
+"दिखाता है।"
+
+#. Translators: a section heading, in capitals in English.
+#: ui/cellaris.slint:781
+msgctxt "CellarisPanel"
+msgid "MODEL"
+msgstr "मॉडल"
+
+#. Translators: opens a file dialog to choose the model file.
+#: ui/cellaris.slint:805
+msgctxt "CellarisPanel"
+msgid "Choose model…"
+msgstr "मॉडल चुनें…"
+
+#. Translators: opens a form to download the model through eov.
+#: ui/cellaris.slint:807
+msgctxt "CellarisPanel"
+msgid "Download model…"
+msgstr "मॉडल डाउनलोड करें…"
+
+#. Translators: opens a file dialog to choose ONNX Runtime's library.
+#: ui/cellaris.slint:809
+msgctxt "CellarisPanel"
+msgid "Choose runtime…"
+msgstr "रनटाइम चुनें…"
+
+#. Translators: above the fields for the model's address and SHA-256.
+#: ui/cellaris.slint:824
+msgctxt "CellarisPanel"
+msgid "Your site's copy of the model, and its SHA-256:"
+msgstr "आपकी साइट की मॉडल प्रति, और उसका SHA-256:"
+
+#. Translators: hex digits are 0–9 and a–f.
+#: ui/cellaris.slint:834
+msgctxt "CellarisPanel"
+msgid "SHA-256 (64 hex digits)"
+msgstr "SHA-256 (64 हेक्स अंक)"
+
+#. Translators: downloads the model from the address given.
+#: ui/cellaris.slint:840
+msgctxt "CellarisPanel"
+msgid "Download"
+msgstr "डाउनलोड करें"

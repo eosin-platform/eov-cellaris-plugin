@@ -11,6 +11,15 @@
 //! - [`engine`] runs it all on a worker thread; [`present`] shows it.
 //! - [`region`] measures a drawn region on the same blended cells.
 //! - [`batch`] predicts whole slides without a window, for `eov batch`.
+//! - [`text`] keeps texts until they are shown, in the language of the
+//!   interface then (and in English for logs and data).
+//!
+//! The interface is translated (`translations/`, see the README): texts
+//! made here are marked with `tr!`, the panel's with `@tr`. What eov keeps
+//! showing for the plugin (toolbar tooltips, the tool, layer names, the
+//! panel's properties, badges) is sent again when the language changes.
+//! Batch runs write English: their output is read by programs and people's
+//! tools, as eov's own batch output is.
 
 pub mod batch;
 pub mod blend;
@@ -24,6 +33,7 @@ pub mod present;
 pub mod region;
 pub mod resample;
 pub mod runtime;
+pub mod text;
 
 #[cfg(test)]
 mod tests;
@@ -45,6 +55,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use text::{Text, text};
 
 /// What an open file dialog is choosing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,16 +86,85 @@ fn host_err(error: HostError) -> String {
     error.message
 }
 
+/// The overlay button's tooltip (eov adds its key).
+fn overlay_tooltip() -> String {
+    // Translators: the tooltip of the toolbar button that shows or hides the
+    // predicted markers; H&E is haematoxylin and eosin. Keep "research use
+    // only".
+    tr!("Cellaris: predicted markers over H&E (research use only)")
+}
+
+/// The overlay button, with the key the settings give it (eov adds the key
+/// to the tooltip, or refuses it if it is taken).
+fn overlay_button(prefs: &Prefs, active: bool) -> ToolbarButtonSpec {
+    ToolbarButtonSpec {
+        button_id: OVERLAY_BUTTON.into(),
+        tooltip: overlay_tooltip(),
+        icon_svg: OVERLAY_ICON.into(),
+        hotkey: (!prefs.overlay_key.is_empty()).then(|| Hotkey::key(&prefs.overlay_key)),
+        active,
+        order: 0,
+        ..Default::default()
+    }
+}
+
+/// The panel button's tooltip.
+fn panel_tooltip() -> String {
+    // Translators: the tooltip of the toolbar button that shows or hides the
+    // Cellaris panel.
+    tr!("Cellaris panel: legend, region readout and model")
+}
+
+/// Why eov refused a registration, as a kept text: in English for logs and
+/// data, and as eov showed it (`shown_reason`) on screen. eov before 1.1
+/// sends no shown reason: its English one is shown, kept in its order in
+/// right-to-left text.
+fn refusal_reason(reason: String, shown_reason: Option<String>) -> Text {
+    Text::new(move || {
+        if text::writing_english() {
+            reason.clone()
+        } else {
+            shown_reason
+                .clone()
+                .unwrap_or_else(|| text::isolate(&reason))
+        }
+    })
+}
+
+/// The tool that outlines a region to measure.
+fn region_tool() -> ToolSpec {
+    let mut tool = ToolSpec::new(
+        REGION_TOOL,
+        engine::readout_job_title(),
+        REGION_ICON,
+        ToolKind::Polygon,
+    );
+    tool.preview_style = Some(present::region_style());
+    tool.edit_layers = Vec::new();
+    tool
+}
+
 impl<B: Backend> Cellaris<B> {
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.shared.lock()
     }
 
+    /// Saves a setting. When it cannot be saved, the log says which, in
+    /// English, and the user is told in their language: eov shows logged
+    /// warnings to the user as they are (PLG-15).
     fn persist<T: serde::Serialize + ?Sized>(&self, key: &str, value: &T) {
         if let Err(error) = self.host.set_setting(key, value) {
-            self.host.warn(format!(
+            self.host.info(format!(
                 "Cellaris could not save the setting {key}: {error}"
             ));
+            self.host.notify(
+                NotifyLevel::Warning,
+                // Translators: a warning; {} is eov's reason, in English.
+                tr!(
+                    "Cellaris could not save its settings: {}",
+                    text::isolate(&error.message)
+                ),
+            );
         }
     }
 
@@ -265,7 +345,7 @@ impl<B: Backend> Cellaris<B> {
             }
             Err(error) => self
                 .host
-                .notify_error("The Cellaris panel could not open", error.message),
+                .notify_error(tr!("The Cellaris panel could not open"), error.message),
         }
         self.refresh(&mut st);
     }
@@ -317,7 +397,8 @@ impl<B: Backend> Cellaris<B> {
 
     fn measure_roi(&self) -> Result<(), String> {
         let Some(file_id) = self.active_file() else {
-            self.host.notify(NotifyLevel::Info, "Open a slide first.");
+            self.host
+                .notify(NotifyLevel::Info, tr!("Open a slide first."));
             return Ok(());
         };
         match self.host.roi(file_id).map_err(host_err)? {
@@ -326,8 +407,12 @@ impl<B: Backend> Cellaris<B> {
             }
             _ => self.host.notify(
                 NotifyLevel::Info,
-                "This slide has no region of interest; draw one with the ROI tool, or outline a \
-                 region with the Cellaris region tool.",
+                tr!(
+                    // Translators: the ROI tool is eov's region-of-interest tool;
+                    // "Cellaris region readout" is the name of Cellaris's tool (use
+                    // the same words as there).
+                    "This slide has no region of interest; draw one with the ROI tool, or outline a region with the Cellaris region readout tool."
+                ),
             ),
         }
         Ok(())
@@ -390,7 +475,7 @@ impl<B: Backend> Cellaris<B> {
             if confirmed {
                 job.readout.state = ReadoutState::Running;
                 job.started = Instant::now();
-                job.job = self.host.start_job("Cellaris region readout", true).ok();
+                job.job = self.host.start_job(engine::readout_job_title(), true).ok();
             } else {
                 job.readout.state = ReadoutState::Cancelled;
             }
@@ -410,12 +495,13 @@ impl<B: Backend> Cellaris<B> {
                 self.host.copy_text(text).map_err(host_err)?;
                 self.host.notify(
                     NotifyLevel::Success,
-                    "Readout copied as tab-separated text.",
+                    tr!("Readout copied as tab-separated text."),
                 );
             }
-            None => self
-                .host
-                .notify(NotifyLevel::Info, "There is no finished readout to copy."),
+            None => self.host.notify(
+                NotifyLevel::Info,
+                tr!("There is no finished readout to copy."),
+            ),
         }
         Ok(())
     }
@@ -446,31 +532,36 @@ impl<B: Backend> Cellaris<B> {
     }
 
     fn choose(&self, choice: Choice) -> Result<(), String> {
+        // Translators: a kind of file in the file dialog.
+        let runtime_files = || tr!("ONNX Runtime library");
         let filters = match choice {
             Choice::Model => vec![FileFilter {
-                name: "ONNX model".into(),
+                // Translators: a kind of file in the file dialog.
+                name: tr!("ONNX model"),
                 extensions: vec!["onnx".into()],
             }],
             // Versioned Linux names (libonnxruntime.so.1.22.0) have no
             // usable extension, so nothing is filtered there.
             Choice::Runtime if cfg!(target_os = "windows") => vec![FileFilter {
-                name: "ONNX Runtime library".into(),
+                name: runtime_files(),
                 extensions: vec!["dll".into()],
             }],
             Choice::Runtime if cfg!(target_os = "macos") => vec![FileFilter {
-                name: "ONNX Runtime library".into(),
+                name: runtime_files(),
                 extensions: vec!["dylib".into()],
             }],
             Choice::Runtime => Vec::new(),
         };
         let title = match choice {
-            Choice::Model => "Choose a Cellaris marker model",
-            Choice::Runtime => "Choose the ONNX Runtime library",
+            // Translators: the title of the file dialog.
+            Choice::Model => tr!("Choose a Cellaris marker model"),
+            // Translators: the title of the file dialog.
+            Choice::Runtime => tr!("Choose the ONNX Runtime library"),
         };
         let request = self
             .host
             .open_file_dialog(FileDialogArgs {
-                title: Some(title.into()),
+                title: Some(title),
                 filters,
                 ..Default::default()
             })
@@ -541,10 +632,11 @@ impl<B: Backend> Cellaris<B> {
             return;
         }
         let Some(sha256) = config::parse_sha256(sha256) else {
-            st.download_note = Some(
+            st.download_note = Some(text!(tr!(
+                // Translators: SHA-256 is a checksum (not translated); hex digits
+                // are 0–9 and a–f.
                 "Enter the model's SHA-256 (64 hex digits): the download is checked against it."
-                    .into(),
-            );
+            )));
             self.refresh(&mut st);
             return;
         };
@@ -574,12 +666,13 @@ impl<B: Backend> Cellaris<B> {
             }
             Err(error) if error.is_unsupported() => {
                 st.model_store = Support::No;
-                st.download_note = Some(
+                st.download_note = Some(text!(tr!(
+                    // Translators: "Choose model…" is the panel's button: use the
+                    // same words as there.
                     "This eov cannot download models: choose the model file with Choose model\u{2026}"
-                        .into(),
-                );
+                )));
             }
-            Err(error) => st.download_note = Some(error.message),
+            Err(error) => st.download_note = Some(Text::plain(error.message)),
         }
         self.refresh(&mut st);
     }
@@ -600,7 +693,7 @@ impl<B: Backend> Cellaris<B> {
         st.model_fetch = None;
         let Some(path) = path else {
             // eov has told the user why; the panel keeps it in view.
-            st.download_note = error.filter(|_| !cancelled);
+            st.download_note = error.filter(|_| !cancelled).map(Text::plain);
             self.refresh(&mut st);
             return;
         };
@@ -613,6 +706,47 @@ impl<B: Backend> Cellaris<B> {
         drop(st);
         self.persist(keys::MODEL, &path);
         let mut st = self.lock();
+        self.refresh(&mut st);
+        drop(st);
+        self.shared.wake();
+    }
+
+    /// The SDK has switched `tr!` to the language the user chose: what eov
+    /// shows for the plugin is sent again in it. The panel's own texts
+    /// follow by themselves; its properties, the badges, the status bar,
+    /// the marks and labels on slides go again with the refresh, and the
+    /// cells' value tooltips with their rasters.
+    fn language_changed(&self) {
+        // eov said in the old language why it refused the overlay's key: the
+        // button is added again (with its state), and eov answers in the new
+        // language if it still refuses it, without warning the user twice.
+        let overlay_again = {
+            let mut st = self.lock();
+            st.refused
+                .remove(OVERLAY_BUTTON)
+                .map(|_| overlay_button(&st.prefs, st.overlay))
+        };
+        let refused = overlay_again.is_some();
+        if let Some(button) = overlay_again {
+            let _ = self.host.add_toolbar_button(button);
+        }
+        for (button_id, tooltip) in [
+            (OVERLAY_BUTTON, overlay_tooltip()),
+            (PANEL_BUTTON, panel_tooltip()),
+        ] {
+            if button_id == OVERLAY_BUTTON && refused {
+                continue;
+            }
+            let _ = self.host.update_toolbar_button(ButtonUpdate {
+                button_id: button_id.into(),
+                tooltip: Some(tooltip),
+                ..Default::default()
+            });
+        }
+        let _ = self.host.register_tool(region_tool());
+        let mut st = self.lock();
+        engine::rename_layers(&self.host, &st);
+        st.relabel();
         self.refresh(&mut st);
         drop(st);
         self.shared.wake();
@@ -662,7 +796,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
     fn create(host: Host, init: PluginInit) -> Result<Self, String> {
         let (mut prefs, problems) = Prefs::from_settings(&init.settings);
         for problem in &problems {
-            host.info(format!("Cellaris {problem}"));
+            host.info(format!("Cellaris {}", problem.english()));
         }
         let model_store = use_stored_model(&host, &mut prefs);
         let paths = Paths {
@@ -671,11 +805,13 @@ impl<B: Backend> Plugin for Cellaris<B> {
             cache_dir: PathBuf::from(&init.cache_dir),
         };
         // Offered in the window too, for `eov batch list`; hosts from
-        // before batch runs answer Unsupported.
+        // before batch runs answer Unsupported. Anything else is a mistake
+        // in the command's fixed spec: for the log, not a warning (eov
+        // shows those to the user, untranslated, PLG-15).
         if let Err(error) = host.register_batch_command(batch::command())
             && !error.is_unsupported()
         {
-            host.warn(format!(
+            host.info(format!(
                 "Cellaris could not offer its batch command: {error}"
             ));
         }
@@ -694,33 +830,17 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 _backend: PhantomData,
             });
         }
-        // The host adds the key to the tooltip, or refuses it if taken.
-        host.add_toolbar_button(ToolbarButtonSpec {
-            button_id: OVERLAY_BUTTON.into(),
-            tooltip: "Cellaris: predicted markers over H&E (research use only)".into(),
-            icon_svg: OVERLAY_ICON.into(),
-            hotkey: (!prefs.overlay_key.is_empty()).then(|| Hotkey::key(&prefs.overlay_key)),
-            order: 0,
-            ..Default::default()
-        })
-        .map_err(host_err)?;
+        host.add_toolbar_button(overlay_button(&prefs, false))
+            .map_err(host_err)?;
         host.add_toolbar_button(ToolbarButtonSpec {
             button_id: PANEL_BUTTON.into(),
-            tooltip: "Cellaris panel: legend, region readout and model".into(),
+            tooltip: panel_tooltip(),
             icon_svg: PANEL_ICON.into(),
             order: 1,
             ..Default::default()
         })
         .map_err(host_err)?;
-        let mut tool = ToolSpec::new(
-            REGION_TOOL,
-            "Cellaris region readout",
-            REGION_ICON,
-            ToolKind::Polygon,
-        );
-        tool.preview_style = Some(present::region_style());
-        tool.edit_layers = Vec::new();
-        host.register_tool(tool).map_err(host_err)?;
+        host.register_tool(region_tool()).map_err(host_err)?;
 
         let mut state = State::new(prefs.clone(), paths.clone());
         state.setting_problems = problems;
@@ -730,6 +850,9 @@ impl<B: Backend> Plugin for Cellaris<B> {
         let handle = std::thread::Builder::new()
             .name("cellaris-worker".into())
             .spawn(move || worker.run())
+            // In English: eov logs it and writes it to the audit log as it
+            // is, and shows it to the user inside its own translated
+            // message.
             .map_err(|e| format!("could not start the Cellaris worker: {e}"))?;
         Ok(Self {
             host,
@@ -787,7 +910,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
                     && let Some(job) = file.readout
                     && let Some(host_job) = job.job
                 {
-                    host_job.finish(Some("the slide was closed".into()));
+                    host_job.finish(Some(engine::slide_closed()));
                 }
                 if st.active_file == Some(file_id) {
                     st.active_file = None;
@@ -831,7 +954,7 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 Some(region) => self.set_region(file_id, Some(region), false),
                 None => self.host.notify(
                     NotifyLevel::Info,
-                    "Outline a region with at least three points.",
+                    tr!("Outline a region with at least three points."),
                 ),
             },
             HostEvent::ObjectEdited { object, shape } => {
@@ -881,26 +1004,49 @@ impl<B: Backend> Plugin for Cellaris<B> {
                 self.refresh(&mut st);
             }
             HostEvent::RoiChanged { file_id, roi } => self.roi_changed(file_id, roi),
+            HostEvent::LanguageChanged { .. } => self.language_changed(),
             HostEvent::DisplayChanged { pane, display } => {
                 let mut st = self.lock();
                 st.displays.insert(pane, display);
                 self.refresh(&mut st);
             }
-            HostEvent::RegistrationRefused { what, id, reason } => {
-                // eov has warned and logged it; the panel keeps it in view.
-                let mut st = self.lock();
+            HostEvent::RegistrationRefused {
+                what,
+                id,
+                reason,
+                shown_reason,
+                ..
+            } => {
+                // eov has warned and logged it; the panel keeps it in view,
+                // in eov's words as it shows them (from eov before 1.1, its
+                // English ones). A newer answer replaces an older one.
+                let reason = refusal_reason(reason, shown_reason);
+                let refused = id.clone();
                 let problem = match (what.as_str(), id.as_str()) {
-                    ("hotkey", OVERLAY_BUTTON) => format!(
-                        "{reason} Another key can be set as {} in Cellaris's settings.json \
-                         (\"\" for none).",
-                        keys::OVERLAY_KEY
-                    ),
+                    ("hotkey", OVERLAY_BUTTON) => text!(tr!(
+                        // Translators: {reason} is eov's explanation, a whole
+                        // sentence; {key} is the name of a setting in
+                        // settings.json, and "" an empty value there (neither
+                        // is translated).
+                        "{reason} Another key can be set as {key} in Cellaris's settings.json (\"\" for none).",
+                        reason,
+                        key = keys::OVERLAY_KEY
+                    )),
                     ("hotkey", _) => reason,
-                    _ => format!("eov refused the {what} of {id}: {reason}"),
+                    _ => text!(tr!(
+                        // Translators: eov did not accept something Cellaris
+                        // registered: {id} is its identifier and {what} the kind of
+                        // registration as eov names it in English, such as
+                        // "hotkey" (neither is translated); {reason} is eov's
+                        // explanation, a whole sentence.
+                        "eov refused to register {id} ({what}): {reason}",
+                        what = text::isolate(&what),
+                        id = text::isolate(&id),
+                        reason
+                    )),
                 };
-                if !st.setting_problems.contains(&problem) {
-                    st.setting_problems.push(problem);
-                }
+                let mut st = self.lock();
+                st.refused.insert(refused, problem);
                 self.refresh(&mut st);
             }
             _ => {}

@@ -12,6 +12,11 @@
 //! summary keeps sums and fixed histograms.
 //!
 //! **Research use only**: the notice heads the CSV and the summary.
+//!
+//! What a batch run writes is in English, whatever the language of eov's
+//! interface: the files are data, and the messages go to the terminal and
+//! the run's manifest with eov's own (English) output. Texts shared with
+//! the window are written with [`Text::english`].
 
 use crate::blend::{Accum, CellData, Channels, Ramp, expected_bits, finalize};
 use crate::config::{Prefs, RESEARCH_NOTICE};
@@ -22,6 +27,7 @@ use crate::model::{Backend, LoadError, LoadRequest, ModelInfo, Predictor, Stoppe
 use crate::present::{self, WindowCounts};
 use crate::region::{BlockUse, Fit, Region, block_use};
 use crate::resample::{self, WindowImage, WindowKind};
+use crate::text::Text;
 use eov_plugin_api::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -502,7 +508,8 @@ impl<B: Backend> Slides<B> {
             Err(error) => Err(format!(
                 "{}: {} (a model and ONNX Runtime can be given with --param model=PATH and \
                  --param runtime=PATH)",
-                error.summary, error.detail
+                error.summary.english(),
+                error.detail.english()
             )),
         }
     }
@@ -594,7 +601,7 @@ fn scale_error(problem: &ScaleProblem, info: &ModelInfo) -> String {
              run with --param assume_mpp=true to assume the model's {:.3} \u{b5}m/px",
             info.mpp
         ),
-        other => other.message(),
+        other => other.message().english(),
     }
 }
 
@@ -1023,6 +1030,7 @@ impl Scan<'_> {
             format!(
                 ", {} left",
                 present::duration(elapsed / done as f64 * total.saturating_sub(done) as f64)
+                    .english()
             )
         };
         let _ = self.host.batch_progress(
@@ -1046,7 +1054,7 @@ impl Scan<'_> {
     ) -> (Value, Option<String>) {
         let c = &self.counts;
         let info = self.info;
-        let mut warnings = present::slide_notes(
+        let mut warnings: Vec<String> = present::slide_notes(
             info,
             Some(self.grid),
             file,
@@ -1055,8 +1063,11 @@ impl Scan<'_> {
                 tissue: c.windows_predicted as usize,
                 unusual: c.windows_unusual as usize,
             },
-        );
-        warnings.extend(info.notes.iter().cloned());
+        )
+        .iter()
+        .map(Text::english)
+        .collect();
+        warnings.extend(info.notes.iter().map(Text::english));
         let mut incomplete = Vec::new();
         if c.windows_failed > 0 {
             incomplete.push(format!(

@@ -252,7 +252,8 @@ pub enum ReadoutState {
     Running,
     Done,
     Cancelled,
-    Failed(String),
+    /// Shown in the panel.
+    Failed(crate::text::Text),
 }
 
 /// The measurement of one region.

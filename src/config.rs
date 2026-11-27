@@ -1,7 +1,8 @@
 //! Identifiers and persisted preferences.
 
 use crate::markers::{DEFAULT_MARKERS, DisplayMode, MAX_MARKERS};
-use eov_plugin_api::prelude::{Map, Value};
+use crate::text::{Text, isolate, text};
+use eov_plugin_api::prelude::{Map, Value, tr};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -20,8 +21,18 @@ pub const PANEL_UI: &str = "ui/cellaris.slint";
 pub const PANEL_COMPONENT: &str = "CellarisPanel";
 pub const PANEL_WIDTH: f32 = 340.0;
 
-/// The statement shown wherever predictions are (CEL-9, §14.6).
+/// The statement shown wherever predictions are (CEL-9, §14.6), as files
+/// and copied readouts carry it; [`research_notice`] shows it.
 pub const RESEARCH_NOTICE: &str = "PREDICTED \u{2014} research use only, not for diagnosis";
+
+/// [`RESEARCH_NOTICE`] in the language of the interface, wherever eov shows
+/// it: badges, the panel, the slide.
+pub fn research_notice() -> String {
+    // Translators: shown wherever predicted colours are. Keep all of its
+    // meaning: the colours are a model's prediction, not a measurement; for
+    // research only; never for diagnosis.
+    tr!("PREDICTED \u{2014} research use only, not for diagnosis")
+}
 
 pub const OVERLAY_ICON: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" \
     fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><circle cx=\"12\" cy=\"12\" r=\"8\"/>\
@@ -106,12 +117,20 @@ pub mod keys {
 impl Prefs {
     /// Reads the settings the host kept; a bad value falls back to its
     /// default and is reported.
-    pub fn from_settings(settings: &Map<String, Value>) -> (Prefs, Vec<String>) {
+    pub fn from_settings(settings: &Map<String, Value>) -> (Prefs, Vec<Text>) {
         let mut prefs = Prefs::default();
         let mut problems = Vec::new();
         let mut refused = Vec::new();
         let mut bad = |key: &str, value: &Value| {
-            problems.push(format!("ignored the setting {key} = {value}"));
+            let (key, value) = (key.to_string(), value.to_string());
+            problems.push(text!(tr!(
+                // Translators: {key} is the name of a setting in Cellaris's
+                // settings.json and {value} its value there; neither is
+                // translated.
+                "ignored the setting {key} = {value}",
+                key = isolate(&key),
+                value = isolate(&value)
+            )));
         };
         for (key, value) in settings {
             match key.as_str() {
@@ -184,9 +203,15 @@ impl Prefs {
                                 if crate::markers::window_is_valid(&name, low, high) {
                                     prefs.windows.insert(name, [low, high]);
                                 } else {
-                                    refused.push(format!(
-                                        "ignored the display window {low}\u{2013}{high} of {name}"
-                                    ));
+                                    refused.push(text!(tr!(
+                                        // Translators: {low} and {high} are the ends of a
+                                        // marker's display window as settings.json gives
+                                        // them, {name} the marker (not translated).
+                                        "ignored the display window {low}\u{2013}{high} of {name}",
+                                        low,
+                                        high,
+                                        name = isolate(&name)
+                                    )));
                                 }
                             }
                         }
@@ -286,6 +311,12 @@ mod tests {
         let (prefs, problems) = Prefs::from_settings(&settings);
         assert_eq!((prefs.model_url, prefs.model_sha256), (None, None));
         assert_eq!(problems.len(), 2, "{problems:?}");
+    }
+
+    #[test]
+    fn the_notice_shown_is_the_one_files_carry() {
+        // Tests run in English.
+        assert_eq!(research_notice(), RESEARCH_NOTICE);
     }
 
     #[test]

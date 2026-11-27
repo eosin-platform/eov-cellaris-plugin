@@ -1,6 +1,11 @@
 // The Cellaris panel. Every value is pushed by the plugin (Surface::set);
 // controls keep no state of their own, so what is shown is always what the
 // plugin holds. Callbacks arrive as Plugin::ui_callback.
+//
+// The panel's own texts are translated with @tr (eov compiles it with the
+// plugin's catalogs); the plugin sends its texts translated, and again when
+// the language changes. eov sets eov-rtl for right-to-left languages: text
+// that starts a line is then aligned right.
 
 import { LineEdit, Slider, ScrollView } from "std-widgets.slint";
 
@@ -26,6 +31,19 @@ export struct CardRow {
     value: string,
 }
 
+// The language of the interface beyond its texts and direction, from the
+// panel's `eov-language` (a tag such as "pt-BR").
+global Script {
+    in property <string> language;
+    /// The size for small text (`font-size: Script.text-size(11px)`): at
+    /// least 12 px in Hindi, other languages keep `size`. Below 12 px eov's
+    /// GPU renderer draws Devanagari with overlapping and missing pieces at
+    /// a scale factor of 1.
+    public pure function text-size(size: length) -> length {
+        return root.language == "hi" ? max(size, 12px) : size;
+    }
+}
+
 global Colours {
     out property <color> surface: #252526;
     out property <color> raised: #3e444c;
@@ -43,13 +61,13 @@ global Colours {
 
 component Heading inherits Text {
     color: Colours.muted;
-    font-size: 11px;
+    font-size: Script.text-size(11px);
     font-weight: 600;
 }
 
 component Note inherits Text {
     color: Colours.muted;
-    font-size: 11px;
+    font-size: Script.text-size(11px);
     wrap: word-wrap;
 }
 
@@ -79,9 +97,143 @@ component Action inherits Rectangle {
     }
 }
 
+// Up to three Actions side by side while they fit in `available`;
+// otherwise the third moves onto a second line, or each gets a line of its
+// own. Slint has no flow layout: the arrangement is chosen from the
+// buttons' widths, measured from their texts (as Action sizes itself). An
+// empty text is no button.
+component ButtonFlow inherits Rectangle {
+    // The width the row may take; not the row's own width, which follows
+    // the arrangement.
+    in property <length> available;
+    in property <string> first;
+    in property <string> second;
+    in property <string> third;
+    in property <bool> first-enabled: true;
+    in property <bool> second-enabled: true;
+    in property <bool> third-enabled: true;
+    callback first-clicked();
+    callback second-clicked();
+    callback third-clicked();
+
+    property <length> gap: 6px;
+    property <length> first-width: root.first == "" ? 0px : first-text.preferred-width + 16px;
+    property <length> second-width: root.second == "" ? 0px : second-text.preferred-width + 16px;
+    property <length> third-width: root.third == "" ? 0px : third-text.preferred-width + 16px;
+    property <int> count: (root.first == "" ? 0 : 1) + (root.second == "" ? 0 : 1) + (root.third == "" ? 0 : 1);
+    // 1: one line; 2: the first two, then the third; 3: a line each.
+    property <int> lines: root.first-width + root.second-width + root.third-width + max(0, root.count - 1) * root.gap <= root.available ? 1 : root.count == 3 && root.first-width + root.second-width + root.gap <= root.available ? 2 : 3;
+
+    // Measures only: placed outside the layout, never drawn.
+    first-text := Text {
+        x: 0px;
+        y: 0px;
+        visible: false;
+        accessible-role: none;
+        text: root.first;
+        font-size: 12px;
+    }
+
+    second-text := Text {
+        x: 0px;
+        y: 0px;
+        visible: false;
+        accessible-role: none;
+        text: root.second;
+        font-size: 12px;
+    }
+
+    third-text := Text {
+        x: 0px;
+        y: 0px;
+        visible: false;
+        accessible-role: none;
+        text: root.third;
+        font-size: 12px;
+    }
+
+    VerticalLayout {
+        spacing: root.gap;
+
+        if root.lines == 1: HorizontalLayout {
+            spacing: root.gap;
+            if root.first != "": Action {
+                text: root.first;
+                enabled: root.first-enabled;
+                clicked => {
+                    root.first-clicked();
+                }
+            }
+            if root.second != "": Action {
+                text: root.second;
+                enabled: root.second-enabled;
+                clicked => {
+                    root.second-clicked();
+                }
+            }
+            if root.third != "": Action {
+                text: root.third;
+                enabled: root.third-enabled;
+                clicked => {
+                    root.third-clicked();
+                }
+            }
+        }
+
+        if root.lines == 2: HorizontalLayout {
+            spacing: root.gap;
+            Action {
+                text: root.first;
+                enabled: root.first-enabled;
+                clicked => {
+                    root.first-clicked();
+                }
+            }
+            Action {
+                text: root.second;
+                enabled: root.second-enabled;
+                clicked => {
+                    root.second-clicked();
+                }
+            }
+        }
+        if root.lines == 2: Action {
+            text: root.third;
+            enabled: root.third-enabled;
+            clicked => {
+                root.third-clicked();
+            }
+        }
+
+        if root.lines == 3 && root.first != "": Action {
+            text: root.first;
+            enabled: root.first-enabled;
+            clicked => {
+                root.first-clicked();
+            }
+        }
+        if root.lines == 3 && root.second != "": Action {
+            text: root.second;
+            enabled: root.second-enabled;
+            clicked => {
+                root.second-clicked();
+            }
+        }
+        if root.lines == 3 && root.third != "": Action {
+            text: root.third;
+            enabled: root.third-enabled;
+            clicked => {
+                root.third-clicked();
+            }
+        }
+    }
+}
+
 component Toggle inherits Rectangle {
     in property <bool> on;
     in property <string> text;
+    // Where the label starts: right in right-to-left languages.
+    in property <TextHorizontalAlignment> text-alignment: left;
     callback clicked();
     min-height: 22px;
 
@@ -101,7 +253,7 @@ component Toggle inherits Rectangle {
                 if root.on: Text {
                     text: "\u{2713}";
                     color: white;
-                    font-size: 11px;
+                    font-size: Script.text-size(11px);
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -112,6 +264,7 @@ component Toggle inherits Rectangle {
             text: root.text;
             color: Colours.text;
             font-size: 12px;
+            horizontal-alignment: root.text-alignment;
             vertical-alignment: center;
             wrap: word-wrap;
             horizontal-stretch: 1;
@@ -151,13 +304,14 @@ component Swatch inherits Rectangle {
 }
 
 export component CellarisPanel inherits Rectangle {
-    in property <string> notice: "PREDICTED \u{2014} research use only, not for diagnosis";
+    // Translators: keep the full meaning: predicted, research only, no diagnosis.
+    in property <string> notice: @tr("PREDICTED \u{2014} research use only, not for diagnosis");
     in property <bool> overlay-on: false;
     in property <string> status: "";
     in property <int> status-level: 0;
     in property <string> status-detail: "";
     in property <bool> can-retry: false;
-    in property <string> slide-name: "No slide";
+    in property <string> slide-name: @tr("No slide");
     in property <string> slide-notes: "";
     in property <float> progress: -1;
     in property <string> progress-text: "";
@@ -190,6 +344,19 @@ export component CellarisPanel inherits Rectangle {
     in-out property <string> download-sha256: "";
     in property <string> download-note: "";
     in property <bool> download-note-error: false;
+    // Set by eov: the interface is written from right to left.
+    in property <bool> eov-rtl: false;
+    // Set by eov: the language of the interface (see Script).
+    in property <string> eov-language <=> Script.language;
+
+    // Where text that starts a line is aligned.
+    property <TextHorizontalAlignment> start-alignment: root.eov-rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+
+    // A name inserted into a translated text keeps its own order in
+    // right-to-left languages.
+    pure function isolate(text: string) -> string {
+        return root.eov-rtl ? "\u{2068}" + text + "\u{2069}" : text;
+    }
 
     callback toggle-overlay();
     callback set-opacity(float);
@@ -233,10 +400,12 @@ export component CellarisPanel inherits Rectangle {
                     font-size: 15px;
                     font-weight: 600;
                     horizontal-stretch: 1;
+                    horizontal-alignment: root.start-alignment;
                     vertical-alignment: center;
                 }
                 Action {
-                    text: "Close";
+                    // Translators: closes the Cellaris panel.
+                    text: @tr("Close");
                     horizontal-stretch: 0;
                     clicked => {
                         root.close-panel();
@@ -258,12 +427,15 @@ export component CellarisPanel inherits Rectangle {
                         color: Colours.notice-text;
                         font-size: 12px;
                         font-weight: 700;
+                        horizontal-alignment: root.start-alignment;
                         wrap: word-wrap;
                     }
                     Text {
-                        text: "The colours show what a model predicts the immunofluorescence would be. They are not measurements: check them against measured IF before relying on them.";
+                        // Translators: keep the full meaning; IF is immunofluorescence.
+                        text: @tr("The colours show what a model predicts the immunofluorescence would be. They are not measurements: check them against measured IF before relying on them.");
                         color: Colours.notice-text;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
+                        horizontal-alignment: root.start-alignment;
                         wrap: word-wrap;
                     }
                 }
@@ -275,14 +447,17 @@ export component CellarisPanel inherits Rectangle {
                     text: root.status;
                     color: root.status-level == 3 ? Colours.error : root.status-level == 2 ? Colours.warning : Colours.text;
                     font-size: 12px;
+                    horizontal-alignment: root.start-alignment;
                     wrap: word-wrap;
                 }
                 if root.status-detail != "": Note {
                     text: root.status-detail;
+                    horizontal-alignment: root.start-alignment;
                 }
                 if root.can-retry: HorizontalLayout {
                     Action {
-                        text: "Retry";
+                        // Translators: tries again what failed (the model, cells).
+                        text: @tr("Retry");
                         horizontal-stretch: 0;
                         clicked => {
                             root.retry();
@@ -292,22 +467,32 @@ export component CellarisPanel inherits Rectangle {
                 }
             }
 
-            Heading { text: "SLIDE"; }
+            Heading {
+                // Translators: a section heading, in capitals in English.
+                text: @tr("SLIDE");
+                horizontal-alignment: root.start-alignment;
+            }
             Text {
                 text: root.slide-name;
                 color: Colours.text;
                 font-size: 12px;
+                horizontal-alignment: root.start-alignment;
                 wrap: word-wrap;
             }
             if root.slide-notes != "": Note {
                 text: root.slide-notes;
+                horizontal-alignment: root.start-alignment;
             }
 
-            Heading { text: "PREDICTED MARKERS"; }
+            Heading {
+                // Translators: a section heading, in capitals in English.
+                text: @tr("PREDICTED MARKERS");
+                horizontal-alignment: root.start-alignment;
+            }
             HorizontalLayout {
                 spacing: 8px;
                 Action {
-                    text: root.overlay-on ? "Hide predictions" : "Show predictions";
+                    text: root.overlay-on ? @tr("Hide predictions") : @tr("Show predictions");
                     clicked => {
                         root.toggle-overlay();
                     }
@@ -320,6 +505,7 @@ export component CellarisPanel inherits Rectangle {
                 }
                 Note {
                     text: root.progress-text;
+                    horizontal-alignment: root.start-alignment;
                 }
             }
 
@@ -328,6 +514,7 @@ export component CellarisPanel inherits Rectangle {
                 Toggle {
                     on: row.visible;
                     text: row.name;
+                    text-alignment: root.start-alignment;
                     horizontal-stretch: 1;
                     clicked => {
                         root.set-marker-visible(index, !row.visible);
@@ -344,7 +531,7 @@ export component CellarisPanel inherits Rectangle {
                     window-label := Text {
                         text: row.window == "" ? "" : row.window + (index == root.window-editor ? " \u{25be}" : " \u{25b8}");
                         color: row.adjusted ? Colours.notice-text : Colours.muted;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
                         vertical-alignment: center;
                     }
                     TouchArea {
@@ -360,16 +547,20 @@ export component CellarisPanel inherits Rectangle {
                 spacing: 2px;
                 padding-left: 22px;
                 Text {
-                    text: "Display window of " + root.markers[root.window-editor].name + " (arcsinh)";
+                    // Translators: {} is a marker, such as Pan-CK.
+                    text: @tr("Display window of {} (arcsinh)", root.isolate(root.markers[root.window-editor].name));
                     color: Colours.muted;
-                    font-size: 11px;
+                    font-size: Script.text-size(11px);
+                    horizontal-alignment: root.start-alignment;
                 }
                 HorizontalLayout {
                     spacing: 6px;
                     Text {
-                        text: "Black";
+                        // Translators: the low end of a marker's display window: at or below it nothing is drawn (black in fluorescence style).
+                        text: @tr("Low");
                         color: Colours.text;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
+                        horizontal-alignment: root.start-alignment;
                         vertical-alignment: center;
                         min-width: 34px;
                     }
@@ -385,7 +576,7 @@ export component CellarisPanel inherits Rectangle {
                     Text {
                         text: (round(root.window-low * 100) / 100) + "";
                         color: Colours.muted;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
                         vertical-alignment: center;
                         min-width: 34px;
                     }
@@ -393,9 +584,11 @@ export component CellarisPanel inherits Rectangle {
                 HorizontalLayout {
                     spacing: 6px;
                     Text {
-                        text: "White";
+                        // Translators: the high end of a marker's display window: at or above it the marker is drawn in its full colour.
+                        text: @tr("High");
                         color: Colours.text;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
+                        horizontal-alignment: root.start-alignment;
                         vertical-alignment: center;
                         min-width: 34px;
                     }
@@ -411,7 +604,7 @@ export component CellarisPanel inherits Rectangle {
                     Text {
                         text: (round(root.window-high * 100) / 100) + "";
                         color: Colours.muted;
-                        font-size: 11px;
+                        font-size: Script.text-size(11px);
                         vertical-alignment: center;
                         min-width: 34px;
                     }
@@ -419,12 +612,14 @@ export component CellarisPanel inherits Rectangle {
                 HorizontalLayout {
                     spacing: 8px;
                     Note {
-                        text: "Only how predictions are drawn changes; readouts and batch runs keep their values.";
+                        text: @tr("Only how predictions are drawn changes; readouts and batch runs keep their values.");
+                        horizontal-alignment: root.start-alignment;
                         horizontal-stretch: 1;
                         height: self.preferred-height;
                     }
                     Action {
-                        text: "Reset";
+                        // Translators: resets a marker's display window to Cellaris's own.
+                        text: @tr("Reset");
                         enabled: root.window-adjusted;
                         horizontal-stretch: 0;
                         clicked => {
@@ -437,7 +632,8 @@ export component CellarisPanel inherits Rectangle {
             HorizontalLayout {
                 spacing: 8px;
                 Text {
-                    text: "Opacity";
+                    // Translators: how opaque the predicted colours are drawn.
+                    text: @tr("Opacity");
                     color: Colours.text;
                     font-size: 12px;
                     vertical-alignment: center;
@@ -452,9 +648,10 @@ export component CellarisPanel inherits Rectangle {
                     }
                 }
                 Text {
-                    text: round(root.overlay-opacity * 100) + " %";
+                    // Translators: {} is the opacity, in percent.
+                    text: @tr("{} %", round(root.overlay-opacity * 100));
                     color: Colours.muted;
-                    font-size: 11px;
+                    font-size: Script.text-size(11px);
                     vertical-alignment: center;
                     min-width: 34px;
                 }
@@ -462,31 +659,41 @@ export component CellarisPanel inherits Rectangle {
 
             Toggle {
                 on: root.fluorescence;
-                text: "Fluorescence style: colour on black over all tissue";
+                text: @tr("Fluorescence style: colour on black over all tissue");
+                text-alignment: root.start-alignment;
                 clicked => {
                     root.set-fluorescence(!root.fluorescence);
                 }
             }
             Toggle {
                 on: root.assume-mpp;
-                text: "Assume the model's pixel size for slides that report none";
+                // Translators: a check box; other messages quote its first words.
+                text: @tr("Assume the model's pixel size for slides that report none");
+                text-alignment: root.start-alignment;
                 clicked => {
                     root.set-assume-mpp(!root.assume-mpp);
                 }
             }
             Note {
-                text: "Colours are chosen to stay distinct with red-green and blue-yellow colour blindness; hide markers to look at one at a time. Areas still being computed are veiled; failed ones are outlined in red.";
+                text: @tr("Colours are chosen to stay distinct with red-green and blue-yellow colour blindness; hide markers to look at one at a time. Areas still being computed are veiled; failed ones are outlined in red.");
+                horizontal-alignment: root.start-alignment;
             }
 
-            Heading { text: "REGION READOUT"; }
+            Heading {
+                // Translators: a section heading, in capitals in English: statistics of the model's predicted values over a region (not a measurement).
+                text: @tr("REGION READOUT");
+                horizontal-alignment: root.start-alignment;
+            }
             Text {
                 text: root.readout-status;
                 color: Colours.text;
                 font-size: 12px;
+                horizontal-alignment: root.start-alignment;
                 wrap: word-wrap;
             }
             if root.readout-detail != "": Note {
                 text: root.readout-detail;
+                horizontal-alignment: root.start-alignment;
             }
             if root.readout-running: Bar {
                 value: root.readout-progress;
@@ -496,10 +703,14 @@ export component CellarisPanel inherits Rectangle {
 
                 HorizontalLayout {
                     spacing: 8px;
-                    Text { text: "marker"; color: Colours.muted; font-size: 11px; horizontal-stretch: 1; }
-                    Text { text: "mean"; color: Colours.muted; font-size: 11px; width: 40px; horizontal-alignment: right; }
-                    Text { text: "spread"; color: Colours.muted; font-size: 11px; width: 44px; horizontal-alignment: right; }
-                    Text { text: "density r\u{b2}"; color: Colours.muted; font-size: 11px; width: 64px; horizontal-alignment: right; }
+                    // Translators: a column of the readout: the marker.
+                    Text { text: @tr("marker"); color: Colours.muted; font-size: Script.text-size(11px); horizontal-stretch: 1; horizontal-alignment: root.start-alignment; }
+                    // Translators: a narrow column of the readout: the mean predicted value.
+                    Text { text: @tr("mean"); color: Colours.muted; font-size: Script.text-size(11px); width: 40px; horizontal-alignment: right; }
+                    // Translators: a narrow column of the readout: how much the value varies.
+                    Text { text: @tr("spread"); color: Colours.muted; font-size: Script.text-size(11px); width: 44px; horizontal-alignment: right; }
+                    // Translators: a narrow column: how much optical density alone explains.
+                    Text { text: @tr("density r\u{b2}"); color: Colours.muted; font-size: Script.text-size(11px); width: 64px; horizontal-alignment: right; }
                 }
 
                 for row in root.readout-rows: HorizontalLayout {
@@ -510,7 +721,7 @@ export component CellarisPanel inherits Rectangle {
                             colour: row.colour;
                         }
                     }
-                    Text { text: row.name; color: Colours.text; font-size: 12px; horizontal-stretch: 1; }
+                    Text { text: row.name; color: Colours.text; font-size: 12px; horizontal-stretch: 1; horizontal-alignment: root.start-alignment; }
                     Text { text: row.mean; color: Colours.text; font-size: 12px; width: 40px; horizontal-alignment: right; }
                     Text { text: row.spread; color: Colours.text; font-size: 12px; width: 44px; horizontal-alignment: right; }
                     Text { text: row.density; color: Colours.text; font-size: 12px; width: 64px; horizontal-alignment: right; }
@@ -519,13 +730,15 @@ export component CellarisPanel inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 Action {
-                    text: "Draw region";
+                    // Translators: picks the tool that outlines a region for a readout of the predicted values.
+                    text: @tr("Draw region");
                     clicked => {
                         root.draw-region();
                     }
                 }
                 Action {
-                    text: "Measure ROI";
+                    // Translators: makes the slide's region of interest (ROI) the readout's region, instead of a drawn one; the readout follows the ROI.
+                    text: @tr("Use ROI");
                     clicked => {
                         root.measure-roi();
                     }
@@ -534,20 +747,23 @@ export component CellarisPanel inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 if root.readout-running: Action {
-                    text: "Cancel";
+                    // Translators: stops the region readout.
+                    text: @tr("Cancel");
                     clicked => {
                         root.cancel-readout();
                     }
                 }
                 Action {
-                    text: "Copy";
+                    // Translators: copies the region readout as text.
+                    text: @tr("Copy");
                     enabled: root.can-copy;
                     clicked => {
                         root.copy-readout();
                     }
                 }
                 Action {
-                    text: "Clear";
+                    // Translators: removes the readout's region and its readout.
+                    text: @tr("Clear");
                     enabled: root.has-region;
                     clicked => {
                         root.clear-region();
@@ -555,49 +771,58 @@ export component CellarisPanel inherits Rectangle {
                 }
             }
             Note {
-                text: "Mean is the predicted intensity, arcsinh, over tissue in the region, and spread how much it varies between 5 \u{b5}m blocks. Density r\u{b2} is how much of that variation optical density alone reproduces. Near 1, the marker is a density map here. Low with a small spread means the prediction is flat, not that it learned anything. Low with a wide spread is needed for it to be the marker, but only measured IF shows it is. Numbers come from the same blended predictions the overlay shows.";
+                // Translators: explains the readout's columns; keep the meaning exact; the 5 µm blocks are small squares of tissue, not paraffin blocks.
+                text: @tr("Mean is the predicted intensity, arcsinh, over tissue in the region, and spread how much it varies between 5 \u{b5}m blocks. Density r\u{b2} is how much of that variation optical density alone reproduces. Near 1, the marker is a density map here. Low with a small spread means the prediction is flat, not that it learned anything. Low with a wide spread is needed for it to be the marker, but only measured IF shows it is. Numbers come from the same blended predictions the overlay shows.");
+                horizontal-alignment: root.start-alignment;
             }
 
-            Heading { text: "MODEL"; }
+            Heading {
+                // Translators: a section heading, in capitals in English.
+                text: @tr("MODEL");
+                horizontal-alignment: root.start-alignment;
+            }
             for row in root.model-card: VerticalLayout {
                 spacing: 1px;
                 Text {
                     text: row.key;
                     color: Colours.muted;
-                    font-size: 10px;
+                    font-size: Script.text-size(10px);
+                    horizontal-alignment: root.start-alignment;
                 }
                 Text {
                     text: row.value;
                     color: Colours.text;
-                    font-size: 11px;
+                    font-size: Script.text-size(11px);
+                    horizontal-alignment: root.start-alignment;
                     wrap: word-wrap;
                 }
             }
-            HorizontalLayout {
-                spacing: 6px;
-                Action {
-                    text: "Choose model\u{2026}";
-                    clicked => {
-                        root.choose-model();
-                    }
+            // Three long texts: on one line only where they fit.
+            ButtonFlow {
+                // The content's width inside its padding.
+                available: scroll.visible-width - 24px;
+                // Translators: opens a file dialog to choose the model file.
+                first: @tr("Choose model\u{2026}");
+                // Translators: opens a form to download the model through eov.
+                second: root.can-download ? @tr("Download model\u{2026}") : "";
+                // Translators: opens a file dialog to choose ONNX Runtime's library.
+                third: @tr("Choose runtime\u{2026}");
+                first-clicked => {
+                    root.choose-model();
                 }
-                if root.can-download: Action {
-                    text: "Download model\u{2026}";
-                    clicked => {
-                        root.toggle-download();
-                    }
+                second-clicked => {
+                    root.toggle-download();
                 }
-                Action {
-                    text: "Choose runtime\u{2026}";
-                    clicked => {
-                        root.choose-runtime();
-                    }
+                third-clicked => {
+                    root.choose-runtime();
                 }
             }
             if root.download-open: VerticalLayout {
                 spacing: 6px;
                 Note {
-                    text: "Your site's copy of the model, and its SHA-256:";
+                    // Translators: above the fields for the model's address and SHA-256.
+                    text: @tr("Your site's copy of the model, and its SHA-256:");
+                    horizontal-alignment: root.start-alignment;
                 }
                 url := LineEdit {
                     text <=> root.download-url;
@@ -605,12 +830,14 @@ export component CellarisPanel inherits Rectangle {
                 }
                 sha := LineEdit {
                     text <=> root.download-sha256;
-                    placeholder-text: "SHA-256 (64 hex digits)";
+                    // Translators: hex digits are 0–9 and a–f.
+                    placeholder-text: @tr("SHA-256 (64 hex digits)");
                 }
                 HorizontalLayout {
                     spacing: 6px;
                     Action {
-                        text: "Download";
+                        // Translators: downloads the model from the address given.
+                        text: @tr("Download");
                         enabled: !root.download-busy;
                         horizontal-stretch: 0;
                         clicked => {
@@ -622,6 +849,7 @@ export component CellarisPanel inherits Rectangle {
                 Note {
                     text: root.download-note;
                     color: root.download-note-error ? Colours.error : Colours.muted;
+                    horizontal-alignment: root.start-alignment;
                 }
             }
         }

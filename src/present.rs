@@ -4,13 +4,14 @@
 //! copyable readout.
 
 use crate::blend::TissueCell;
-use crate::config::{PANEL_BUTTON, RESEARCH_NOTICE};
+use crate::config::{PANEL_BUTTON, RESEARCH_NOTICE, research_notice};
 use crate::engine::{
     FileState, ModelState, PaneDemand, State, Support, cell_object, marks_layer, region_layer,
 };
 use crate::geometry::{Grid, Idx, SCALE_TOLERANCE, ScaleSource};
 use crate::markers::{self, DisplayMode};
 use crate::region::{BlockUse, Readout, ReadoutState, block_use, utc_timestamp};
+use crate::text::{Text, decimal, isolate, text, writing_english};
 use eov_plugin_api::prelude::*;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -37,13 +38,19 @@ const FAILED: Rgba = Rgba(0xE5, 0x39, 0x35, 0xFF);
 const REGION: Rgba = Rgba(0x00, 0xC8, 0xFF, 0xFF);
 
 /// "about 3 min".
-pub fn duration(seconds: f64) -> String {
+pub fn duration(seconds: f64) -> Text {
     if seconds < 90.0 {
-        format!("about {} s", seconds.round().max(1.0))
+        let seconds = seconds.round().max(1.0) as u64;
+        // Translators: how long something will still take; "s" is seconds.
+        text!(tr!("about {n} s" | "about {n} s" % seconds))
     } else if seconds < 90.0 * 60.0 {
-        format!("about {} min", (seconds / 60.0).round())
+        let minutes = (seconds / 60.0).round() as u64;
+        // Translators: how long something will still take; "min" is minutes.
+        text!(tr!("about {n} min" | "about {n} min" % minutes))
     } else {
-        format!("about {:.1} h", seconds / 3600.0)
+        let hours = seconds / 3600.0;
+        // Translators: how long something will still take, in hours ("h").
+        text!(tr!("about {} h", decimal(hours, 1)))
     }
 }
 
@@ -102,19 +109,41 @@ pub fn cell_values(
     let values: Vec<String> = names
         .iter()
         .zip(&sums)
-        .map(|(name, sum)| format!("{name} {:.2}", sum / blocks as f64))
+        .map(|(name, sum)| format!("{name} {}", decimal(sum / blocks as f64, 2)))
         .collect();
-    let mut text = format!(
-        "Predicted \u{2014} research use only\n{}\nMean arcsinh intensity over {blocks} tissue \
-         blocks",
-        values.join(" \u{b7} ")
+    let mut mean = tr!(
+        // Translators: in a cell's tooltip; a tissue block is a 5 µm square
+        // of tissue, not a paraffin block.
+        "Mean predicted arcsinh intensity over {n} tissue block"
+            | "Mean predicted arcsinh intensity over {n} tissue blocks" % blocks
     );
     if unusual > 0 {
-        text.push_str(&format!(", {unusual} unlike the training data"));
+        let unusual = tr!(
+            // Translators: in a cell's tooltip: {n} of the tissue blocks look
+            // unlike the slides the model learnt from.
+            "{n} unlike the training data" | "{n} unlike the training data" % unusual
+        );
+        // Translators: joins two parts of a cell's tooltip: "Mean predicted
+        // arcsinh intensity over 2 tissue blocks" and "1 unlike the training
+        // data".
+        mean = tr!("{mean}, {unusual}", mean, unusual);
     }
     if dark > 0 {
-        text.push_str(&format!("; {dark} near-black blocks left out"));
+        // Translators: in a cell's tooltip: tissue blocks (5 µm squares of
+        // tissue, not paraffin blocks) too dark to be bright-field H&E.
+        let dark = tr!("{n} near-black block left out" | "{n} near-black blocks left out" % dark);
+        // Translators: joins two parts of a cell's tooltip: the mean of the
+        // predicted values ("Mean predicted arcsinh intensity over 2 tissue
+        // blocks", …) and "1 near-black block left out".
+        mean = tr!("{mean}; {dark}", mean, dark);
     }
+    let text = format!(
+        "{}\n{}\n{mean}",
+        // Translators: the first line of a cell's tooltip. Keep all of its
+        // meaning: the values are a model's prediction, for research only.
+        tr!("Predicted \u{2014} research use only"),
+        values.join(" \u{b7} ")
+    );
     Some(
         OverlayObject::new(
             cell_object(cell),
@@ -177,21 +206,28 @@ fn rect_shape(grid: &Grid, (i0, i1, j0, j1): (i64, i64, i64, i64)) -> Shape {
     }
 }
 
-fn text(id: String, x: f64, y: f64, label: String, colour: Rgba) -> OverlayObject {
-    OverlayObject::new(id, Shape::Point { x, y })
-        .with_style(Style {
-            fill: Rgba::TRANSPARENT,
-            stroke: Rgba::TRANSPARENT,
-            point_radius: 0.0,
-            text_color: colour,
-            ..Style::default()
-        })
-        .with_label(label)
-        .with_editable(false)
+/// `object` labelled with `label`: in the language of the interface on
+/// screen, and in English where eov burns the label into images (exports,
+/// copies of the view), whose font has Latin and Greek letters only.
+fn labelled(object: OverlayObject, label: &Text) -> OverlayObject {
+    object
+        .with_label(label.to_string())
+        .with_export_label(label.english())
+}
+
+fn text(id: String, x: f64, y: f64, label: &Text, colour: Rgba) -> OverlayObject {
+    let object = OverlayObject::new(id, Shape::Point { x, y }).with_style(Style {
+        fill: Rgba::TRANSPARENT,
+        stroke: Rgba::TRANSPARENT,
+        point_radius: 0.0,
+        text_color: colour,
+        ..Style::default()
+    });
+    labelled(object, label).with_editable(false)
 }
 
 /// Short notes on how a slide was matched to the model.
-pub fn scale_notes(st: &State, file: &FileState) -> Vec<String> {
+pub fn scale_notes(st: &State, file: &FileState) -> Vec<Text> {
     let Some(model) = st.model.info() else {
         return Vec::new();
     };
@@ -219,31 +255,49 @@ pub struct WindowCounts {
 
 /// Short notes on how a slide was matched to the model and what its
 /// windows showed: shown in its badge and panel, and in batch summaries.
+///
+/// The notes are [`Text`]s: in the language of the interface where they are
+/// shown, in English (`Text::english`) in copied readouts and batch
+/// summaries.
 pub fn slide_notes(
     model: &crate::model::ModelInfo,
     grid: Option<&Grid>,
     info: &FileInfo,
     windows: WindowCounts,
-) -> Vec<String> {
+) -> Vec<Text> {
     let mut notes = Vec::new();
     if let Some(grid) = grid {
         match grid.scale.source {
-            ScaleSource::Assumed => notes.push(format!(
-                "pixel size unknown \u{2014} assumed {:.3} \u{b5}m/px",
-                model.mpp
-            )),
-            ScaleSource::OneAxis => notes.push("pixel size reported for one axis only".into()),
+            ScaleSource::Assumed => {
+                let mpp = model.mpp;
+                notes.push(text!(tr!(
+                    // Translators: a note on a slide; µm/px is micrometres per
+                    // pixel.
+                    "pixel size unknown \u{2014} assumed {} \u{b5}m/px",
+                    decimal(mpp, 3)
+                )));
+            }
+            ScaleSource::OneAxis => {
+                // Translators: a note on a slide: its pixel size is known for
+                // its width or its height only.
+                notes.push(text!(tr!("pixel size reported for one axis only")));
+            }
             ScaleSource::Reported => {}
         }
         let up = grid.scale.upsampling(model.mpp);
         if up > SCALE_TOLERANCE {
-            notes.push(format!(
-                "upsampled \u{d7}{up:.2} from {:.3} \u{b5}m/px \u{2014} less reliable",
-                grid.scale.mpp_x.max(grid.scale.mpp_y)
-            ));
+            let from = grid.scale.mpp_x.max(grid.scale.mpp_y);
+            notes.push(text!(tr!(
+                // Translators: a note on a slide: it was enlarged {factor} times
+                // from its pixel size, {mpp} micrometres per pixel.
+                "upsampled \u{d7}{factor} from {mpp} \u{b5}m/px \u{2014} less reliable",
+                factor = decimal(up, 2),
+                mpp = decimal(from, 3)
+            )));
         }
         if grid.scale.is_anisotropic() {
-            notes.push("non-square pixels, resampled per axis".into());
+            // Translators: a note on a slide whose pixels are not square.
+            notes.push(text!(tr!("non-square pixels, resampled per axis")));
         }
     }
     if let Some(stain) = &info.stain {
@@ -252,45 +306,67 @@ pub fn slide_notes(
             || lower.contains("hematoxylin")
             || lower.contains("haematoxylin"))
         {
-            notes.push(format!(
-                "the slide says {stain}; the model was trained on H&E"
-            ));
+            let stain = stain.clone();
+            notes.push(text!(tr!(
+                // Translators: a note on a slide; {} is the stain its metadata
+                // names (not translated); H&E is haematoxylin and eosin.
+                "the slide says {}; the model was trained on H&E",
+                isolate(&stain)
+            )));
         }
     }
     if windows.dark > 0 {
-        notes.push(format!(
-            "{} windows skipped as not bright-field",
-            windows.dark
-        ));
+        let dark = windows.dark;
+        notes.push(text!(tr!(
+            // Translators: a note on a slide; a window is one of the square
+            // images the model predicts from.
+            "{n} window skipped as not bright-field"
+                | "{n} windows skipped as not bright-field" % dark
+        )));
     }
     if windows.unusual > 0 {
-        notes.push(format!(
-            "{} of {} windows look unlike the training data",
-            windows.unusual, windows.tissue
-        ));
+        let (unusual, tissue) = (windows.unusual, windows.tissue);
+        notes.push(text!(tr!(
+            // Translators: a note on a slide: {n} of its {total} windows with
+            // tissue look unlike the slides the model learnt from. The form
+            // follows {n}, the windows that do; {total} is a bare number.
+            "{n} window of {total} looks unlike the training data"
+                | "{n} windows of {total} look unlike the training data" % unusual,
+            total = tissue
+        )));
     }
     if !model.mpp_recorded {
-        notes.push("the model does not record its pixel size".into());
+        // Translators: a note on a slide: the model does not say at which
+        // pixel size it was trained.
+        notes.push(text!(tr!("the model does not record its pixel size")));
     }
     notes
 }
 
-/// A line of text, and whether it warns.
-type Line = (String, bool);
+/// A line of text, and whether it warns. A [`Text`]: badges show it in the
+/// language of the interface, and on hosts without badges it is a label on
+/// the slide, which images get in English.
+type Line = (Text, bool);
 
 /// Why nothing can be predicted on any slide, while that is so.
 fn model_line(st: &State) -> Option<Line> {
     match &st.model {
-        ModelState::Failed(error) => Some((
-            format!("Not computed: {} (see the Cellaris panel)", error.summary),
-            true,
-        )),
-        ModelState::Loading | ModelState::Idle => Some(("Loading the model\u{2026}".into(), false)),
-        ModelState::Ready(_) => st
-            .markers
-            .as_ref()
-            .err()
-            .map(|problem| (format!("Not computed: {problem}"), true)),
+        ModelState::Failed(error) => {
+            let summary = error.summary.clone();
+            Some((
+                // Translators: over the slide; {} says why nothing was predicted.
+                text!(tr!("Not computed: {} (see the Cellaris panel)", summary)),
+                true,
+            ))
+        }
+        ModelState::Loading | ModelState::Idle => {
+            Some((text!(tr!("Loading the model\u{2026}")), false))
+        }
+        ModelState::Ready(_) => st.markers.as_ref().err().map(|problem| {
+            let problem = problem.clone();
+            // Translators: over the slide; {} says why nothing was predicted.
+            (text!(tr!("Not computed: {}", problem)), true)
+        }),
     }
 }
 
@@ -301,21 +377,37 @@ fn legend_line(st: &State) -> Option<String> {
         .iter()
         .filter(|m| st.prefs.is_visible(&m.name))
         .map(|m| {
-            let mut entry = format!("{}: {}", m.name, markers::colour_name(m.colour));
+            let (marker, colour) = (isolate(&m.name), markers::colour_name(m.colour));
+            // An adjusted window is named: brightness then depends on it.
             if m.is_adjusted() {
-                // Brightness then depends on the user's window.
-                entry.push_str(&format!(" ({})", m.window_text()));
+                // Translators: a legend entry over the slide, such as
+                // "Pan-CK: magenta (arcsinh 4.50–6.50)": a marker, its colour,
+                // and the display window the user set for it.
+                tr!(
+                    "{marker}: {colour} ({window})",
+                    marker,
+                    colour,
+                    window = m.window_text()
+                )
+            } else {
+                // Translators: a legend entry over the slide, such as
+                // "Hoechst: yellow": a marker and its colour.
+                tr!("{marker}: {colour}", marker, colour)
             }
-            entry
         })
         .collect();
     if shown.is_empty() {
-        return Some("Every marker is hidden (see the Cellaris panel)".into());
+        return Some(tr!("Every marker is hidden (see the Cellaris panel)"));
     }
     let hidden = markers.len() - shown.len();
-    let mut line = shown.join(" \u{b7} ");
+    let line = shown.join(" \u{b7} ");
     if hidden > 0 {
-        line.push_str(&format!(" ({hidden} hidden)"));
+        // Translators: {markers} is the legend over the slide; {n} markers are
+        // hidden.
+        return Some(tr!(
+            "{markers} ({n} hidden)" | "{markers} ({n} hidden)" % hidden,
+            markers = line
+        ));
     }
     Some(line)
 }
@@ -324,7 +416,9 @@ fn legend_line(st: &State) -> Option<String> {
 /// belongs to a slide, and shows in each of its panes).
 fn slide_line(st: &State, file: &FileState) -> Option<Line> {
     if let Some(problem) = file.problem() {
-        return Some((format!("Not computed: {}", short_problem(problem)), true));
+        let problem = short_problem(problem);
+        // Translators: over the slide; {} says why nothing was predicted.
+        return Some((text!(tr!("Not computed: {}", problem)), true));
     }
     if st.model.info().is_none() || st.markers.is_err() {
         // The model's line says why.
@@ -332,25 +426,31 @@ fn slide_line(st: &State, file: &FileState) -> Option<Line> {
     }
     let left = file.pending.len();
     if left > 0 {
-        let done = file.in_view.saturating_sub(left);
-        let mut line = format!("Computing {done} of {} cells", file.in_view);
+        let (done, in_view) = (file.in_view.saturating_sub(left), file.in_view);
+        let computing = text!(tr!(
+            // Translators: over the slide; a cell is a small square of the
+            // slide that is predicted at once.
+            "Computing {done} of {n} cell" | "Computing {done} of {n} cells" % in_view,
+            done
+        ));
         let failed = file.failed.len();
-        if failed > 0 {
-            // Only failures of cells in view count: others are not retried.
-            line.push_str(&format!(
-                " \u{b7} {failed} failed{}",
-                if file.stuck > 0 {
-                    " (Retry in the Cellaris panel)"
-                } else {
-                    ", retrying"
-                }
-            ));
+        // Only failures of cells in view count: others are not retried.
+        let more = if failed > 0 && file.stuck > 0 {
+            text!(tr!(
+                // Translators: {n} cells could not be computed; Retry is a
+                // button in the Cellaris panel.
+                "{n} failed (Retry in the Cellaris panel)"
+                    | "{n} failed (Retry in the Cellaris panel)" % failed
+            ))
+        } else if failed > 0 {
+            // Translators: {n} cells could not be computed and are tried again.
+            text!(tr!("{n} failed, retrying" | "{n} failed, retrying" % failed))
         } else {
-            line.push_str(&format!(
-                " \u{b7} {} left",
-                duration(left as f64 * st.throughput.seconds_per_window())
-            ));
-        }
+            let time = duration(left as f64 * st.throughput.seconds_per_window());
+            // Translators: {} is a duration such as "about 3 min".
+            text!(tr!("{} left", time))
+        };
+        let line = Text::new(move || format!("{computing} \u{b7} {more}"));
         return Some((line, failed > 0));
     }
     let too_far = file
@@ -361,29 +461,47 @@ fn slide_line(st: &State, file: &FileState) -> Option<Line> {
             _ => None,
         })
         .max()?;
-    let which = if file
+    let limit = crate::engine::MAX_VIEW_CELLS;
+    let line = if file
         .panes
         .values()
         .any(|demand| matches!(demand, PaneDemand::Active))
     {
-        "one view of this slide"
+        text!(tr!(
+            // Translators: over the slide, when it is shown in several views:
+            // one of them shows too much of it to predict ({n} cells; at most
+            // {limit}). A cell is one square of the grid the slide is predicted
+            // in, not a biological cell.
+            "Zoom in to predict: one view of this slide needs {n} cell (limit {limit})"
+                | "Zoom in to predict: one view of this slide needs {n} cells (limit {limit})"
+                    % too_far,
+            limit
+        ))
     } else {
-        "this view"
+        text!(tr!(
+            // Translators: over the slide: the view shows too much of it to
+            // predict ({n} cells; at most {limit}). A cell is one square of the
+            // grid the slide is predicted in, not a biological cell.
+            "Zoom in to predict: this view needs {n} cell (limit {limit})"
+                | "Zoom in to predict: this view needs {n} cells (limit {limit})" % too_far,
+            limit
+        ))
     };
-    Some((
-        format!(
-            "Zoom in to predict: {which} needs {too_far} cells (limit {})",
-            crate::engine::MAX_VIEW_CELLS
-        ),
-        true,
-    ))
+    Some((line, true))
 }
 
-fn short_problem(problem: &crate::geometry::ScaleProblem) -> String {
+fn short_problem(problem: &crate::geometry::ScaleProblem) -> Text {
     match problem {
-        crate::geometry::ScaleProblem::Unknown => "pixel size unknown".into(),
+        // Translators: why a slide is not predicted (over the slide).
+        crate::geometry::ScaleProblem::Unknown => text!(tr!("pixel size unknown")),
         crate::geometry::ScaleProblem::TooCoarse { slide_mpp, .. } => {
-            format!("slide too coarse ({slide_mpp:.2} \u{b5}m/px)")
+            let slide_mpp = *slide_mpp;
+            // Translators: why a slide is not predicted (over the slide); µm/px
+            // is micrometres per pixel.
+            text!(tr!(
+                "slide too coarse ({} \u{b5}m/px)",
+                decimal(slide_mpp, 2)
+            ))
         }
         crate::geometry::ScaleProblem::BadSlide(reason) => reason.clone(),
     }
@@ -402,10 +520,10 @@ fn clip(text: &str) -> String {
 /// A slide's badge: its line and its notes.
 fn slide_text(st: &State, file: &FileState) -> Option<String> {
     let mut parts: Vec<String> = slide_line(st, file)
-        .map(|(line, _)| line)
+        .map(|(line, _)| line.to_string())
         .into_iter()
         .collect();
-    parts.extend(scale_notes(st, file));
+    parts.extend(scale_notes(st, file).iter().map(Text::to_string));
     (!parts.is_empty()).then(|| clip(&parts.join(" \u{b7} ")))
 }
 
@@ -419,10 +537,10 @@ pub fn badges(st: &State) -> BTreeMap<String, (Option<FileId>, String)> {
     }
     out.insert(
         NOTICE_BADGE.to_string(),
-        (None, format!("{RESEARCH_NOTICE} \u{b7} Cellaris")),
+        (None, format!("{} \u{b7} Cellaris", research_notice())),
     );
     if let Some(line) = model_line(st)
-        .map(|(line, _)| line)
+        .map(|(line, _)| line.to_string())
         .or_else(|| legend_line(st))
     {
         out.insert(MODEL_BADGE.to_string(), (None, clip(&line)));
@@ -564,28 +682,28 @@ fn in_slide_badge(st: &State, id: FileId, file: &FileState, objects: &mut Vec<Ov
     let x = view.visible.x + 12.0 / zoom;
     let mut y = view.visible.y + 14.0 / zoom;
     let step = 22.0 / zoom;
-    objects.push(text(
-        format!("badge-{pane}"),
-        x,
-        y,
-        format!("{RESEARCH_NOTICE} \u{b7} Cellaris"),
-        TEXT,
-    ));
+    let notice = Text::new(|| {
+        let notice = if writing_english() {
+            RESEARCH_NOTICE.to_string()
+        } else {
+            research_notice()
+        };
+        format!("{notice} \u{b7} Cellaris")
+    });
+    objects.push(text(format!("badge-{pane}"), x, y, &notice, TEXT));
     y += step;
     if let Some((line, warning)) = model_line(st).or_else(|| slide_line(st, file)) {
         let colour = if warning { WARNING } else { TEXT };
-        objects.push(text(format!("status-{pane}"), x, y, line, colour));
+        objects.push(text(format!("status-{pane}"), x, y, &line, colour));
         y += step;
     }
     let notes = scale_notes(st, file);
     if !notes.is_empty() {
-        objects.push(text(
-            format!("notes-{pane}"),
-            x,
-            y,
-            notes.join(" \u{b7} "),
-            WARNING,
-        ));
+        let notes = Text::new(move || {
+            let notes: Vec<String> = notes.iter().map(Text::to_string).collect();
+            notes.join(" \u{b7} ")
+        });
+        objects.push(text(format!("notes-{pane}"), x, y, &notes, WARNING));
         y += step;
     }
     if let Ok(markers) = &st.markers {
@@ -594,29 +712,36 @@ fn in_slide_badge(st: &State, id: FileId, file: &FileState, objects: &mut Vec<Ov
                 continue;
             }
             let [r, g, b] = marker.colour;
-            objects.push(
-                OverlayObject::new(
-                    format!("legend-{pane}-{k}"),
-                    Shape::Point {
-                        x: x + 6.0 / zoom,
-                        y: y + 2.0 / zoom,
-                    },
-                )
-                .with_style(Style {
-                    fill: Rgba::rgb(r, g, b),
-                    stroke: Rgba(0x11, 0x13, 0x18, 0xFF),
-                    stroke_width: 1.0,
-                    point_radius: 6.0,
-                    text_color: TEXT,
-                    ..Style::default()
-                })
-                .with_label(if marker.is_adjusted() {
-                    format!("{} (predicted, {})", marker.name, marker.window_text())
-                } else {
-                    format!("{} (predicted)", marker.name)
-                })
-                .with_editable(false),
-            );
+            let label = if marker.is_adjusted() {
+                let marker = marker.clone();
+                text!(tr!(
+                    // Translators: a legend entry drawn on the slide: a
+                    // marker, and the display window the user set for it.
+                    "{marker} (predicted, {window})",
+                    marker = isolate(&marker.name),
+                    window = marker.window_text()
+                ))
+            } else {
+                let name = marker.name.clone();
+                // Translators: a legend entry drawn on the slide: a marker.
+                text!(tr!("{} (predicted)", isolate(&name)))
+            };
+            let entry = OverlayObject::new(
+                format!("legend-{pane}-{k}"),
+                Shape::Point {
+                    x: x + 6.0 / zoom,
+                    y: y + 2.0 / zoom,
+                },
+            )
+            .with_style(Style {
+                fill: Rgba::rgb(r, g, b),
+                stroke: Rgba(0x11, 0x13, 0x18, 0xFF),
+                stroke_width: 1.0,
+                point_radius: 6.0,
+                text_color: TEXT,
+                ..Style::default()
+            });
+            objects.push(labelled(entry, &label).with_editable(false));
             y += 20.0 / zoom;
         }
     }
@@ -631,11 +756,18 @@ pub fn region_objects(st: &State, id: FileId) -> Vec<OverlayObject> {
         return Vec::new();
     };
     let label = match file.readout.as_ref().map(|r| &r.readout) {
-        Some(readout) if readout.is_running() => format!(
-            "Cellaris region \u{b7} measuring {:.0} %",
-            readout.progress() * 100.0
-        ),
-        _ => "Cellaris region".to_string(),
+        Some(readout) if readout.is_running() => {
+            let percent = format!("{:.0}", readout.progress() * 100.0);
+            text!(tr!(
+                // Translators: the label drawn on a region while its readout is
+                // computed; {} is how much of it is done, in percent.
+                "Cellaris region \u{b7} {} % computed",
+                percent
+            ))
+        }
+        // Translators: the label drawn on the region of a readout (a readout
+        // summarises predicted values; it is not a measurement).
+        _ => text!(tr!("Cellaris region")),
     };
     let mut style = region_style();
     if file
@@ -645,12 +777,8 @@ pub fn region_objects(st: &State, id: FileId) -> Vec<OverlayObject> {
     {
         style.dash = Dash::Dashed;
     }
-    vec![
-        OverlayObject::new("region", region.to_shape())
-            .with_style(style)
-            .with_label(label)
-            .with_editable(true),
-    ]
+    let region = OverlayObject::new("region", region.to_shape()).with_style(style);
+    vec![labelled(region, &label).with_editable(true)]
 }
 
 fn fingerprint(objects: &[OverlayObject]) -> u64 {
@@ -695,12 +823,16 @@ pub fn refresh(host: &Host, st: &mut State) {
             && let Some(host_job) = &job.job
             && job.readout.is_running()
         {
+            let total = job.readout.cells.len();
+            let done = total - job.readout.remaining.len();
             host_job.update(
                 Some(job.readout.progress()),
-                Some(&format!(
-                    "{} of {} cells",
-                    job.readout.cells.len() - job.readout.remaining.len(),
-                    job.readout.cells.len()
+                Some(&tr!(
+                    // Translators: the progress of a region readout: {done} of the
+                    // region's {n} cells (squares of the grid the slide is
+                    // predicted in, not biological cells).
+                    "{done} of {n} cell" | "{done} of {n} cells" % total,
+                    done
                 )),
             );
         }
@@ -732,9 +864,11 @@ pub fn refresh(host: &Host, st: &mut State) {
 /// The plugin's status-bar segment.
 pub fn status_line(st: &State) -> Option<String> {
     match &st.model {
-        ModelState::Loading => return Some("Cellaris: loading the model\u{2026}".into()),
+        ModelState::Loading => return Some(tr!("Cellaris: loading the model\u{2026}")),
         ModelState::Failed(error) if st.overlay => {
-            return Some(format!("Cellaris: {}", error.summary));
+            // Translators: the status bar while the overlay is on; {} says
+            // what went wrong.
+            return Some(tr!("Cellaris: {}", error.summary));
         }
         _ => {}
     }
@@ -754,19 +888,28 @@ pub fn status_line(st: &State) -> Option<String> {
     if !st.overlay && readouts == 0 {
         return None;
     }
-    let mut parts = vec!["Cellaris (predicted, research use only)".to_string()];
+    // Translators: in the status bar while predictions are shown. Keep all
+    // of its meaning: the colours are predicted, for research only.
+    let mut parts = vec![tr!("Cellaris (predicted, research use only)")];
     if left > 0 {
-        parts.push(format!(
-            "{}/{cells} cells, {:.1} s per window",
-            cells.saturating_sub(left),
-            st.throughput.seconds_per_window()
+        parts.push(tr!(
+            // Translators: in the status bar: {done} of {n} cells computed, and
+            // how long each window (square image the model predicts from)
+            // takes, in seconds. A cell is one square of the grid the slide is
+            // predicted in, not a biological cell.
+            "{done}/{n} cell, {seconds} s per window"
+                | "{done}/{n} cells, {seconds} s per window" % cells,
+            done = cells.saturating_sub(left),
+            seconds = decimal(st.throughput.seconds_per_window(), 1)
         ));
     }
     if failed > 0 {
-        parts.push(format!("{failed} failed"));
+        // Translators: in the status bar: {n} cells could not be computed.
+        parts.push(tr!("{n} failed" | "{n} failed" % failed));
     }
     if readouts > 0 {
-        parts.push("measuring a region".into());
+        // Translators: in the status bar while a region readout is computed.
+        parts.push(tr!("computing a region readout"));
     }
     Some(parts.join(" \u{b7} "))
 }
@@ -785,9 +928,9 @@ fn rows(readout: &Readout, st: &State) -> Vec<Value> {
             json!({
                 "name": marker.name,
                 "colour": markers::hex(marker.colour),
-                "mean": format!("{:.2}", fit.mean()),
-                "spread": format!("{:.2}", fit.spread()),
-                "density": fit.r2().map_or("\u{2014}".to_string(), |r2| format!("{r2:.2}")),
+                "mean": decimal(fit.mean(), 2),
+                "spread": decimal(fit.spread(), 2),
+                "density": fit.r2().map_or("\u{2014}".to_string(), |r2| decimal(r2, 2)),
             })
         })
         .collect()
@@ -806,15 +949,20 @@ fn readout_properties(st: &State, out: &mut Map<String, Value>) {
     let job = file.and_then(|f| f.readout.as_ref());
     let has_region = file.is_some_and(|f| f.region.is_some());
     let waiting = match (&st.model, &st.markers) {
-        (ModelState::Ready(_), Err(problem)) => format!("Cannot measure: {problem}"),
-        _ => "Waiting for the model\u{2026}".to_string(),
+        // Translators: {} says why the region's readout cannot be computed
+        // (such as "no markers are selected").
+        (ModelState::Ready(_), Err(problem)) => tr!("Cannot compute the readout: {}", problem),
+        _ => tr!("Waiting for the model\u{2026}"),
     };
     let (status, detail, progress, rows, running, can_copy) = match job {
         None if has_region => (waiting, String::new(), 0.0, Vec::new(), false, false),
         None => (
-            "Pick the Cellaris region tool and outline some tissue, or measure the region of \
-             interest."
-                .to_string(),
+            tr!(
+                // Translators: "Cellaris region readout" is the name of the tool
+                // (use the same words as there); the region of interest is eov's
+                // ROI (the panel's button Use ROI).
+                "Outline some tissue with the Cellaris region readout tool, or use the region of interest."
+            ),
             String::new(),
             0.0,
             Vec::new(),
@@ -827,59 +975,101 @@ fn readout_properties(st: &State, out: &mut Map<String, Value>) {
             let blocks = readout.blocks();
             let area = grid.map(|g| areas(readout, g));
             let summary = match area {
-                Some((tissue, region)) => format!(
-                    "{blocks} tissue blocks, {tissue:.3} mm\u{b2} of tissue in {region:.3} mm\u{b2}"
+                Some((tissue, region)) => tr!(
+                    // Translators: what a region readout covers: {n} tissue blocks
+                    // (5 µm squares of tissue, not paraffin blocks), their area and
+                    // the region's, in square millimetres.
+                    "{n} tissue block, {tissue} mm\u{b2} of tissue in {region} mm\u{b2}"
+                        | "{n} tissue blocks, {tissue} mm\u{b2} of tissue in {region} mm\u{b2}"
+                            % blocks,
+                    tissue = decimal(tissue, 3),
+                    region = decimal(region, 3)
                 ),
-                None => format!("{blocks} tissue blocks"),
+                // Translators: what a region readout covers: {n} tissue blocks (5 µm
+                // squares of tissue, not paraffin blocks).
+                None => tr!("{n} tissue block" | "{n} tissue blocks" % blocks),
             };
             let status = match &readout.state {
-                ReadoutState::Confirming => "Waiting for you to confirm a long measurement.".into(),
-                ReadoutState::Running => format!(
-                    "Measuring: {} of {} cells \u{b7} {summary}",
-                    readout.cells.len() - readout.remaining.len(),
-                    readout.cells.len()
+                ReadoutState::Confirming => tr!("Waiting for you to confirm a long readout."),
+                ReadoutState::Running => tr!(
+                    // Translators: {done} of the region's {n} cells (squares of the
+                    // grid the slide is predicted in, not biological cells) are
+                    // computed; {summary} is what the readout covers so far, such
+                    // as "12 tissue blocks, …".
+                    "Computing: {done} of {n} cell \u{b7} {summary}"
+                        | "Computing: {done} of {n} cells \u{b7} {summary}" % readout.cells.len(),
+                    done = readout.cells.len() - readout.remaining.len(),
+                    summary = summary.clone()
                 ),
                 ReadoutState::Done => summary.clone(),
-                ReadoutState::Cancelled => format!("Cancelled \u{b7} {summary}"),
-                ReadoutState::Failed(message) => message.clone(),
+                // Translators: {} is what the readout covered until it was
+                // cancelled, such as "12 tissue blocks, …".
+                ReadoutState::Cancelled => tr!("Cancelled \u{b7} {}", summary),
+                ReadoutState::Failed(message) => message.to_string(),
             };
             let mut details = Vec::new();
             if readout.is_running() {
                 let left = readout.remaining.len() as f64 * st.throughput.seconds_per_window();
-                details.push(format!("{} left on this computer.", duration(left)));
+                // Translators: {} is a duration such as "about 3 min".
+                details.push(tr!("{} left on this computer.", duration(left)));
             } else if blocks > 0 && blocks < crate::region::MIN_BLOCKS {
-                details.push(format!(
-                    "Fewer than {} tissue blocks, too few for a density r\u{b2}.",
-                    crate::region::MIN_BLOCKS
+                details.push(tr!(
+                    // Translators: density r² is a column of the readout; a tissue
+                    // block is a 5 µm square of tissue, not a paraffin block.
+                    "Fewer than {n} tissue block, too few for a density r\u{b2}."
+                        | "Fewer than {n} tissue blocks, too few for a density r\u{b2}."
+                            % crate::region::MIN_BLOCKS
                 ));
             }
             if let Some(recon) = readout.mean_recon() {
-                let unusual = if readout.unusual_blocks > 0 {
-                    format!(
-                        ", {:.0} % of blocks above the model's threshold",
+                let recon = decimal(recon, 3);
+                details.push(if readout.unusual_blocks > 0 {
+                    let percent = format!(
+                        "{:.0}",
                         100.0 * readout.unusual_blocks as f64 / readout.recon_blocks as f64
+                    );
+                    tr!(
+                        // Translators: the reconstruction error says how unlike the
+                        // training data the tissue looks; {percent} is a percentage;
+                        // blocks are 5 µm squares of tissue, not paraffin blocks.
+                        "Mean reconstruction error {recon}, {percent} % of blocks above the model's threshold.",
+                        recon,
+                        percent
                     )
                 } else {
-                    String::new()
-                };
-                details.push(format!("Mean reconstruction error {recon:.3}{unusual}."));
+                    // Translators: the reconstruction error says how unlike the
+                    // training data the tissue looks.
+                    tr!("Mean reconstruction error {}.", recon)
+                });
             }
             if readout.dark_cells > 0 || readout.dark_blocks > 0 {
-                details.push(format!(
-                    "{} blocks and {} cells skipped as near-black (not bright-field H&E).",
-                    readout.dark_blocks, readout.dark_cells
+                let (blocks, cells) = (readout.dark_blocks, readout.dark_cells);
+                details.push(tr!(
+                    // Translators: {blocks} is a number of blocks ("3 blocks") and
+                    // {cells} a number of cells ("1 cell"), both translated
+                    // separately.
+                    "{blocks} and {cells} skipped as near-black (not bright-field H&E).",
+                    // Translators: a number of tissue blocks (5 µm squares of
+                    // tissue, not paraffin blocks), in "3 blocks and 1 cell skipped
+                    // as near-black".
+                    blocks = tr!("{n} block" | "{n} blocks" % blocks),
+                    // Translators: a number of cells (squares of the grid the slide
+                    // is predicted in, not biological cells), in "3 blocks and 1
+                    // cell skipped as near-black".
+                    cells = tr!("{n} cell" | "{n} cells" % cells)
                 ));
             }
             if let Some(file) = file {
                 details.extend(
                     scale_notes(st, file)
                         .into_iter()
-                        .map(|n| format!("Note: {n}.")),
+                        // Translators: {} is a note on the slide.
+                        .map(|n| tr!("Note: {}.", n)),
                 );
             }
             (
                 status,
-                details.join(" "),
+                eov_plugin_api::i18n::join_sentences(&details),
                 readout.progress(),
                 rows(readout, st),
                 readout.is_running() || readout.state == ReadoutState::Confirming,
@@ -897,43 +1087,68 @@ fn readout_properties(st: &State, out: &mut Map<String, Value>) {
 }
 
 fn model_card(st: &State) -> Vec<Value> {
-    let row = |key: &str, value: String| json!({ "key": key, "value": value });
+    let row = |key: String, value: String| json!({ "key": key, "value": value });
+    // Translators: the labels of the model card in the Cellaris panel.
+    let model = || tr!("Model card" => "Model");
+    let runtime = || tr!("Model card" => "Runtime");
     let mut card = Vec::new();
     match &st.model {
         ModelState::Ready(info) => {
             card.push(row(
-                "Model",
+                model(),
                 info.title.clone().unwrap_or_else(|| info.file_name()),
             ));
             if let Some(version) = &info.version {
-                card.push(row("Version", version.clone()));
+                card.push(row(tr!("Model card" => "Version"), version.clone()));
             }
-            card.push(row("File", info.path.display().to_string()));
             card.push(row(
-                "SHA-256",
-                format!("{} ({:.1} MB)", info.short_hash(), info.bytes as f64 / 1e6),
+                tr!("Model card" => "File"),
+                info.path.display().to_string(),
             ));
             card.push(row(
-                "Trained at",
-                format!(
-                    "{:.3} \u{b5}m/px{}",
-                    info.mpp,
-                    if info.mpp_recorded { "" } else { " (assumed)" }
+                "SHA-256".to_string(),
+                // Translators: the start of the model file's SHA-256, and its
+                // size in megabytes.
+                tr!(
+                    "{hash} ({size} MB)",
+                    hash = info.short_hash(),
+                    size = decimal(info.bytes as f64 / 1e6, 1)
                 ),
             ));
+            let mpp = decimal(info.mpp, 3);
             card.push(row(
-                "Input",
-                format!(
-                    "{0}\u{d7}{0} px windows, {1}",
-                    info.window,
-                    match info.batch {
-                        crate::model::Batch::Dynamic => "any batch size".to_string(),
-                        crate::model::Batch::Fixed(n) => format!("batches of {n}"),
-                    }
-                ),
+                // Translators: the pixel size the model was trained at.
+                tr!("Model card" => "Trained at"),
+                if info.mpp_recorded {
+                    format!("{mpp} \u{b5}m/px")
+                } else {
+                    // Translators: a pixel size the model does not record, so it
+                    // is assumed; µm/px is micrometres per pixel.
+                    tr!("{} \u{b5}m/px (assumed)", mpp)
+                },
             ));
             card.push(row(
-                "Channels",
+                // Translators: what the model takes in.
+                tr!("Model card" => "Input"),
+                match info.batch {
+                    crate::model::Batch::Dynamic => tr!(
+                        // Translators: the model's input: square windows of {side}
+                        // pixels, as many at once as wanted.
+                        "{side}\u{d7}{side} px windows, any batch size",
+                        side = info.window
+                    ),
+                    crate::model::Batch::Fixed(n) => tr!(
+                        // Translators: the model's input: square windows of {side}
+                        // pixels, exactly {n} at once.
+                        "{side}\u{d7}{side} px windows, batches of {n}"
+                            | "{side}\u{d7}{side} px windows, batches of {n}" % n,
+                        side = info.window
+                    ),
+                },
+            ));
+            card.push(row(
+                // Translators: the markers the model predicts.
+                tr!("Model card" => "Channels"),
                 format!(
                     "{} ({})",
                     info.channel_names.len(),
@@ -941,44 +1156,47 @@ fn model_card(st: &State) -> Vec<Value> {
                 ),
             ));
             card.push(row(
-                "Outputs",
-                format!(
-                    "{}{}",
-                    if info.raw_intensity {
-                        "raw intensities, shown as arcsinh(x/5)"
-                    } else {
-                        "arcsinh intensities"
-                    },
-                    if info.recon {
-                        ", reconstruction error"
-                    } else {
-                        ""
+                // Translators: what the model computes.
+                tr!("Model card" => "Outputs"),
+                match (info.raw_intensity, info.recon) {
+                    (true, true) => {
+                        // Translators: the model card's Outputs row: the model's
+                        // predicted intensities are on a linear ("raw",
+                        // untransformed) scale and shown as arcsinh(x/5); "raw" does
+                        // not mean measured signal.
+                        tr!("raw intensities, shown as arcsinh(x/5), reconstruction error")
                     }
-                ),
+                    // Translators: the model card's Outputs row: the model's predicted
+                    // intensities are on a linear ("raw", untransformed) scale and
+                    // shown as arcsinh(x/5); "raw" does not mean measured signal.
+                    (true, false) => tr!("raw intensities, shown as arcsinh(x/5)"),
+                    (false, true) => tr!("arcsinh intensities, reconstruction error"),
+                    (false, false) => tr!("arcsinh intensities"),
+                },
             ));
             if let Some(training) = &info.training_data {
-                card.push(row("Trained on", training.clone()));
+                // Translators: the data the model was trained on.
+                card.push(row(tr!("Model card" => "Trained on"), training.clone()));
             }
             if let Some(license) = &info.license {
-                card.push(row("Licence", license.clone()));
+                card.push(row(tr!("Model card" => "Licence"), license.clone()));
             }
             if let Some(description) = &info.description {
-                card.push(row("About", description.clone()));
+                // Translators: the model's own description follows.
+                card.push(row(tr!("Model card" => "About"), description.clone()));
             }
             if let Some(producer) = &info.producer {
-                card.push(row("Exported by", producer.clone()));
+                // Translators: the program that wrote the model file.
+                card.push(row(tr!("Model card" => "Exported by"), producer.clone()));
             }
-            card.push(row(
-                "Runtime",
-                format!("{}, {} threads", info.runtime, info.threads),
-            ));
+            card.push(row(runtime(), runtime_text(&info.runtime, info.threads)));
             for note in &info.notes {
-                card.push(row("Note", note.clone()));
+                card.push(row(tr!("Model card" => "Note"), note.to_string()));
             }
         }
         _ => {
             card.push(row(
-                "Model",
+                model(),
                 st.prefs.model_path.clone().unwrap_or_else(|| {
                     st.paths
                         .data_dir
@@ -991,16 +1209,49 @@ fn model_card(st: &State) -> Vec<Value> {
     }
     if st.runtime_restart {
         card.push(row(
-            "Runtime",
-            "the new choice takes effect when eov restarts".into(),
+            runtime(),
+            tr!("the new choice takes effect when eov restarts"),
         ));
     }
     card
 }
 
+/// The model card's runtime: "ONNX Runtime 1.22.0 from /usr/lib/…, 4
+/// threads".
+fn runtime_text(runtime: &str, threads: usize) -> String {
+    match crate::model::runtime_parts(runtime) {
+        Some((Some(version), library)) => tr!(
+            // Translators: {version} is ONNX Runtime's version, {library} its
+            // file; {n} threads compute predictions.
+            "ONNX Runtime {version} from {library}, {n} thread"
+                | "ONNX Runtime {version} from {library}, {n} threads" % threads,
+            version,
+            library = isolate(library)
+        ),
+        Some((None, library)) => tr!(
+            // Translators: {library} is ONNX Runtime's file; {n} threads compute
+            // predictions.
+            "ONNX Runtime (version unknown) from {library}, {n} thread"
+                | "ONNX Runtime (version unknown) from {library}, {n} threads" % threads,
+            library = isolate(library)
+        ),
+        None => tr!(
+            // Translators: {runtime} names ONNX Runtime and its file; {n}
+            // threads compute predictions.
+            "{runtime}, {n} thread" | "{runtime}, {n} threads" % threads,
+            runtime = isolate(runtime)
+        ),
+    }
+}
+
 /// Said when a pane shows the slide with its colours adjusted: the model
 /// still sees the slide's own pixels.
-pub fn display_note(st: &State, id: FileId) -> Option<String> {
+///
+/// eov's badge says how: in English for data such as the copied readout
+/// (`badge`), and as the window shows it, in the interface's language, in
+/// the panel (`shown_badge`; hosts before plugin API 1.1 send only `badge`,
+/// in English then too).
+pub fn display_note(st: &State, id: FileId) -> Option<Text> {
     let shows = |pane: &PaneId| st.views.get(pane).is_some_and(|v| v.file_id == id);
     let display = st
         .focused_pane
@@ -1009,35 +1260,50 @@ pub fn display_note(st: &State, id: FileId) -> Option<String> {
         .chain(st.views.keys().copied().filter(shows))
         .filter_map(|pane| st.displays.get(&pane))
         .find(|display| display.modified)?;
-    let what = display.badge.trim();
-    Some(if what.is_empty() {
-        "the display is adjusted; predictions use the slide's unadjusted colours".to_string()
-    } else {
-        format!("the display is adjusted ({what}); predictions use the slide's unadjusted colours")
-    })
+    let english = display.badge.trim().to_string();
+    let shown = display
+        .shown_badge
+        .as_deref()
+        .map_or(english.as_str(), str::trim)
+        .to_string();
+    // Which badge, and so which sentence, is decided as the note is written.
+    Some(Text::new(move || {
+        let what = if writing_english() { &english } else { &shown };
+        let note = if what.is_empty() {
+            // Translators: a note on a slide: eov shows it with adjusted colours,
+            // but the model sees the slide's own.
+            text!(tr!(
+                "the display is adjusted; predictions use the slide's unadjusted colours"
+            ))
+        } else {
+            let what = what.clone();
+            text!(tr!(
+                // Translators: a note on a slide: eov shows it with adjusted colours
+                // ({} says how, in eov's words), but the model sees the slide's own.
+                "the display is adjusted ({}); predictions use the slide's unadjusted colours",
+                what
+            ))
+        };
+        note.to_string()
+    }))
 }
 
 /// The panel's properties.
 pub fn sidebar_properties(st: &State) -> Map<String, Value> {
     let mut out = Map::new();
-    out.insert("notice".into(), json!(RESEARCH_NOTICE));
+    out.insert("notice".into(), json!(research_notice()));
     out.insert("overlay-on".into(), json!(st.overlay));
     let (status, level, detail, retry) = match &st.model {
         ModelState::Idle => (
-            "The model loads when the overlay is turned on or a region is measured.".to_string(),
+            tr!("The model loads when the overlay is turned on or a region readout starts."),
             0,
             String::new(),
             false,
         ),
-        ModelState::Loading => (
-            "Loading the model\u{2026}".to_string(),
-            1,
-            String::new(),
-            false,
-        ),
-        ModelState::Failed(error) => (error.summary.clone(), 3, error.detail.clone(), true),
+        ModelState::Loading => (tr!("Loading the model\u{2026}"), 1, String::new(), false),
+        ModelState::Failed(error) => (error.summary.to_string(), 3, error.detail.to_string(), true),
         ModelState::Ready(info) => match &st.markers {
-            Err(problem) => (problem.clone(), 3, String::new(), false),
+            Err(problem) => (problem.to_string(), 3, String::new(), false),
             Ok(_) => {
                 let failed: usize = st.files.values().map(|f| f.failed.len()).sum();
                 if failed > 0 {
@@ -1045,31 +1311,37 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
                         .files
                         .values()
                         .flat_map(|f| f.failures.values())
-                        .map(|f| f.error.clone())
+                        .map(|f| f.error.to_string())
                         .next()
                         .unwrap_or_default();
                     (
-                        format!("{failed} cells in view could not be computed"),
+                        tr!(
+                            // Translators: cells are the small squares of the slide
+                            // that are predicted at once.
+                            "{n} cell in view could not be computed"
+                                | "{n} cells in view could not be computed" % failed
+                        ),
                         2,
                         error,
                         true,
                     )
                 } else if st.busy {
                     (
-                        format!(
-                            "Computing \u{b7} {:.1} s per window",
-                            st.throughput.seconds_per_window()
+                        tr!(
+                            // Translators: {} is how long each window (square image
+                            // the model predicts from) takes, in seconds.
+                            "Computing \u{b7} {} s per window",
+                            decimal(st.throughput.seconds_per_window(), 1)
                         ),
                         1,
                         String::new(),
                         false,
                     )
                 } else {
+                    let model = info.title.clone().unwrap_or_else(|| info.file_name());
                     (
-                        format!(
-                            "Ready: {}",
-                            info.title.clone().unwrap_or_else(|| info.file_name())
-                        ),
+                        // Translators: {} is the name of the model that is loaded.
+                        tr!("Ready: {}", isolate(&model)),
                         0,
                         String::new(),
                         false,
@@ -1079,11 +1351,11 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
         },
     };
     let mut detail = detail;
-    for problem in &st.setting_problems {
+    for problem in st.setting_problems.iter().chain(st.refused.values()) {
         if !detail.is_empty() {
             detail.push('\n');
         }
-        detail.push_str(problem);
+        detail.push_str(&problem.to_string());
     }
     out.insert("status".into(), json!(status));
     out.insert("status-level".into(), json!(level));
@@ -1092,24 +1364,33 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
 
     let file = st.active_file.and_then(|id| st.files.get(&id));
     let (slide, notes) = match file {
-        None => ("No slide".to_string(), String::new()),
+        None => (tr!("No slide"), String::new()),
         Some(file) => {
             let scale = match file.grid() {
-                Some(grid) => format!(
-                    "{:.3} \u{d7} {:.3} \u{b5}m/px, read from level {} (\u{d7}{:.2})",
-                    grid.scale.mpp_x, grid.scale.mpp_y, grid.level, grid.downsample
+                Some(grid) => tr!(
+                    // Translators: the slide's pixel size in micrometres per pixel
+                    // (µm/px), the pyramid level it is read from, and how much
+                    // smaller that level is (×4.00).
+                    "{x} \u{d7} {y} \u{b5}m/px, read from level {level} (\u{d7}{downsample})",
+                    x = decimal(grid.scale.mpp_x, 3),
+                    y = decimal(grid.scale.mpp_y, 3),
+                    level = grid.level,
+                    downsample = decimal(grid.downsample, 2)
                 ),
                 None => match (file.info.mpp_x, file.info.mpp_y) {
-                    (Some(x), Some(y)) => format!("{x:.3} \u{d7} {y:.3} \u{b5}m/px"),
-                    _ => "pixel size not reported".to_string(),
+                    (Some(x), Some(y)) => {
+                        format!("{} \u{d7} {} \u{b5}m/px", decimal(x, 3), decimal(y, 3))
+                    }
+                    // Translators: the slide does not say its pixel size.
+                    _ => tr!("pixel size not reported"),
                 },
             };
             let mut notes = vec![scale];
             if let Some(problem) = file.problem() {
-                notes.push(problem.message());
+                notes.push(problem.message().to_string());
             }
-            notes.extend(scale_notes(st, file));
-            notes.extend(display_note(st, file.info.file_id));
+            notes.extend(scale_notes(st, file).iter().map(Text::to_string));
+            notes.extend(display_note(st, file.info.file_id).map(|note| note.to_string()));
             (file.info.filename.clone(), notes.join("\n"))
         }
     };
@@ -1130,7 +1411,13 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
     out.insert(
         "progress-text".into(),
         json!(if cells > 0 && st.overlay {
-            format!("{done} of {cells} cells in view")
+            tr!(
+                // Translators: under the progress bar in the Cellaris panel; a
+                // cell is one square of the grid the slide is predicted in, not a
+                // biological cell.
+                "{done} of {n} cell in view" | "{done} of {n} cells in view" % cells,
+                done
+            )
         } else {
             String::new()
         }),
@@ -1151,13 +1438,14 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
             "name": name,
             "colour": markers::hex(colour),
             "visible": st.prefs.is_visible(name),
-            "window": if shown {
-                format!(
-                    "arcsinh {low:.2}\u{2013}{high:.2}{}",
-                    if adjusted { ", yours" } else { "" }
-                )
-            } else {
+            "window": if !shown {
                 String::new()
+            } else if adjusted {
+                // Translators: {} is a marker's display window ("arcsinh 4.50–6.50")
+                // that the user set.
+                tr!("{}, yours", markers::window_text(low, high))
+            } else {
+                markers::window_text(low, high)
             },
             "adjusted": adjusted,
         })
@@ -1218,12 +1506,20 @@ pub fn sidebar_properties(st: &State) -> Map<String, Value> {
 fn download_properties(st: &State, out: &mut Map<String, Value>) {
     let (note, error) = match (&st.model_fetch, &st.download_note) {
         (Some(_), _) => (
-            "eov is asking you, or downloading it (see the status bar)\u{2026}".to_string(),
+            // Translators: eov first asks the user whether to download the model
+            // (nothing is downloaded without that answer), then downloads it.
+            tr!(
+                "eov is asking you whether to download the model, or downloading it (see the status bar)\u{2026}"
+            ),
             false,
         ),
-        (None, Some(note)) => (note.clone(), true),
+        (None, Some(note)) => (note.to_string(), true),
         (None, None) => (
-            "eov checks the download against this SHA-256 and keeps it in its model store; it is then Cellaris's model. Without an address, the copy your administrator gave eov is used.".to_string(),
+            tr!(
+                // Translators: under the model's address and SHA-256 in the
+                // Cellaris panel; the model store is where eov keeps models.
+                "eov checks the download against this SHA-256 and keeps it in its model store; it is then Cellaris's model. Without an address, the copy your administrator gave eov is used."
+            ),
             false,
         ),
     };
@@ -1293,11 +1589,12 @@ pub fn copy_text(st: &State, id: FileId) -> Option<String> {
         ),
         "marker\tmean_arcsinh\tspread\tdensity_r2".to_string(),
     ];
+    // In English, as files are: the readout is data.
     for note in scale_notes(st, file)
         .into_iter()
         .chain(display_note(st, id))
     {
-        lines.insert(lines.len() - 1, format!("# note\t{note}"));
+        lines.insert(lines.len() - 1, format!("# note\t{}", note.english()));
     }
     for (marker, fit) in markers.iter().zip(&readout.fits) {
         lines.push(format!(
@@ -1696,10 +1993,7 @@ mod panel_tests {
             tooltip.contains("over 2 tissue blocks, 1 unlike the training data"),
             "{tooltip}"
         );
-        assert!(
-            tooltip.contains("1 near-black blocks left out"),
-            "{tooltip}"
-        );
+        assert!(tooltip.contains("1 near-black block left out"), "{tooltip}");
         // A cell without a measurable block has no tooltip.
         let glass = TissueCell {
             blocks: vec![block(0.01, 0.0, 1.0, 0.0)],
@@ -1712,6 +2006,7 @@ mod panel_tests {
     fn an_adjusted_display_is_noted_where_the_slide_is_described() {
         let mut st = example_state();
         assert_eq!(display_note(&st, 1), None);
+        // A host before plugin API 1.1: the badge only, in English.
         st.displays.insert(
             1,
             DisplayAdjustments {
@@ -1720,7 +2015,7 @@ mod panel_tests {
                 ..Default::default()
             },
         );
-        let note = display_note(&st, 1).unwrap();
+        let note = display_note(&st, 1).unwrap().to_string();
         assert!(note.contains("(Colour-normalised (Macenko))"), "{note}");
         assert!(note.contains("unadjusted colours"), "{note}");
         let notes = sidebar_properties(&st)["slide-notes"]
@@ -1732,6 +2027,73 @@ mod panel_tests {
         assert!(text.contains(&format!("# note\t{note}")), "{text}");
         // A pane showing another slide does not count.
         assert_eq!(display_note(&st, 2), None);
+    }
+
+    #[test]
+    fn the_panel_names_the_adjustments_as_eov_shows_them_and_the_readout_in_english() {
+        let mut st = example_state();
+        let english = "Colour-normalised (Macenko) \u{b7} Sharpened";
+        let shown = "Farbnormalisiert (Macenko) \u{b7} Gesch\u{e4}rft";
+        st.displays.insert(
+            1,
+            DisplayAdjustments {
+                modified: true,
+                sharpness: 0.5,
+                stain_normalization: Some("macenko".into()),
+                badge: english.into(),
+                shown_badge: Some(shown.into()),
+                stain_colors: Some(true),
+                ..Default::default()
+            },
+        );
+        let notes = sidebar_properties(&st)["slide-notes"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            notes.contains(&format!("the display is adjusted ({shown});")),
+            "{notes}"
+        );
+        // The copied readout is data, in English.
+        let text = copy_text(&st, 1).unwrap();
+        assert!(
+            text.contains(&format!(
+                "# note\tthe display is adjusted ({english}); predictions use the slide's \
+                 unadjusted colours\n"
+            )),
+            "{text}"
+        );
+        assert!(!text.contains("Farbnormalisiert"), "{text}");
+        // Each says how only when its own badge does.
+        st.displays.get_mut(&1).unwrap().badge = String::new();
+        let note = display_note(&st, 1).unwrap();
+        assert_eq!(
+            note.english(),
+            "the display is adjusted; predictions use the slide's unadjusted colours"
+        );
+        assert!(note.to_string().contains(shown), "{note}");
+    }
+
+    #[test]
+    fn windows_unlike_the_training_data_are_counted_in_their_own_number() {
+        let st = example_state();
+        let model = st.model.info().unwrap();
+        let file = &st.files[&1];
+        let note = |unusual, tissue| {
+            let windows = WindowCounts {
+                dark: 0,
+                tissue,
+                unusual,
+            };
+            slide_notes(model, file.grid().map(|grid| &**grid), &file.info, windows)
+                .iter()
+                .map(Text::english)
+                .find(|note| note.contains("training data"))
+                .unwrap()
+        };
+        assert_eq!(note(1, 40), "1 window of 40 looks unlike the training data");
+        assert_eq!(note(3, 40), "3 windows of 40 look unlike the training data");
+        assert_eq!(note(1, 1), "1 window of 1 looks unlike the training data");
     }
 
     #[test]

@@ -11,6 +11,7 @@
 //! silently, and every assumption shows up in the model card (CEL-11).
 
 use crate::runtime;
+use crate::text::{Text, decimal, isolate, text};
 use sha2::{Digest, Sha256};
 use std::ffi::OsString;
 use std::io::Read;
@@ -71,11 +72,12 @@ pub struct ModelInfo {
     pub producer: Option<String>,
     pub training_data: Option<String>,
     pub license: Option<String>,
-    /// e.g. "ONNX Runtime 1.22.0 from /usr/lib/libonnxruntime.so".
+    /// e.g. "ONNX Runtime 1.22.0 from /usr/lib/libonnxruntime.so", in
+    /// English: it is provenance (see [`runtime_parts`]).
     pub runtime: String,
     pub threads: usize,
     /// Assumptions made while loading, shown in the model card.
-    pub notes: Vec<String>,
+    pub notes: Vec<Text>,
 }
 
 impl ModelInfo {
@@ -136,15 +138,37 @@ pub struct LoadRequest {
     pub param_runtime: Option<PathBuf>,
 }
 
+/// What [`ModelInfo::runtime`] says it is: "ONNX Runtime {version} from
+/// {library}", the version `None` when ONNX Runtime does not say.
+pub fn runtime_description(version: Option<&str>, library: &Path) -> String {
+    format!(
+        "ONNX Runtime {} from {}",
+        version.unwrap_or(UNKNOWN_VERSION),
+        library.display()
+    )
+}
+
+/// How [`runtime_description`] writes a version ONNX Runtime does not give.
+const UNKNOWN_VERSION: &str = "(version unknown)";
+
+/// The version (`None` when unknown) and library of a
+/// [`runtime_description`]; `None` for anything else.
+pub fn runtime_parts(runtime: &str) -> Option<(Option<&str>, &str)> {
+    let (version, library) = runtime
+        .strip_prefix("ONNX Runtime ")?
+        .split_once(" from ")?;
+    Some(((version != UNKNOWN_VERSION).then_some(version), library))
+}
+
 /// Why a model could not be loaded: a line for the user and the details.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoadError {
-    pub summary: String,
-    pub detail: String,
+    pub summary: Text,
+    pub detail: Text,
 }
 
 impl LoadError {
-    pub fn new(summary: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn new(summary: impl Into<Text>, detail: impl Into<Text>) -> Self {
         Self {
             summary: summary.into(),
             detail: detail.into(),
@@ -171,25 +195,30 @@ pub fn locate_model(
     data_dir: &Path,
     plugin_root: &Path,
     exists: &dyn Fn(&Path) -> bool,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, Text> {
     if let Some(path) = env.map(PathBuf::from) {
         return if exists(&path) {
             Ok(path)
         } else {
-            Err(format!(
+            let path = path.display().to_string();
+            Err(text!(tr!(
+                // Translators: CELLARIS_MODEL is an environment variable (not
+                // translated); {} is a path.
                 "CELLARIS_MODEL points at {}, which does not exist",
-                path.display()
-            ))
+                isolate(&path)
+            )))
         };
     }
     if let Some(path) = setting {
         return if exists(path) {
             Ok(path.to_path_buf())
         } else {
-            Err(format!(
+            let path = path.display().to_string();
+            Err(text!(tr!(
+                // Translators: {} is the path of the model file the user chose.
                 "the model chosen in the Cellaris panel, {}, does not exist",
-                path.display()
-            ))
+                isolate(&path)
+            )))
         };
     }
     for dir in [data_dir, plugin_root] {
@@ -198,10 +227,14 @@ pub fn locate_model(
             return Ok(path);
         }
     }
-    Err(format!(
-        "No {MODEL_FILE}: put one in {}, or choose a model in the Cellaris panel.",
-        data_dir.display()
-    ))
+    let dir = data_dir.display().to_string();
+    Err(text!(tr!(
+        // Translators: {file} is the model's file name (markers.onnx), {dir}
+        // the folder it is looked for in.
+        "No {file}: put one in {dir}, or choose a model in the Cellaris panel.",
+        file = MODEL_FILE,
+        dir = isolate(&dir)
+    )))
 }
 
 // ---------------------------------------------------------------------------
@@ -222,36 +255,62 @@ pub struct Meta {
     pub description: Option<String>,
     pub training_data: Option<String>,
     pub license: Option<String>,
-    pub notes: Vec<String>,
+    pub notes: Vec<Text>,
 }
 
+// Metadata keys (channel_names, raw_intensity, mpp, …) are names in the
+// model file and are not translated.
+
 /// Channel names as a comma-separated list or a JSON array.
-pub fn parse_channel_names(text: &str) -> Result<Vec<String>, String> {
+pub fn parse_channel_names(text: &str) -> Result<Vec<String>, Text> {
     let trimmed = text.trim();
     let names: Vec<String> = if trimmed.starts_with('[') {
-        serde_json::from_str::<Vec<String>>(trimmed)
-            .map_err(|e| format!("channel_names is not a list of names: {e}"))?
+        serde_json::from_str::<Vec<String>>(trimmed).map_err(|e| {
+            let e = e.to_string();
+            // Translators: channel_names is a key of the model's metadata (not
+            // translated); {} is why it could not be read.
+            text!(tr!("channel_names is not a list of names: {}", e))
+        })?
     } else {
         trimmed.split(',').map(str::to_string).collect()
     };
     let names: Vec<String> = names.iter().map(|n| n.trim().to_string()).collect();
     if names.is_empty() || names.iter().any(String::is_empty) {
-        return Err(format!("channel_names has an empty name: {text:?}"));
+        let given = format!("{text:?}");
+        // Translators: channel_names is a key of the model's metadata (not
+        // translated); {} is its value.
+        return Err(text!(tr!(
+            "channel_names has an empty name: {}",
+            isolate(&given)
+        )));
     }
     for (index, name) in names.iter().enumerate() {
         if names[..index].contains(name) {
-            return Err(format!("channel_names names {name} twice"));
+            let name = name.clone();
+            // Translators: channel_names is a key of the model's metadata (not
+            // translated); {} is a marker's name.
+            return Err(text!(tr!("channel_names names {} twice", isolate(&name))));
         }
     }
     Ok(names)
 }
 
 /// A boolean flag; anything unrecognised is an error, not "true".
-pub fn parse_flag(key: &str, text: &str) -> Result<bool, String> {
+pub fn parse_flag(key: &str, text: &str) -> Result<bool, Text> {
     match text.trim().to_ascii_lowercase().as_str() {
         "true" | "1" | "yes" => Ok(true),
         "false" | "0" | "no" => Ok(false),
-        other => Err(format!("{key} must be true or false, not {other:?}")),
+        other => {
+            let (key, value) = (key.to_string(), format!("{other:?}"));
+            Err(text!(tr!(
+                // Translators: {key} is a key of the model's metadata, {value} its
+                // value; true and false are the values it may have (none is
+                // translated).
+                "{key} must be true or false, not {value}",
+                key = isolate(&key),
+                value = isolate(&value)
+            )))
+        }
     }
 }
 
@@ -260,33 +319,60 @@ fn parse_number<T: std::str::FromStr + PartialOrd + Copy + std::fmt::Display>(
     text: &str,
     min: T,
     max: T,
-) -> Result<T, String> {
-    let value: T = text
-        .trim()
-        .parse()
-        .map_err(|_| format!("{key} is not a number: {text:?}"))?;
+) -> Result<T, Text> {
+    let value: T = text.trim().parse().map_err(|_| {
+        let (key, value) = (key.to_string(), format!("{text:?}"));
+        // Translators: {key} is a key of the model's metadata (not translated),
+        // {value} its value.
+        text!(tr!(
+            "{key} is not a number: {value}",
+            key = isolate(&key),
+            value = isolate(&value)
+        ))
+    })?;
     if value < min || value > max {
-        return Err(format!("{key} = {value} is outside {min}–{max}"));
+        let (key, value, min, max) = (
+            key.to_string(),
+            value.to_string(),
+            min.to_string(),
+            max.to_string(),
+        );
+        return Err(text!(tr!(
+            // Translators: {key} is a key of the model's metadata (not
+            // translated), {value} its value, {min} and {max} what it may be.
+            "{key} = {value} is outside {min}\u{2013}{max}",
+            key = isolate(&key),
+            value = isolate(&value),
+            min,
+            max
+        )));
     }
     Ok(value)
 }
 
 /// Reads and validates the metadata through `get(key)`.
-pub fn read_meta(get: &dyn Fn(&str) -> Option<String>) -> Result<Meta, String> {
+pub fn read_meta(get: &dyn Fn(&str) -> Option<String>) -> Result<Meta, Text> {
     let first = |keys: &[&'static str]| keys.iter().find_map(|key| get(key).map(|v| (*key, v)));
     let mut notes = Vec::new();
 
-    let channel_names = parse_channel_names(&get("channel_names").ok_or(
-        "the model carries no channel_names, so its channels cannot be told apart; re-export it \
-         with cellaris's export_marker_onnx",
-    )?)?;
+    let channel_names = parse_channel_names(&get("channel_names").ok_or_else(|| {
+        text!(tr!(
+            // Translators: channel_names is a key of the model's metadata and
+            // export_marker_onnx a program (neither is translated).
+            "the model carries no channel_names, so its channels cannot be told apart; re-export it with cellaris's export_marker_onnx"
+        ))
+    })?)?;
 
     let raw_intensity = match get("raw_intensity") {
         Some(text) => parse_flag("raw_intensity", &text)?,
         None => {
-            notes.push(
-                "raw_intensity is not recorded; outputs are taken to be raw intensities".into(),
-            );
+            notes.push(text!(tr!(
+                // Translators: a note in the model card; raw_intensity is a key
+                // of the model's metadata (not translated). "raw intensities"
+                // are the model's predictions on a linear (untransformed) scale,
+                // not measured signal.
+                "raw_intensity is not recorded; outputs are taken to be raw intensities"
+            )));
             true
         }
     };
@@ -294,10 +380,12 @@ pub fn read_meta(get: &dyn Fn(&str) -> Option<String>) -> Result<Meta, String> {
     let (mpp, mpp_recorded) = match first(&["mpp", "microns_per_pixel", "mpp_um"]) {
         Some((key, text)) => (parse_number::<f64>(key, &text, 0.01, 100.0)?, true),
         None => {
-            notes.push(format!(
-                "the training pixel size is not recorded; {DEFAULT_MPP} \u{b5}m/px (Orion level 0) \
-                 is assumed"
-            ));
+            notes.push(text!(tr!(
+                // Translators: a note in the model card; {} is a pixel size in
+                // micrometres per pixel (µm/px); Orion is a dataset.
+                "the training pixel size is not recorded; {} \u{b5}m/px (Orion level 0) is assumed",
+                decimal(DEFAULT_MPP, 3)
+            )));
             (DEFAULT_MPP, false)
         }
     };
@@ -337,15 +425,23 @@ pub fn read_meta(get: &dyn Fn(&str) -> Option<String>) -> Result<Meta, String> {
 }
 
 /// The batch policy and fixed side (if any) of an input `[B, 3, H, W]`.
-pub fn input_layout(dims: &[i64]) -> Result<(Batch, Option<usize>), String> {
+pub fn input_layout(dims: &[i64]) -> Result<(Batch, Option<usize>), Text> {
     if dims.len() != 4 {
-        return Err(format!(
-            "the input has {} dimensions, not [batch, 3, height, width]",
-            dims.len()
-        ));
+        let count = dims.len();
+        return Err(text!(tr!(
+            // Translators: the shape of the model's input; [batch, 3, height,
+            // width] is a notation, keep it as it is.
+            "the input has {n} dimension, not [batch, 3, height, width]"
+                | "the input has {n} dimensions, not [batch, 3, height, width]" % count
+        )));
     }
     if dims[1] > 0 && dims[1] != 3 {
-        return Err(format!("the input takes {} channels, not RGB", dims[1]));
+        let count = dims[1];
+        return Err(text!(tr!(
+            // Translators: RGB is the colour model of the images (not translated).
+            "the input takes {n} channel, not RGB"
+                | "the input takes {n} channels, not RGB" % count
+        )));
     }
     let batch = if dims[0] > 0 {
         Batch::Fixed(dims[0] as usize)
@@ -354,7 +450,12 @@ pub fn input_layout(dims: &[i64]) -> Result<(Batch, Option<usize>), String> {
     };
     let side = match (dims[2], dims[3]) {
         (h, w) if h > 0 && w > 0 && h != w => {
-            return Err(format!("the input is {h}×{w}; only square inputs are used"));
+            // Translators: {h}×{w} is the size of the model's input in pixels.
+            return Err(text!(tr!(
+                "the input is {h}×{w}; only square inputs are used",
+                h,
+                w
+            )));
         }
         (h, _) if h > 0 => Some(h as usize),
         (_, w) if w > 0 => Some(w as usize),
@@ -381,12 +482,14 @@ pub fn check_output(
 }
 
 /// The input side to use: the graph's, else the metadata's, else 256.
-pub fn choose_window(fixed: Option<usize>, meta: Option<usize>) -> Result<usize, String> {
+pub fn choose_window(fixed: Option<usize>, meta: Option<usize>) -> Result<usize, Text> {
     let window = fixed.or(meta).unwrap_or(DEFAULT_WINDOW);
     if !(64..=1024).contains(&window) || !window.is_multiple_of(32) {
-        return Err(format!(
-            "the model's input of {window} px is not a multiple of 32 between 64 and 1024"
-        ));
+        return Err(text!(tr!(
+            // Translators: {} is a size in pixels (px).
+            "the model's input of {} px is not a multiple of 32 between 64 and 1024",
+            window
+        )));
     }
     Ok(window)
 }
@@ -425,6 +528,20 @@ pub fn default_threads() -> usize {
 #[derive(Default)]
 pub struct OrtBackend;
 
+fn no_marker_model() -> Text {
+    // Translators: no model file was found (a summary; the details follow).
+    text!(tr!("No marker model"))
+}
+
+fn not_a_marker_model() -> Text {
+    // Translators: the file chosen as the model is not one Cellaris can use.
+    text!(tr!("Not a marker model"))
+}
+
+fn metadata_not_usable() -> Text {
+    text!(tr!("The model's metadata is not usable"))
+}
+
 struct OrtPredictor {
     session: ort::session::Session,
     run_options: Arc<ort::session::RunOptions>,
@@ -456,21 +573,20 @@ impl Backend for OrtBackend {
             )
         };
         let loaded = runtime::load(&search).map_err(|f| LoadError::new(f.summary, f.detail))?;
-        let runtime = format!(
-            "ONNX Runtime {} from {}",
-            loaded.version.as_deref().unwrap_or("(version unknown)"),
-            loaded.path.display()
-        );
+        let runtime = runtime_description(loaded.version.as_deref(), &loaded.path);
 
         let path = match &request.param_model {
             Some(path) if path.is_file() => path.clone(),
             Some(path) => {
+                let path = path.display().to_string();
                 return Err(LoadError::new(
-                    "No marker model",
-                    format!(
+                    no_marker_model(),
+                    text!(tr!(
+                        // Translators: --param model is a command-line option (not
+                        // translated); {} is a path.
                         "--param model points at {}, which does not exist",
-                        path.display()
-                    ),
+                        isolate(&path)
+                    )),
                 ));
             }
             None => locate_model(
@@ -480,42 +596,68 @@ impl Backend for OrtBackend {
                 &request.plugin_root,
                 &|path| path.is_file(),
             )
-            .map_err(|reason| LoadError::new("No marker model", reason))?,
+            .map_err(|reason| LoadError::new(no_marker_model(), reason))?,
         };
-        let fail = |summary: &str, detail: String| {
-            LoadError::new(summary, format!("{}: {detail}", path.display()))
+        let shown = path.display().to_string();
+        let fail = |summary: Text, detail: Text| {
+            let path = shown.clone();
+            LoadError::new(
+                summary,
+                // Translators: {path} is the model file, {detail} what is wrong
+                // with it.
+                text!(tr!("{path}: {detail}", path = isolate(&path), detail)),
+            )
         };
-        let (sha256, bytes) =
-            hash_file(&path).map_err(|e| fail("The model could not be read", e.to_string()))?;
+        let (sha256, bytes) = hash_file(&path).map_err(|e| {
+            fail(
+                text!(tr!("The model could not be read")),
+                Text::plain(e.to_string()),
+            )
+        })?;
 
         let threads = request.threads.max(1);
         let session = ort::session::Session::builder()
             .and_then(|b| b.with_intra_threads(threads).map_err(Into::into))
             .and_then(|mut b| b.commit_from_file(&path))
-            .map_err(|e| fail("The model could not be opened", e.to_string()))?;
+            .map_err(|e| {
+                fail(
+                    text!(tr!("The model could not be opened")),
+                    Text::plain(e.to_string()),
+                )
+            })?;
 
         let input = session
             .inputs()
             .iter()
             .find(|i| i.name() == "input")
             .or_else(|| session.inputs().first())
-            .ok_or_else(|| fail("Not a marker model", "it has no inputs".into()))?;
+            .ok_or_else(|| fail(not_a_marker_model(), text!(tr!("it has no inputs"))))?;
         if !is_f32(input) {
             return Err(fail(
-                "Not a marker model",
-                "its input is not float32".into(),
+                not_a_marker_model(),
+                // Translators: float32 is a number type (not translated).
+                text!(tr!("its input is not float32")),
             ));
         }
-        let dims = outlet_dims(input)
-            .ok_or_else(|| fail("Not a marker model", "its input is not a tensor".into()))?;
-        let (batch, fixed_side) = input_layout(&dims).map_err(|e| fail("Not a marker model", e))?;
+        let dims = outlet_dims(input).ok_or_else(|| {
+            fail(
+                not_a_marker_model(),
+                // Translators: a tensor is an array of numbers a model takes.
+                text!(tr!("its input is not a tensor")),
+            )
+        })?;
+        let (batch, fixed_side) = input_layout(&dims).map_err(|e| fail(not_a_marker_model(), e))?;
         let input_name = input.name().to_string();
         let mut notes = Vec::new();
         if session.inputs().len() > 1 {
-            notes.push(format!(
-                "the model has {} inputs; only {input_name} is fed",
-                session.inputs().len()
-            ));
+            let (count, input_name) = (session.inputs().len(), input_name.clone());
+            notes.push(text!(tr!(
+                // Translators: a note in the model card; {name} is the name of
+                // one of the model's inputs (not translated).
+                "the model has {n} input; only {name} is fed"
+                    | "the model has {n} inputs; only {name} is fed" % count,
+                name = isolate(&input_name)
+            )));
         }
 
         let markers = session
@@ -524,12 +666,21 @@ impl Backend for OrtBackend {
             .find(|o| o.name() == "markers")
             .ok_or_else(|| {
                 fail(
-                    "Not a marker model",
-                    "it has no output named `markers`; not a cellaris export".into(),
+                    not_a_marker_model(),
+                    // Translators: `markers` is the name of an output of the model
+                    // file (not translated).
+                    text!(tr!(
+                        "it has no output named `markers`; not a cellaris export"
+                    )),
                 )
             })?;
         if !is_f32(markers) {
-            return Err(fail("Not a marker model", "markers is not float32".into()));
+            return Err(fail(
+                not_a_marker_model(),
+                // Translators: markers is the name of an output of the model file
+                // and float32 a number type (neither is translated).
+                text!(tr!("markers is not float32")),
+            ));
         }
         let recon = session
             .outputs()
@@ -538,9 +689,12 @@ impl Backend for OrtBackend {
             .filter(|o| is_f32(o))
             .map(|o| o.name().to_string());
 
-        let metadata = session
-            .metadata()
-            .map_err(|e| fail("The model's metadata could not be read", e.to_string()))?;
+        let metadata = session.metadata().map_err(|e| {
+            fail(
+                text!(tr!("The model's metadata could not be read")),
+                Text::plain(e.to_string()),
+            )
+        })?;
         // Only keys that exist: ONNX Runtime answers "" for absent ones.
         let custom: std::collections::BTreeMap<String, String> = metadata
             .custom_keys()
@@ -549,7 +703,7 @@ impl Backend for OrtBackend {
             .filter_map(|key| metadata.custom(&key).map(|value| (key, value)))
             .collect();
         let meta = read_meta(&|key| custom.get(key).cloned())
-            .map_err(|e| fail("The model's metadata is not usable", e))?;
+            .map_err(|e| fail(metadata_not_usable(), e))?;
         let producer = metadata.producer().filter(|p| !p.is_empty());
         let graph_title = metadata.name().filter(|n| !n.is_empty());
         drop(metadata);
@@ -559,24 +713,37 @@ impl Backend for OrtBackend {
             && dims[1] > 0
             && dims[1] as usize != meta.channel_names.len()
         {
+            let (named, outputs) = (meta.channel_names.len(), dims[1]);
             return Err(fail(
-                "The model's metadata is not usable",
-                format!(
-                    "it names {} channels but outputs {}",
-                    meta.channel_names.len(),
-                    dims[1]
-                ),
+                metadata_not_usable(),
+                text!(tr!(
+                    // Translators: {n} channels are named in the model's metadata;
+                    // {outputs} is the number of channels the model really outputs,
+                    // a bare number (the plural form follows {n} only).
+                    "it names {n} channel but outputs {outputs}"
+                        | "it names {n} channels but outputs {outputs}" % named,
+                    outputs
+                )),
             ));
         }
-        let window = choose_window(fixed_side, meta.window).map_err(|e| fail("Not usable", e))?;
+        let window = choose_window(fixed_side, meta.window).map_err(|e| {
+            // Translators: the model file cannot be used (a summary; the
+            // details follow).
+            fail(text!(tr!("Not usable")), e)
+        })?;
         notes.extend(meta.notes);
         if recon.is_none() {
-            notes.push("the model reports no reconstruction error".into());
+            // Translators: a note in the model card: the model does not say how
+            // familiar an image looks to it.
+            notes.push(text!(tr!("the model reports no reconstruction error")));
         }
 
-        let run_options = ort::session::RunOptions::new()
-            .map(Arc::new)
-            .map_err(|e| fail("ONNX Runtime failed", e.to_string()))?;
+        let run_options = ort::session::RunOptions::new().map(Arc::new).map_err(|e| {
+            fail(
+                text!(tr!("ONNX Runtime failed")),
+                Text::plain(e.to_string()),
+            )
+        })?;
         let info = ModelInfo {
             path: path.clone(),
             bytes,
@@ -704,7 +871,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn meta(pairs: &[(&str, &str)]) -> Result<Meta, String> {
+    fn meta(pairs: &[(&str, &str)]) -> Result<Meta, Text> {
         let map: BTreeMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -798,7 +965,9 @@ mod tests {
         let root = Path::new("/pkg");
         let nothing = |_: &Path| false;
         let everything = |_: &Path| true;
-        let error = locate_model(None, None, data, root, &nothing).unwrap_err();
+        let error = locate_model(None, None, data, root, &nothing)
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("/data/cellaris"), "{error}");
         assert_eq!(
             locate_model(None, None, data, root, &everything).unwrap(),
@@ -812,7 +981,8 @@ mod tests {
         let error = locate_model(Some("/gone.onnx".into()), None, data, root, &|p: &Path| {
             p != Path::new("/gone.onnx")
         })
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("CELLARIS_MODEL") && error.contains("/gone.onnx"));
         let chosen = Path::new("/models/m.onnx");
         assert_eq!(

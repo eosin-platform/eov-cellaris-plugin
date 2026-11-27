@@ -7,12 +7,14 @@
         --onnxruntime-license LICENSE --onnxruntime-notices ThirdPartyNotices.txt
     python3 package.py --model markers.onnx
 
-The package is a tar of plugin.toml, the panel UI, the plugin library and
-the plugin's licences; its SHA-256 goes into <out>.sha256 beside it. ONNX Runtime can be bundled (pass a release archive's
-extracted directory, or the library and its licence files); its licence and
-third-party notices are then always included, as its licence requires. A
-model can be bundled too; its SHA-256 is printed so it can be published with
-the package.
+The package is a tar of plugin.toml, the panel UI, the plugin library, the
+plugin's licences and its translations (translations/<tag>/LC_MESSAGES/
+cellaris.po, when there are any; the .pot template is for translators and
+stays out); its SHA-256 goes into <out>.sha256 beside it. ONNX Runtime can
+be bundled (pass a release archive's extracted directory, or the library
+and its licence files); its licence and third-party notices are then always
+included, as its licence requires. A model can be bundled too; its SHA-256
+is printed so it can be published with the package.
 
 Run it from an eov checkout (the plugin builds against plugins/../plugin_api).
 Nothing is installed: copy the package to eov's plugin directory, or run
@@ -97,6 +99,37 @@ def find_notice(given: Path | None, runtime_arg: Path, names: list[str]) -> Path
     )
 
 
+def catalogs_dir(manifest_text: str) -> str | None:
+    """The folder of the translations, as plugin.toml's [i18n] table names
+    it; None when the plugin is not translated."""
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:
+        # Without a TOML reader: the folder plugin.toml uses.
+        return "translations"
+    i18n = tomllib.loads(manifest_text).get("i18n")
+    if not isinstance(i18n, dict):
+        return None
+    return str(i18n.get("catalogs", "translations"))
+
+
+def translations(root: Path, catalogs: str | None) -> dict[str, Path]:
+    """The catalogs eov reads: <catalogs>/<tag>/LC_MESSAGES/*.po, by their
+    path in the package. None at all is fine: the plugin is then in English."""
+    if catalogs is None:
+        return {}
+    folder = (root / catalogs).resolve()
+    if not folder.is_relative_to(root.resolve()):
+        raise SystemExit(f"[i18n] catalogs {catalogs!r} is outside the plugin")
+    if not folder.is_dir():
+        return {}
+    return {
+        po.relative_to(root).as_posix(): po
+        for po in sorted(folder.glob("*/LC_MESSAGES/*.po"))
+        if po.is_file()
+    }
+
+
 def check_manifest(text: str) -> None:
     try:
         import tomllib  # Python 3.11+
@@ -159,6 +192,7 @@ def main() -> None:
         members[f"ui/{ui.name}"] = ui
     for licence in ("LICENSE-APACHE-2.0", "LICENSE-MIT", "LICENSE-GPLv3"):
         members[f"licenses/cellaris/{licence}"] = ROOT / licence
+    members.update(translations(ROOT, catalogs_dir(manifest_text)))
 
     notes = []
     if args.onnxruntime:

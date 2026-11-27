@@ -1,5 +1,7 @@
 //! Marker selection, display windows, the palette, and compositing.
 
+use crate::text::{Text, decimal, isolate, text};
+use eov_plugin_api::prelude::tr;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -157,37 +159,58 @@ impl Marker {
         })
     }
 
-    /// "arcsinh 4.08–8.82".
+    /// "arcsinh 4.08–8.82", with the language's decimal separator.
     pub fn window_text(&self) -> String {
-        format!("arcsinh {:.2}\u{2013}{:.2}", self.low, self.high)
+        window_text(self.low, self.high)
     }
 }
 
+/// A display window as the panel and the legend show it: "arcsinh
+/// 4.08–8.82", with the language's decimal separator.
+pub fn window_text(low: f32, high: f32) -> String {
+    format!(
+        "arcsinh {}\u{2013}{}",
+        decimal(f64::from(low), 2),
+        decimal(f64::from(high), 2)
+    )
+}
+
 /// Resolves markers by name (case-sensitive, surrounding blanks ignored)
-/// against the model's own channel order.
-pub fn select(channel_names: &[String], wanted: &[String]) -> Result<Vec<Marker>, String> {
+/// against the model's own channel order. The problem is shown to the user.
+pub fn select(channel_names: &[String], wanted: &[String]) -> Result<Vec<Marker>, Text> {
     if wanted.is_empty() {
-        return Err("no markers are selected".to_string());
+        return Err(text!(tr!("no markers are selected")));
     }
     if wanted.len() > MAX_MARKERS {
-        return Err(format!(
-            "at most {MAX_MARKERS} markers can be shown at once"
-        ));
+        return Err(text!(tr!("at most {n} marker can be shown at once"
+            | "at most {n} markers can be shown at once" % MAX_MARKERS)));
     }
     let mut markers: Vec<Marker> = Vec::with_capacity(wanted.len());
     for (index, name) in wanted.iter().enumerate() {
         let name = name.trim();
         if markers.iter().any(|m| m.name == name) {
-            return Err(format!("{name} is selected twice"));
+            let name = name.to_string();
+            // Translators: {} is a marker's name, such as Pan-CK.
+            return Err(text!(tr!("{} is selected twice", isolate(&name))));
         }
         let channel = channel_names
             .iter()
             .position(|candidate| candidate.trim() == name)
-            .ok_or_else(|| format!("the model has no channel named {name}"))?;
+            .ok_or_else(|| {
+                let name = name.to_string();
+                // Translators: {} is a marker's name, such as Pan-CK; a
+                // channel is one of the markers the model predicts.
+                text!(tr!("the model has no channel named {}", isolate(&name)))
+            })?;
         let &(_, low, high) = WINDOWS
             .iter()
             .find(|(known, _, _)| *known == name)
-            .ok_or_else(|| format!("no display window is known for {name}"))?;
+            .ok_or_else(|| {
+                let name = name.to_string();
+                // Translators: {} is a marker's name, such as Pan-CK; its display
+                // window is the range of values its colour is drawn over.
+                text!(tr!("no display window is known for {}", isolate(&name)))
+            })?;
         markers.push(Marker {
             name: name.to_string(),
             channel,
@@ -335,22 +358,29 @@ pub fn hex(colour: [u8; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", colour[0], colour[1], colour[2])
 }
 
-/// The palette's colours by name, for legends that cannot show a swatch.
-pub const PALETTE_NAMES: [&str; MAX_MARKERS] = [
-    "yellow",
-    "magenta",
-    "bluish green",
-    "sky blue",
-    "orange",
-    "vermilion",
-];
+/// The name of the palette's colour `k`, for legends that cannot show a
+/// swatch ("Hoechst: yellow"), in the language of the interface.
+pub fn palette_name(k: usize) -> Option<String> {
+    Some(match k {
+        // Translators: the colours of the predicted markers, named in the
+        // legend over the slide ("Hoechst: yellow").
+        0 => tr!("Colour" => "yellow"),
+        1 => tr!("Colour" => "magenta"),
+        2 => tr!("Colour" => "bluish green"),
+        3 => tr!("Colour" => "sky blue"),
+        4 => tr!("Colour" => "orange"),
+        5 => tr!("Colour" => "vermilion"),
+        _ => return None,
+    })
+}
 
 /// A colour's name in the palette, or its hex code.
 pub fn colour_name(colour: [u8; 3]) -> String {
     PALETTE
         .iter()
         .position(|c| *c == colour)
-        .map_or_else(|| hex(colour), |k| PALETTE_NAMES[k].to_string())
+        .and_then(palette_name)
+        .unwrap_or_else(|| hex(colour))
 }
 
 #[cfg(test)]

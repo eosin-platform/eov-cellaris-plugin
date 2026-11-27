@@ -109,8 +109,11 @@ impl Backend for FakeBackend {
         let seen = seen(&request.data_dir);
         seen.loads.fetch_add(1, Ordering::SeqCst);
         seen.models.lock().unwrap().push(request.model.clone());
-        if let Some(reason) = &config.fail_load {
-            return Err(LoadError::new("No marker model", reason.clone()));
+        if let Some(reason) = config.fail_load {
+            // The reason is inserted like a name (isolated in right-to-left
+            // languages), so that the English log and the shown text differ.
+            let detail = crate::text::Text::new(move || crate::text::isolate(&reason));
+            return Err(LoadError::new("No marker model", detail));
         }
         Ok(Box::new(FakePredictor {
             info: ModelInfo {
@@ -758,6 +761,67 @@ fn an_older_host_without_passive_tooltips_gets_no_values_layer() {
     assert_eq!(values_calls, 2, "the values layer was still updated");
 }
 
+/// The language changes to the same one here (it is global to the library,
+/// so another one would change it for the tests beside this one): what eov
+/// shows for the plugin is handed over again all the same.
+#[test]
+fn a_language_change_hands_eov_what_it_shows_again() {
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let rig = Rig::new(&[(1, slide)], &[v], FakeConfig::default());
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the whole view", LONG, || view_done(&rig, 1));
+    let tooltips = rig.objects(&values_layer(1));
+    assert!(!tooltips.is_empty());
+    {
+        // Forgotten by the mock: only a new hand-over brings them back.
+        let mut state = rig.harness.state();
+        state
+            .layers
+            .get_mut(&values_layer(1))
+            .unwrap()
+            .objects
+            .clear();
+        state
+            .layers
+            .get_mut(&pred_layer(1))
+            .unwrap()
+            .spec
+            .name
+            .clear();
+        state
+            .toolbar_buttons
+            .get_mut(PANEL_BUTTON)
+            .unwrap()
+            .tooltip
+            .clear();
+        state.tools.get_mut(REGION_TOOL).unwrap().label.clear();
+    }
+    let predicted = rig.seen().windows.load(Ordering::SeqCst);
+    rig.harness
+        .send(HostEvent::LanguageChanged {
+            language: "en".into(),
+        })
+        .unwrap();
+    {
+        let state = rig.harness.state();
+        assert_eq!(
+            state.layers[&pred_layer(1)].spec.name,
+            "Cellaris \u{2014} predicted markers (research use only)"
+        );
+        assert_eq!(
+            state.toolbar_buttons[PANEL_BUTTON].tooltip,
+            "Cellaris panel: legend, region readout and model"
+        );
+        assert_eq!(state.tools[REGION_TOOL].label, "Cellaris region readout");
+    }
+    wait_for("the value tooltips", LONG, || {
+        rig.objects(&values_layer(1)) == tooltips
+    });
+    // Drawn again from the values kept, not predicted again.
+    assert_eq!(rig.seen().windows.load(Ordering::SeqCst), predicted);
+}
+
 #[test]
 fn display_windows_change_the_drawing_not_the_values_and_are_kept() {
     let slide = Slide::new(Some(0.325));
@@ -893,6 +957,13 @@ fn an_older_host_without_badges_gets_the_notice_on_the_slide() {
         .collect();
     assert_eq!(legend.len(), 3, "{legend:?}");
     assert!(legend[0].contains("Hoechst") && legend[0].contains("predicted"));
+    // Every label on the slide has its English form for images (eov burns
+    // labels into exports and copies of the view): here, as shown.
+    for object in rig.objects(&marks_layer(1)) {
+        if object.label.is_some() {
+            assert_eq!(object.export_label, object.label, "{}", object.object_id);
+        }
+    }
     // Asked once, then no more.
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(rig.harness.calls_to("badge.set").len(), 1);
@@ -1020,6 +1091,161 @@ fn a_model_that_fails_to_load_is_reported_and_loads_on_retry() {
     assert_eq!(rig.seen().loads.load(Ordering::SeqCst), 2);
 }
 
+/// The `log` calls a plugin made, as (level, message).
+fn logged(state: &MockState) -> Vec<(String, String)> {
+    state
+        .calls_to("log")
+        .iter()
+        .map(|args| {
+            let field = |name: &str| args[name].as_str().unwrap_or_default().to_string();
+            (field("level"), field("message"))
+        })
+        .collect()
+}
+
+/// eov shows a plugin's logged warnings and errors to the user as they are
+/// (PLG-15), and logs are in English: a failed load is told once, with a
+/// translated notification, and logged at a level eov keeps to its log.
+/// The test runs again in Hebrew in a child process (the language is
+/// global to the library, and the other tests run in English): the log
+/// line stays English there, while the notification is in Hebrew.
+#[test]
+fn a_failed_load_is_told_once_and_only_logged_in_english() {
+    const CHILD: &str = "CELLARIS_TEST_HEBREW_LOG";
+    let hebrew = std::env::var_os(CHILD).is_some();
+    let slide = Slide::new(Some(0.325));
+    let v = view(1, 1, 4_000.0, 4_000.0, 200.0, 200.0, 2.0);
+    let fake = FakeConfig {
+        fail_load: Some("no markers.onnx in the data directory".into()),
+        ..Default::default()
+    };
+    let rig = Rig::new(&[(1, slide)], &[v], fake);
+    if hebrew {
+        // Hebrew without a catalog: English words, right-to-left text.
+        rig.harness
+            .send(HostEvent::LanguageChanged {
+                language: "he".into(),
+            })
+            .unwrap();
+    }
+    let line = "Cellaris: No marker model: no markers.onnx in the data directory";
+    let failures = |rig: &Rig| {
+        logged(&rig.harness.state())
+            .iter()
+            .filter(|(level, message)| level == "info" && message == line)
+            .count()
+    };
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the failure", LONG, || failures(&rig) == 1);
+    // Turning the overlay on again tries again, and fails the same way.
+    rig.click(OVERLAY_BUTTON);
+    rig.click(OVERLAY_BUTTON);
+    wait_for("the second failure", LONG, || failures(&rig) == 2);
+    std::thread::sleep(Duration::from_millis(200));
+    let state = rig.harness.state();
+    let told: Vec<&NotifyArgs> = state
+        .notifications
+        .iter()
+        .filter(|n| n.level == NotifyLevel::Error)
+        .collect();
+    assert_eq!(told.len(), 1, "{told:?}");
+    // Without "Cellaris: ": eov puts the plugin's name before the toast.
+    assert_eq!(told[0].message, "No marker model");
+    // The notification is in the interface's language (the log line,
+    // counted above, is English in both).
+    let isolated = told[0]
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains('\u{2068}');
+    assert_eq!(isolated, hebrew, "{told:?}");
+    let loud: Vec<_> = logged(&state)
+        .into_iter()
+        .filter(|(level, _)| level == "warn" || level == "error")
+        .collect();
+    assert!(loud.is_empty(), "{loud:?}");
+    if !hebrew {
+        let module = module_path!().split_once("::").unwrap().1;
+        let name = format!("{module}::a_failed_load_is_told_once_and_only_logged_in_english");
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([name.as_str(), "--exact"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        let report = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.status.success(), "{report}");
+        assert!(report.contains("1 passed"), "{report}");
+    }
+}
+
+#[test]
+fn a_setting_that_cannot_be_saved_is_told_not_logged_as_a_warning() {
+    let rig = Rig::with_host(
+        &[(1, Slide::new(Some(0.325)))],
+        &[],
+        FakeConfig::default(),
+        |state| state.unsupported = vec!["settings.set".into()],
+    );
+    rig.harness
+        .ui_callback("panel", "set-opacity", vec![json!(0.5)])
+        .unwrap();
+    let state = rig.harness.state();
+    let warnings: Vec<&NotifyArgs> = state
+        .notifications
+        .iter()
+        .filter(|n| n.level == NotifyLevel::Warning)
+        .collect();
+    assert_eq!(warnings.len(), 1, "{:?}", state.notifications);
+    assert_eq!(
+        warnings[0].message,
+        "Cellaris could not save its settings: unknown method 'settings.set'"
+    );
+    // The log says which setting, in English, at a level eov keeps to it.
+    let saves: Vec<_> = logged(&state)
+        .into_iter()
+        .filter(|(_, message)| message.contains("could not save"))
+        .collect();
+    assert_eq!(
+        saves,
+        vec![(
+            "info".to_string(),
+            "Cellaris could not save the setting opacity: unknown method 'settings.set'"
+                .to_string()
+        )]
+    );
+}
+
+/// Nothing in the plugin logs a warning or an error: eov would show it to
+/// the user untranslated (PLG-15). Problems are told with `notify` in the
+/// user's language, and logged in English with `info`.
+#[test]
+fn nothing_is_logged_as_a_warning_or_an_error() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|ext| ext != "rs") || path.ends_with("tests.rs") {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).unwrap();
+        for (number, line) in source.lines().enumerate() {
+            let loud = [".warn(", ".error(", "LogLevel::Warn", "LogLevel::Error"];
+            assert!(
+                !loud.iter().any(|call| line.contains(call)),
+                "{}:{}: {line}",
+                path.display(),
+                number + 1
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 10, "only {checked} files in {}", dir.display());
+}
+
 #[test]
 fn failed_reads_are_shown_and_retried() {
     let slide = Slide::new(Some(0.325));
@@ -1129,6 +1355,14 @@ fn a_region_is_measured_on_the_blended_cells_without_seams() {
     let region = rig.objects(&region_layer(1));
     assert_eq!(region.len(), 1);
     assert_eq!(region[0].editable, Some(true));
+    // Labelled on the slide, and in English in images.
+    wait_for("the region's label", LONG, || {
+        rig.objects(&region_layer(1))[0].label.as_deref() == Some("Cellaris region")
+    });
+    assert_eq!(
+        rig.objects(&region_layer(1))[0].export_label.as_deref(),
+        Some("Cellaris region")
+    );
 
     // Copy carries provenance.
     rig.harness
@@ -1380,22 +1614,57 @@ fn the_overlay_has_a_key_and_a_refused_key_is_shown_in_the_panel() {
         rig.harness.state().toolbar_buttons[OVERLAY_BUTTON].hotkey,
         Some(Hotkey::key("x"))
     );
+    rig.click(PANEL_BUTTON);
+    let detail = || {
+        rig.sidebar()["status-detail"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    };
     let reason = "Hotkey 'x' of cellaris:cellaris_overlay was ignored: it is the same key as \
                   other:tool.";
+    // eov's words as it shows them; from eov before 1.1, its English ones.
+    // A newer answer replaces the older one.
+    for (shown_reason, shown) in [
+        (
+            Some("eov's words for the taken x."),
+            "eov's words for the taken x.",
+        ),
+        (None, reason),
+    ] {
+        rig.harness
+            .send(HostEvent::RegistrationRefused {
+                what: "hotkey".into(),
+                id: OVERLAY_BUTTON.into(),
+                reason: reason.into(),
+                shown_reason: shown_reason.map(str::to_string),
+            })
+            .unwrap();
+        wait_for("the refusal in the panel", LONG, || {
+            detail().contains(shown)
+        });
+        let detail = detail();
+        assert_eq!(detail.matches("set as overlay_key").count(), 1, "{detail}");
+    }
+    // After a change of language the button is added again, as it is, so
+    // that eov says why in the new language; until it answers, there is no
+    // note (a key eov accepts now has none).
+    rig.click(OVERLAY_BUTTON);
+    let added = rig.harness.calls_to(methods::TOOLBAR_ADD).len();
     rig.harness
-        .send(HostEvent::RegistrationRefused {
-            what: "hotkey".into(),
-            id: OVERLAY_BUTTON.into(),
-            reason: reason.into(),
+        .send(HostEvent::LanguageChanged {
+            language: "en".into(),
         })
         .unwrap();
-    rig.click(PANEL_BUTTON);
-    let detail = rig.sidebar()["status-detail"]
-        .as_str()
-        .unwrap_or_default()
-        .to_string();
-    assert!(detail.contains(reason), "{detail}");
-    assert!(detail.contains("set as overlay_key"), "{detail}");
+    let calls = rig.harness.calls_to(methods::TOOLBAR_ADD);
+    assert_eq!(calls.len(), added + 1);
+    let button: ToolbarButtonSpec = serde_json::from_value(calls[added].clone()).unwrap();
+    assert_eq!(button.button_id, OVERLAY_BUTTON);
+    assert_eq!(button.hotkey, Some(Hotkey::key("x")));
+    assert!(button.active, "the overlay is on");
+    wait_for("the panel without the note", LONG, || {
+        !detail().contains("overlay_key")
+    });
 }
 
 #[test]
@@ -1841,7 +2110,10 @@ fn ort_smoke_wrong_library_is_reported() {
     })
     .unwrap_err();
     println!("{failure:#?}");
-    assert!(failure.detail.contains("OrtGetApiBase"), "{failure:?}");
+    assert!(
+        failure.detail.to_string().contains("OrtGetApiBase"),
+        "{failure:?}"
+    );
 }
 
 #[test]
@@ -1882,7 +2154,7 @@ fn a_confirmed_long_readout_runs_as_a_job_and_can_be_cancelled() {
     wait_for("some progress", LONG, || {
         rig.sidebar()["readout-status"]
             .as_str()
-            .is_some_and(|s| s.starts_with("Measuring"))
+            .is_some_and(|s| s.starts_with("Computing"))
             && rig.seen().windows.load(Ordering::SeqCst) > 0
     });
     for n in 1..40 {
@@ -1942,7 +2214,7 @@ fn the_same_error_at_different_places_is_reported_once() {
             &sdk,
             &mut st,
             "Cellaris could not compute part of the slide; retrying",
-            &format!("corrupt region at level 0, ({x}, {y}), 256x256"),
+            format!("corrupt region at level 0, ({x}, {y}), 256x256"),
         );
     }
     crate::engine::notify_once(&sdk, &mut st, "Another problem", "detail");
